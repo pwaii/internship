@@ -1145,6 +1145,7 @@ Public Sub BuildPivotTablesFromSetup()
 
     outputWs.Columns.AutoFit
     outputWs.Activate
+    sourceWs.Visible = xlSheetVeryHidden
 
     Application.DisplayAlerts = True
     Application.ScreenUpdating = True
@@ -1317,16 +1318,28 @@ End Sub
 Private Function CreateCompatiblePivotCache(ByVal wb As Workbook, ByVal sourceRange As Range) As PivotCache
     Dim sourceAddress As String
     Dim sourceAddressA1 As String
+    Dim sourceExternal As String
+    Dim sourceExternalA1 As String
     Dim cache As PivotCache
 
     sourceAddress = "'" & sourceRange.Worksheet.Name & "'!" & sourceRange.Address(ReferenceStyle:=xlR1C1)
     sourceAddressA1 = "'" & sourceRange.Worksheet.Name & "'!" & sourceRange.Address(ReferenceStyle:=xlA1)
+    sourceExternal = sourceRange.Address(ReferenceStyle:=xlR1C1, External:=True)
+    sourceExternalA1 = sourceRange.Address(ReferenceStyle:=xlA1, External:=True)
 
     On Error Resume Next
     Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddress)
     If cache Is Nothing Then
         Err.Clear
         Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddressA1)
+    End If
+    If cache Is Nothing Then
+        Err.Clear
+        Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceExternal)
+    End If
+    If cache Is Nothing Then
+        Err.Clear
+        Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceExternalA1)
     End If
     If cache Is Nothing Then
         Err.Clear
@@ -1344,14 +1357,20 @@ End Function
 Private Function CreateCompatiblePivotTable(ByVal cache As PivotCache, ByVal destinationCell As Range, ByVal tableName As String) As PivotTable
     Dim pivot As PivotTable
     Dim destinationAddress As String
+    Dim destinationAddressA1 As String
 
     destinationAddress = "'" & destinationCell.Worksheet.Name & "'!" & destinationCell.Address(ReferenceStyle:=xlR1C1)
+    destinationAddressA1 = "'" & destinationCell.Worksheet.Name & "'!" & destinationCell.Address(ReferenceStyle:=xlA1)
 
     On Error Resume Next
     Set pivot = cache.CreatePivotTable(TableDestination:=destinationCell, TableName:=tableName)
     If pivot Is Nothing Then
         Err.Clear
         Set pivot = cache.CreatePivotTable(TableDestination:=destinationAddress, TableName:=tableName)
+    End If
+    If pivot Is Nothing Then
+        Err.Clear
+        Set pivot = cache.CreatePivotTable(TableDestination:=destinationAddressA1, TableName:=tableName)
     End If
     On Error GoTo 0
 
@@ -1971,7 +1990,7 @@ Private Function CreateNormalizedSourceSheet(ByVal wb As Workbook, ByVal dataWs 
     End If
 
     dataWs.Activate
-    helperWs.Visible = xlSheetVeryHidden
+    helperWs.Visible = xlSheetVisible
     Set CreateNormalizedSourceSheet = helperWs
 End Function
 
