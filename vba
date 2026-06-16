@@ -1089,7 +1089,8 @@ Public Sub BuildPivotTablesFromSetup()
     PopulateFieldSuggestions setupWs, headers
     Set sourceWs = CreateNormalizedSourceSheet(targetWb, dataWs, headers, setupWs, selectedTemplate, lastSetupRow)
     Set sourceRange = sourceWs.UsedRange
-    Set cache = targetWb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceRange)
+    ValidatePivotSourceRange sourceRange, dataSheetName
+    Set cache = CreateCompatiblePivotCache(targetWb, sourceRange)
 
     outputSheetName = FirstOutputSheetName(setupWs, selectedTemplate, lastSetupRow)
     If outputSheetName = "" Then outputSheetName = "Pivot_Output"
@@ -1299,6 +1300,68 @@ Private Function SaveFileFormatForWorkbook(ByVal targetWb As Workbook) As Long
     End If
 End Function
 
+Private Sub ValidatePivotSourceRange(ByVal sourceRange As Range, ByVal dataSheetName As String)
+    If sourceRange Is Nothing Then
+        Err.Raise vbObjectError + 370, , "The selected data sheet has no usable range: " & dataSheetName
+    End If
+
+    If sourceRange.Columns.Count < 1 Then
+        Err.Raise vbObjectError + 371, , "The selected data sheet has no columns: " & dataSheetName
+    End If
+
+    If sourceRange.Rows.Count < 2 Then
+        Err.Raise vbObjectError + 372, , "The selected data sheet has headers but no data rows: " & dataSheetName
+    End If
+End Sub
+
+Private Function CreateCompatiblePivotCache(ByVal wb As Workbook, ByVal sourceRange As Range) As PivotCache
+    Dim sourceAddress As String
+    Dim sourceAddressA1 As String
+    Dim cache As PivotCache
+
+    sourceAddress = "'" & sourceRange.Worksheet.Name & "'!" & sourceRange.Address(ReferenceStyle:=xlR1C1)
+    sourceAddressA1 = "'" & sourceRange.Worksheet.Name & "'!" & sourceRange.Address(ReferenceStyle:=xlA1)
+
+    On Error Resume Next
+    Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddress)
+    If cache Is Nothing Then
+        Err.Clear
+        Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddressA1)
+    End If
+    If cache Is Nothing Then
+        Err.Clear
+        Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceRange)
+    End If
+    On Error GoTo 0
+
+    If cache Is Nothing Then
+        Err.Raise vbObjectError + 373, , "Excel could not create the PivotTable cache from " & sourceAddressA1 & ". Check that the data has one header row and at least one data row."
+    End If
+
+    Set CreateCompatiblePivotCache = cache
+End Function
+
+Private Function CreateCompatiblePivotTable(ByVal cache As PivotCache, ByVal destinationCell As Range, ByVal tableName As String) As PivotTable
+    Dim pivot As PivotTable
+    Dim destinationAddress As String
+
+    destinationAddress = "'" & destinationCell.Worksheet.Name & "'!" & destinationCell.Address(ReferenceStyle:=xlR1C1)
+
+    On Error Resume Next
+    Set pivot = cache.CreatePivotTable(TableDestination:=destinationCell, TableName:=tableName)
+    If pivot Is Nothing Then
+        Err.Clear
+        Set pivot = cache.CreatePivotTable(TableDestination:=destinationAddress, TableName:=tableName)
+    End If
+    On Error GoTo 0
+
+    If pivot Is Nothing Then
+        Err.Raise vbObjectError + 374, , "Excel could not create the PivotTable at " & destinationAddress & ". The output sheet may contain blocked/merged cells or Excel may not accept the destination."
+    End If
+
+    Set CreateCompatiblePivotTable = pivot
+End Function
+
 Private Function CreateOnePivot( _
     ByVal cache As PivotCache, _
     ByVal outputWs As Worksheet, _
@@ -1363,10 +1426,7 @@ Private Function CreateOnePivot( _
         .ShrinkToFit = True
     End With
 
-    Set pivot = cache.CreatePivotTable( _
-        TableDestination:=outputWs.Cells(pivotStartRow, 1), _
-        TableName:=finalName & "_" & CStr(outputRow) _
-    )
+    Set pivot = CreateCompatiblePivotTable(cache, outputWs.Cells(pivotStartRow, 1), finalName & "_" & CStr(outputRow))
 
     For position = 0 To MaxLong(UBoundSafe(rowFields), MaxLong(UBoundSafe(rowNames), UBoundSafe(rowGroups)))
         sourceInput = ""
