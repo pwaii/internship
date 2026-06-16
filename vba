@@ -1175,6 +1175,68 @@ BuildError:
     MsgBox BuildErrorMessage(Err.Description, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers), vbExclamation
 End Sub
 
+Public Sub RunPivotBuilderDiagnostic()
+    Dim wb As Workbook
+    Dim dataWs As Worksheet
+    Dim outWs As Worksheet
+    Dim sourceRange As Range
+    Dim cache As PivotCache
+    Dim pivot As PivotTable
+    Dim reportText As String
+
+    On Error GoTo DiagnosticError
+
+    Set wb = ThisWorkbook
+    Application.DisplayAlerts = False
+    If WorksheetExists(wb, "PB_Diagnostic_Data") Then wb.Worksheets("PB_Diagnostic_Data").Delete
+    If WorksheetExists(wb, "PB_Diagnostic_Output") Then wb.Worksheets("PB_Diagnostic_Output").Delete
+    Application.DisplayAlerts = True
+
+    Set dataWs = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
+    dataWs.Name = "PB_Diagnostic_Data"
+    dataWs.Range("A1").Value = "Category"
+    dataWs.Range("B1").Value = "Name"
+    dataWs.Range("C1").Value = "Status"
+    dataWs.Range("A2").Value = "A"
+    dataWs.Range("B2").Value = "Text one"
+    dataWs.Range("C2").Value = "Open"
+    dataWs.Range("A3").Value = "A"
+    dataWs.Range("B3").Value = "Text two"
+    dataWs.Range("C3").Value = "Closed"
+    dataWs.Range("A4").Value = "B"
+    dataWs.Range("B4").Value = "Text three"
+    dataWs.Range("C4").Value = "Open"
+    dataWs.Range("A5").Value = "B"
+    dataWs.Range("B5").Value = "Text four"
+    dataWs.Range("C5").Value = "Open"
+    dataWs.ListObjects.Add xlSrcRange, dataWs.Range("A1:C5"), , xlYes
+    dataWs.ListObjects(1).Name = UniqueTableName(wb, "PBDiagnosticTable")
+    Set sourceRange = dataWs.ListObjects(1).Range
+
+    Set outWs = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
+    outWs.Name = "PB_Diagnostic_Output"
+    Set cache = CreateCompatiblePivotCache(wb, sourceRange)
+    Set pivot = CreateCompatiblePivotTable(cache, outWs.Range("A3"), "PBDiagnosticPivot")
+    pivot.PivotFields("Category").Orientation = xlRowField
+    pivot.AddDataField pivot.PivotFields("Name"), "Count of Name", xlCount
+    pivot.RefreshTable
+    outWs.Columns.AutoFit
+
+    reportText = "Diagnostic succeeded." & vbCrLf & _
+        "Excel version: " & Application.Version & vbCrLf & _
+        "Workbook: " & wb.FullName & vbCrLf & _
+        "This Excel can create a text-only PivotTable."
+    MsgBox reportText, vbInformation
+    Exit Sub
+
+DiagnosticError:
+    Application.DisplayAlerts = True
+    MsgBox "Diagnostic failed." & vbCrLf & _
+        "Excel version: " & Application.Version & vbCrLf & _
+        "Problem: " & Err.Description & vbCrLf & vbCrLf & _
+        "If this fails on only one laptop, that laptop likely has an Office repair/update/security issue or a blocked workbook location.", vbExclamation
+End Sub
+
 Private Function BuildErrorMessage( _
     ByVal errorText As String, _
     ByVal selectedTemplate As String, _
@@ -1320,15 +1382,21 @@ Private Function CreateCompatiblePivotCache(ByVal wb As Workbook, ByVal sourceRa
     Dim sourceAddressA1 As String
     Dim sourceExternal As String
     Dim sourceExternalA1 As String
+    Dim tableName As String
     Dim cache As PivotCache
 
     sourceAddress = "'" & sourceRange.Worksheet.Name & "'!" & sourceRange.Address(ReferenceStyle:=xlR1C1)
     sourceAddressA1 = "'" & sourceRange.Worksheet.Name & "'!" & sourceRange.Address(ReferenceStyle:=xlA1)
     sourceExternal = sourceRange.Address(ReferenceStyle:=xlR1C1, External:=True)
     sourceExternalA1 = sourceRange.Address(ReferenceStyle:=xlA1, External:=True)
+    tableName = SourceRangeTableName(sourceRange)
 
     On Error Resume Next
-    Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddress)
+    If tableName <> "" Then Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=tableName)
+    If cache Is Nothing Then
+        Err.Clear
+        Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddress)
+    End If
     If cache Is Nothing Then
         Err.Clear
         Set cache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=sourceAddressA1)
@@ -1379,6 +1447,19 @@ Private Function CreateCompatiblePivotTable(ByVal cache As PivotCache, ByVal des
     End If
 
     Set CreateCompatiblePivotTable = pivot
+End Function
+
+Private Function SourceRangeTableName(ByVal sourceRange As Range) As String
+    Dim table As ListObject
+
+    On Error Resume Next
+    For Each table In sourceRange.Worksheet.ListObjects
+        If Not Intersect(sourceRange, table.Range) Is Nothing Then
+            SourceRangeTableName = table.Name
+            Exit Function
+        End If
+    Next table
+    On Error GoTo 0
 End Function
 
 Private Function CreateOnePivot( _
@@ -1971,6 +2052,7 @@ Private Function CreateNormalizedSourceSheet(ByVal wb As Workbook, ByVal dataWs 
     Dim colsCount As Long
     Dim totalColsCount As Long
     Dim colIndex As Long
+    Dim sourceTable As ListObject
 
     Set dataRange = dataWs.UsedRange
     rowsCount = dataRange.Rows.Count
@@ -1988,6 +2070,14 @@ Private Function CreateNormalizedSourceSheet(ByVal wb As Workbook, ByVal dataWs 
         dataRange.Offset(1, 0).Resize(rowsCount - 1, colsCount).Copy Destination:=helperWs.Cells(2, 1)
         FillRowGroupColumns helperWs, dataRange, headers, setupWs, selectedTemplate, lastSetupRow
     End If
+
+    Set sourceTable = helperWs.ListObjects.Add( _
+        SourceType:=xlSrcRange, _
+        Source:=helperWs.Cells(1, 1).Resize(Application.Max(1, rowsCount), totalColsCount), _
+        XlListObjectHasHeaders:=xlYes _
+    )
+    sourceTable.Name = UniqueTableName(wb, "PBSourceTable")
+    sourceTable.TableStyle = "TableStyleLight1"
 
     dataWs.Activate
     helperWs.Visible = xlSheetVisible
@@ -2782,6 +2872,17 @@ Private Sub AddSetupButtons(ByVal setupWs As Worksheet)
         .OnAction = "SetupPivotBuilderSheet"
     End With
 
+    Set shape = setupWs.Shapes.AddShape(msoShapeRoundedRectangle, buildLeft + 200, buildTop, buttonWidth, buttonHeight)
+    With shape
+        .Name = "PivotBuilderDiagnosticButton"
+        .TextFrame.Characters.Text = "Diagnostic"
+        .TextFrame.Characters.Font.Size = 9
+        .Fill.ForeColor.RGB = RGB(217, 221, 226)
+        .Line.ForeColor.RGB = RGB(166, 172, 181)
+        .TextFrame.Characters.Font.Color = RGB(0, 0, 0)
+        .OnAction = "RunPivotBuilderDiagnostic"
+    End With
+
 End Sub
 
 Private Function WorksheetExists(ByVal wb As Workbook, ByVal sheetName As String) As Boolean
@@ -2823,6 +2924,60 @@ Private Function UniqueSheetName(ByVal wb As Workbook, ByVal baseName As String)
     Next index
 
     Err.Raise vbObjectError + 200, , "Could not create a unique sheet name."
+End Function
+
+Private Function UniqueTableName(ByVal wb As Workbook, ByVal baseName As String) As String
+    Dim root As String
+    Dim candidate As String
+    Dim index As Long
+
+    root = SafeTableName(baseName)
+    candidate = root
+
+    If Not TableNameExists(wb, candidate) Then
+        UniqueTableName = candidate
+        Exit Function
+    End If
+
+    For index = 2 To 999
+        candidate = Left$(root, 240 - Len(CStr(index))) & CStr(index)
+        If Not TableNameExists(wb, candidate) Then
+            UniqueTableName = candidate
+            Exit Function
+        End If
+    Next index
+
+    Err.Raise vbObjectError + 201, , "Could not create a unique source table name."
+End Function
+
+Private Function TableNameExists(ByVal wb As Workbook, ByVal tableName As String) As Boolean
+    Dim ws As Worksheet
+    Dim table As ListObject
+
+    For Each ws In wb.Worksheets
+        For Each table In ws.ListObjects
+            If StrComp(table.Name, tableName, vbTextCompare) = 0 Then
+                TableNameExists = True
+                Exit Function
+            End If
+        Next table
+    Next ws
+End Function
+
+Private Function SafeTableName(ByVal tableName As String) As String
+    Dim result As String
+    Dim i As Long
+    Dim ch As String
+
+    result = ""
+    For i = 1 To Len(tableName)
+        ch = Mid$(tableName, i, 1)
+        If ch Like "[A-Za-z0-9_]" Then result = result & ch
+    Next i
+
+    If result = "" Then result = "PBSourceTable"
+    If Not (Left$(result, 1) Like "[A-Za-z_]") Then result = "T" & result
+    SafeTableName = Left$(result, 240)
 End Function
 
 Private Function SafeSheetName(ByVal sheetName As String) As String
