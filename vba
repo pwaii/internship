@@ -1022,6 +1022,9 @@ Public Sub BuildPivotTablesFromSetup()
     Dim csvFolder As String
     Dim convertedFromCsv As Boolean
     Dim convertedWorkbookPath As String
+    Dim currentBuildRow As Long
+    Dim currentPivotName As String
+    Dim saveMessage As String
 
     On Error GoTo BuildError
 
@@ -1107,6 +1110,8 @@ Public Sub BuildPivotTablesFromSetup()
 
     For rowIndex = 9 To lastSetupRow
         If IsBuildSetupRow(setupWs, rowIndex, selectedTemplate) Then
+            currentBuildRow = rowIndex
+            currentPivotName = Trim$(CStr(setupWs.Cells(rowIndex, "B").Value))
 
             Set pivot = CreateOnePivot( _
                 cache, _
@@ -1149,11 +1154,11 @@ Public Sub BuildPivotTablesFromSetup()
         Exit Sub
     End If
 
-    targetWb.Save
+    saveMessage = SaveBuiltWorkbook(targetWb, sourceWorkbookPath, convertedFromCsv, convertedWorkbookPath)
     If convertedFromCsv Then
-        MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s), and saved an Excel copy:" & vbCrLf & convertedWorkbookPath, vbInformation
+        MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s)." & vbCrLf & saveMessage, vbInformation
     Else
-        MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s), and saved the source workbook.", vbInformation
+        MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s)." & vbCrLf & saveMessage, vbInformation
     End If
 
     targetWb.Close SaveChanges:=False
@@ -1165,8 +1170,134 @@ BuildError:
     On Error Resume Next
     If Not targetWb Is Nothing Then targetWb.Close SaveChanges:=False
     On Error GoTo 0
-    MsgBox "Could not build PivotTables:" & vbCrLf & Err.Description, vbExclamation
+    MsgBox BuildErrorMessage(Err.Description, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers), vbExclamation
 End Sub
+
+Private Function BuildErrorMessage( _
+    ByVal errorText As String, _
+    ByVal selectedTemplate As String, _
+    ByVal dataSheetName As String, _
+    ByVal setupRow As Long, _
+    ByVal pivotName As String, _
+    ByVal headers As Variant _
+) As String
+    Dim result As String
+
+    result = "Could not build PivotTables." & vbCrLf & vbCrLf
+    If selectedTemplate <> "" Then result = result & "Template: " & selectedTemplate & vbCrLf
+    If dataSheetName <> "" Then result = result & "Data sheet: " & dataSheetName & vbCrLf
+    If setupRow >= 9 Then result = result & "Setup row: " & CStr(setupRow) & vbCrLf
+    If pivotName <> "" Then result = result & "Pivot name: " & pivotName & vbCrLf
+    result = result & vbCrLf & "Problem: " & errorText & vbCrLf & vbCrLf
+
+    result = result & "Most common fix:" & vbCrLf & _
+        "1. Click Choose and select the source workbook on this laptop." & vbCrLf & _
+        "2. Pick the correct Data sheet in B4." & vbCrLf & _
+        "3. Use the dropdowns to replace any old field names in Rows, Group Rules, Display Values, Values To Count/Sum, Filters, and Conditions." & vbCrLf & _
+        "4. Blank Pivot Name rows are skipped." & vbCrLf
+
+    If IsArray(headers) Then
+        result = result & vbCrLf & "Available fields in the selected data:" & vbCrLf & HeaderListText(headers, 30)
+    End If
+
+    BuildErrorMessage = result
+End Function
+
+Private Function HeaderListText(ByVal headers As Variant, ByVal maxItems As Long) As String
+    Dim index As Long
+    Dim count As Long
+    Dim result As String
+    Dim separator As String
+
+    On Error GoTo Done
+    For index = LBound(headers) To UBound(headers)
+        count = count + 1
+        If count > maxItems Then
+            result = result & separator & "...and more"
+            Exit For
+        End If
+        result = result & separator & CStr(headers(index))
+        separator = ", "
+    Next index
+
+Done:
+    HeaderListText = result
+End Function
+
+Private Function SaveBuiltWorkbook( _
+    ByVal targetWb As Workbook, _
+    ByVal sourceWorkbookPath As String, _
+    ByVal convertedFromCsv As Boolean, _
+    ByVal convertedWorkbookPath As String _
+) As String
+    Dim copyPath As String
+    Dim saveErr As String
+
+    On Error GoTo SaveFailed
+
+    If targetWb.ReadOnly Then
+        copyPath = PivotOutputWorkbookPath(sourceWorkbookPath, targetWb)
+        Application.DisplayAlerts = False
+        targetWb.SaveAs Filename:=copyPath, FileFormat:=SaveFileFormatForWorkbook(targetWb)
+        Application.DisplayAlerts = True
+        SaveBuiltWorkbook = "The source workbook was opened read-only, so Excel saved a copy:" & vbCrLf & copyPath
+    Else
+        targetWb.Save
+        If convertedFromCsv Then
+            SaveBuiltWorkbook = "Saved an Excel copy:" & vbCrLf & convertedWorkbookPath
+        Else
+            SaveBuiltWorkbook = "Saved to the input workbook:" & vbCrLf & targetWb.FullName
+        End If
+    End If
+    Exit Function
+
+SaveFailed:
+    saveErr = Err.Description
+    Err.Clear
+    On Error GoTo CopyFailed
+    copyPath = PivotOutputWorkbookPath(sourceWorkbookPath, targetWb)
+    Application.DisplayAlerts = False
+    targetWb.SaveAs Filename:=copyPath, FileFormat:=SaveFileFormatForWorkbook(targetWb)
+    Application.DisplayAlerts = True
+    SaveBuiltWorkbook = "Excel could not save the original input file: " & saveErr & vbCrLf & _
+        "Saved a copy instead:" & vbCrLf & copyPath
+    Exit Function
+
+CopyFailed:
+    Application.DisplayAlerts = True
+    Err.Raise vbObjectError + 360, , "Excel could not save the input workbook or a copy. Original save problem: " & saveErr & ". Copy save problem: " & Err.Description
+End Function
+
+Private Function PivotOutputWorkbookPath(ByVal sourceWorkbookPath As String, ByVal targetWb As Workbook) As String
+    Dim folderPath As String
+    Dim baseName As String
+    Dim dotPos As Long
+    Dim candidate As String
+    Dim extensionText As String
+
+    folderPath = Left$(sourceWorkbookPath, InStrRev(sourceWorkbookPath, Application.PathSeparator))
+    baseName = Mid$(sourceWorkbookPath, Len(folderPath) + 1)
+    dotPos = InStrRev(baseName, ".")
+    If dotPos > 1 Then baseName = Left$(baseName, dotPos - 1)
+    If baseName = "" Then baseName = "PivotOutput"
+
+    If targetWb.HasVBProject Then
+        extensionText = ".xlsm"
+    Else
+        extensionText = ".xlsx"
+    End If
+
+    candidate = folderPath & baseName & "_PivotOutput" & extensionText
+    PivotOutputWorkbookPath = UniqueFilePath(candidate)
+End Function
+
+Private Function SaveFileFormatForWorkbook(ByVal targetWb As Workbook) As Long
+    If targetWb.HasVBProject Then
+        SaveFileFormatForWorkbook = xlOpenXMLWorkbookMacroEnabled
+    Else
+        SaveFileFormatForWorkbook = xlOpenXMLWorkbook
+    End If
+End Function
 
 Private Function CreateOnePivot( _
     ByVal cache As PivotCache, _
