@@ -29,6 +29,7 @@ Public Sub SetupPivotBuilderSheet()
     Dim savedRows As Variant
     Dim savedIsNewLayout As Boolean
     Dim savedIsOldEnabledLayout As Boolean
+    Dim savedHasNextRightColumn As Boolean
     Dim hadExistingSetup As Boolean
     Dim dataRow As Long
     Dim colIndex As Long
@@ -49,8 +50,13 @@ Public Sub SetupPivotBuilderSheet()
         End If
         savedIsNewLayout = LCase$(Trim$(CStr(ws.Range("A8").Value))) = "template"
         savedIsOldEnabledLayout = LCase$(Trim$(CStr(ws.Range("A8").Value))) = "enabled"
+        savedHasNextRightColumn = LCase$(Trim$(CStr(ws.Range("M8").Value))) = "next pivot right"
         If savedIsNewLayout Or savedIsOldEnabledLayout Then
-            savedRows = ws.Range("A9:M200").Value
+            If savedHasNextRightColumn Then
+                savedRows = ws.Range("A9:N200").Value
+            Else
+                savedRows = ws.Range("A9:M200").Value
+            End If
         Else
             savedRows = ws.Range("A9:K200").Value
         End If
@@ -63,7 +69,7 @@ Public Sub SetupPivotBuilderSheet()
     ws.Cells.Interior.Color = RGB(242, 244, 247)
 
     ws.Range("A1").Value = "Excel Pivot Builder"
-    ws.Range("A1:M1").Merge
+    ws.Range("A1:N1").Merge
     ws.Range("A1").Font.Bold = True
     ws.Range("A1").Font.Size = 16
     ws.Range("A1").Font.Color = RGB(255, 255, 255)
@@ -80,7 +86,7 @@ Public Sub SetupPivotBuilderSheet()
     ws.Range("B4").Value = IIf(hadExistingSetup And Trim$(CStr(savedDataSheet)) <> "", savedDataSheet, defaultDataSheet)
     
     ws.Range("A5").Value = "Selected template"
-    ws.Range("B5").Value = IIf(hadExistingSetup And Trim$(CStr(savedTemplate)) <> "", savedTemplate, "Default")
+    ws.Range("B5").Value = IIf(hadExistingSetup And Trim$(CStr(savedTemplate)) <> "", savedTemplate, "All")
 
     ws.Range("A6").Value = "Fill one row per PivotTable. Blank Pivot Name rows are skipped."
     ws.Range("A6:D6").Merge
@@ -89,7 +95,7 @@ Public Sub SetupPivotBuilderSheet()
     ws.Range("A3:D5").Interior.Color = RGB(255, 255, 255)
     ws.Range("A3:D5").Borders.Color = RGB(255, 255, 255)
 
-    ws.Range("A8:M8").Value = Array( _
+    ws.Range("A8:N8").Value = Array( _
         "Template", _
         "Pivot Name", _
         "Output Sheet", _
@@ -102,16 +108,26 @@ Public Sub SetupPivotBuilderSheet()
         "Filters", _
         "Conditions", _
         "CSV File Name", _
+        "Next Pivot Right", _
         "Notes" _
     )
-    ws.Range("A8:M8").Font.Bold = True
-    ws.Range("A8:M8").Font.Color = RGB(255, 255, 255)
-    ws.Range("A8:M8").Interior.Color = RGB(0, 0, 0)
+    ws.Range("A8:N8").Font.Bold = True
+    ws.Range("A8:N8").Font.Color = RGB(255, 255, 255)
+    ws.Range("A8:N8").Interior.Color = RGB(0, 0, 0)
     ws.Rows("8:8").RowHeight = 22
 
     If hadExistingSetup Then
         If savedIsNewLayout Then
-            ws.Range("A9:M200").Value = savedRows
+            If savedHasNextRightColumn Then
+                ws.Range("A9:N200").Value = savedRows
+            Else
+                For dataRow = 1 To UBound(savedRows, 1)
+                    For colIndex = 1 To 12
+                        ws.Cells(8 + dataRow, colIndex).Value = savedRows(dataRow, colIndex)
+                    Next colIndex
+                    ws.Cells(8 + dataRow, "N").Value = savedRows(dataRow, 13)
+                Next dataRow
+            End If
         ElseIf savedIsOldEnabledLayout Then
             For dataRow = 1 To UBound(savedRows, 1)
                 If UCase$(Trim$(CStr(savedRows(dataRow, 1)))) = "YES" Or Trim$(CStr(savedRows(dataRow, 3))) <> "" Then
@@ -127,7 +143,7 @@ Public Sub SetupPivotBuilderSheet()
                     ws.Cells(8 + dataRow, "J").Value = savedRows(dataRow, 10)
                     ws.Cells(8 + dataRow, "K").Value = savedRows(dataRow, 11)
                     ws.Cells(8 + dataRow, "L").Value = savedRows(dataRow, 12)
-                    ws.Cells(8 + dataRow, "M").Value = savedRows(dataRow, 13)
+                    ws.Cells(8 + dataRow, "N").Value = savedRows(dataRow, 13)
                 End If
             Next dataRow
         Else
@@ -138,7 +154,7 @@ Public Sub SetupPivotBuilderSheet()
             Next dataRow
         End If
     Else
-        ws.Range("A9:M9").Value = Array( _
+        ws.Range("A9:N9").Value = Array( _
             "Default", _
             "Pivot_1", _
             "Pivot_Output", _
@@ -149,25 +165,30 @@ Public Sub SetupPivotBuilderSheet()
             "", _
             "05,06", _
             "", _
-            "Status=Open; Region=East", _
             "", _
+            "", _
+            "No", _
             "Conditions are optional. Use Field=Value; Field2=Value2" _
         )
     End If
 
-    ws.Range("A9:M200").Interior.Color = RGB(255, 255, 255)
-    ws.Range("A8:M200").Borders.Color = RGB(200, 205, 212)
-    ws.Range("N1").Value = "Field Suggestions"
-    ws.Range("N1:Q1").Merge
-    ws.Range("N1").Font.Bold = True
-    ws.Range("N1").Font.Color = RGB(255, 255, 255)
-    ws.Range("N1").Interior.Color = RGB(141, 2, 31)
-    ws.Range("N3").Value = "Available Fields"
-    ws.Range("N3:O3").Merge
-    ws.Range("N3").Font.Bold = True
-    ws.Range("N3").Font.Color = RGB(255, 255, 255)
-    ws.Range("N3").Interior.Color = RGB(0, 0, 0)
-    ws.Range("N4:N500").Interior.Color = RGB(255, 255, 255)
+    ws.Range("A9:N200").Interior.Color = RGB(255, 255, 255)
+    ws.Range("A8:N200").Borders.Color = RGB(200, 205, 212)
+    ws.Range("O1").Value = "Field Suggestions"
+    ws.Range("O1:R1").Merge
+    ws.Range("O1").Font.Bold = True
+    ws.Range("O1").Font.Color = RGB(255, 255, 255)
+    ws.Range("O1").Interior.Color = RGB(141, 2, 31)
+    ws.Range("O3").Value = "Available Fields"
+    ws.Range("O3").Font.Bold = True
+    ws.Range("O3").Font.Color = RGB(255, 255, 255)
+    ws.Range("O3").Interior.Color = RGB(0, 0, 0)
+    ws.Range("O4:O500").Interior.Color = RGB(255, 255, 255)
+    ws.Range("Q3").Value = "Template Choices"
+    ws.Range("Q3").Font.Bold = True
+    ws.Range("Q3").Font.Color = RGB(255, 255, 255)
+    ws.Range("Q3").Interior.Color = RGB(0, 0, 0)
+    ws.Range("Q4:Q500").Interior.Color = RGB(255, 255, 255)
 
     ws.Columns("A").ColumnWidth = 18
     ws.Columns("B").ColumnWidth = 22
@@ -181,10 +202,12 @@ Public Sub SetupPivotBuilderSheet()
     ws.Columns("J").ColumnWidth = 16
     ws.Columns("K").ColumnWidth = 26
     ws.Columns("L").ColumnWidth = 18
-    ws.Columns("M").ColumnWidth = 38
-    ws.Columns("N:Q").ColumnWidth = 22
-    ws.Range("A1:M200").VerticalAlignment = xlTop
-    ws.Range("A8:M200").WrapText = False
+    ws.Columns("M").ColumnWidth = 16
+    ws.Columns("N").ColumnWidth = 38
+    ws.Columns("O:R").ColumnWidth = 22
+    ws.Range("A1:N200").VerticalAlignment = xlTop
+    ws.Range("A8:N200").WrapText = True
+    ws.Range("A8:N200").ShrinkToFit = True
     ws.Range("E9:G200").WrapText = True
     ws.Range("G9:G200").WrapText = True
     ws.Range("K9:K200").WrapText = True
@@ -195,6 +218,7 @@ Public Sub SetupPivotBuilderSheet()
     AddSetupButtons ws
     AddSetupComments ws
     ApplyBrandLayout ws
+    ApplyTemplateRowVisibility ws
     If Trim$(CStr(ws.Range("B3").Value)) <> "" Then
         TryRefreshFieldSuggestions ws, False
     End If
@@ -284,8 +308,8 @@ Public Sub NewTemplateFromCurrent()
     nextRow = Application.Max(9, lastSetupRow + 1)
 
     For rowIndex = 9 To lastSetupRow
-        If Trim$(CStr(setupWs.Cells(rowIndex, "A").Value)) = currentTemplate Then
-            setupWs.Range("A" & rowIndex & ":M" & rowIndex).Copy Destination:=setupWs.Range("A" & nextRow)
+        If TemplateSelected(Trim$(CStr(setupWs.Cells(rowIndex, "A").Value)), currentTemplate) Then
+            setupWs.Range("A" & rowIndex & ":N" & rowIndex).Copy Destination:=setupWs.Range("A" & nextRow)
             setupWs.Cells(nextRow, "A").Value = newTemplate
             nextRow = nextRow + 1
             copiedCount = copiedCount + 1
@@ -293,7 +317,7 @@ Public Sub NewTemplateFromCurrent()
     Next rowIndex
 
     If copiedCount = 0 Then
-        setupWs.Range("A" & nextRow & ":M" & nextRow).Value = Array( _
+        setupWs.Range("A" & nextRow & ":N" & nextRow).Value = Array( _
             newTemplate, _
             "Pivot_1", _
             "Pivot_Output", _
@@ -306,6 +330,7 @@ Public Sub NewTemplateFromCurrent()
             "", _
             "", _
             "", _
+            "No", _
             "" _
         )
         copiedCount = 1
@@ -316,6 +341,7 @@ Public Sub NewTemplateFromCurrent()
     AddFieldValidations setupWs
     AddSaveBehaviorValidation setupWs
     ApplySaveBehaviorDisplay setupWs
+    ApplyTemplateRowVisibility setupWs
     CaptureSetupCellCache setupWs
     setupWs.Activate
     setupWs.Range("B5").Select
@@ -451,6 +477,7 @@ Public Sub AutoRefreshFieldSuggestionsTick()
         Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
         ApplyDropdownAppend setupWs
         ApplySaveBehaviorDisplay setupWs
+        ApplyTemplateRowVisibility setupWs
         currentKey = FieldRefreshKey(setupWs)
         If currentKey <> mLastAutoFieldKey Then
             If TryRefreshFieldSuggestions(setupWs, False) Then
@@ -554,7 +581,7 @@ Private Function IsSuggestedField(ByVal fieldName As String) As Boolean
 
     If Not WorksheetExists(ThisWorkbook, SETUP_SHEET) Then Exit Function
     Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
-    Set found = setupWs.Range("N4:N500").Find(What:=fieldName, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
+    Set found = setupWs.Range("O4:O500").Find(What:=fieldName, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
     IsSuggestedField = Not found Is Nothing
 End Function
 
@@ -610,6 +637,13 @@ Private Sub AddSaveBehaviorValidation(ByVal setupWs As Worksheet)
         .Validation.IgnoreBlank = True
         .Validation.InCellDropdown = True
     End With
+
+    With setupWs.Range("M9:M200")
+        .Validation.Delete
+        .Validation.Add Type:=xlValidateList, Formula1:="No,Yes"
+        .Validation.IgnoreBlank = True
+        .Validation.InCellDropdown = True
+    End With
 End Sub
 
 Private Function NormalizedSaveBehavior(ByVal textValue As String) As String
@@ -622,6 +656,13 @@ Private Function NormalizedSaveBehavior(ByVal textValue As String) As String
     Else
         NormalizedSaveBehavior = "SAVE TO INPUT FILE"
     End If
+End Function
+
+Private Function YesNoValue(ByVal textValue As String) As Boolean
+    Dim cleanValue As String
+
+    cleanValue = UCase$(Trim$(textValue))
+    YesNoValue = cleanValue = "YES" Or cleanValue = "Y" Or cleanValue = "TRUE" Or cleanValue = "1" Or cleanValue = "CHECKED"
 End Function
 
 Private Function WorkbookFolder(ByVal wb As Workbook, ByVal fallbackPath As String) As String
@@ -748,7 +789,7 @@ Private Sub OpenFieldChecklist(ByVal target As Range)
     Dim shape As Shape
 
     Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
-    If Application.WorksheetFunction.CountA(setupWs.Range("N4:N500")) = 0 Then
+    If Application.WorksheetFunction.CountA(setupWs.Range("O4:O500")) = 0 Then
         TryRefreshFieldSuggestions setupWs, False
     End If
 
@@ -862,7 +903,7 @@ Private Sub OpenConditionBuilder(ByVal target As Range)
     Dim shape As Shape
 
     Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
-    If Application.WorksheetFunction.CountA(setupWs.Range("N4:N500")) = 0 Then
+    If Application.WorksheetFunction.CountA(setupWs.Range("O4:O500")) = 0 Then
         TryRefreshFieldSuggestions setupWs, False
     End If
 
@@ -1011,6 +1052,10 @@ Public Sub BuildPivotTablesFromSetup()
     Dim lastSetupRow As Long
     Dim rowIndex As Long
     Dim outputRow As Long
+    Dim outputCol As Long
+    Dim rowBandBottom As Long
+    Dim currentBlockBottom As Long
+    Dim currentBlockRight As Long
     Dim headers As Variant
     Dim sourceRange As Range
     Dim cache As PivotCache
@@ -1027,6 +1072,7 @@ Public Sub BuildPivotTablesFromSetup()
     Dim saveMessage As String
     Dim buildErrorText As String
     Dim buildStage As String
+    Dim nextPivotRight As Boolean
 
     On Error GoTo BuildError
 
@@ -1114,11 +1160,9 @@ Public Sub BuildPivotTablesFromSetup()
     Set outputWs = targetWb.Worksheets.Add(After:=targetWb.Worksheets(targetWb.Worksheets.Count))
     outputWs.Name = UniqueSheetName(targetWb, SafeSheetName(outputSheetName))
 
-    outputWs.Range("A1").Value = "Pivot template: " & selectedTemplate
-    outputWs.Range("A2").Value = "Created: " & Format(Now, "yyyy-mm-dd hh:mm")
-    outputWs.Range("A1:A2").Font.Bold = True
-
-    outputRow = 5
+    outputRow = 1
+    outputCol = 1
+    rowBandBottom = 1
     builtCount = 0
     csvCount = 0
 
@@ -1135,6 +1179,7 @@ Public Sub BuildPivotTablesFromSetup()
                 cache, _
                 outputWs, _
                 outputRow, _
+                outputCol, _
                 CStr(setupWs.Cells(rowIndex, "B").Value), _
                 CStr(setupWs.Cells(rowIndex, "E").Value), _
                 CStr(setupWs.Cells(rowIndex, "F").Value), _
@@ -1154,10 +1199,22 @@ Public Sub BuildPivotTablesFromSetup()
                 If csvFileName = "" Then csvFileName = Trim$(CStr(setupWs.Cells(rowIndex, "B").Value))
                 If csvFileName = "" Then csvFileName = "Pivot_" & CStr(builtCount)
                 If csvFolder = "" Then Err.Raise vbObjectError + 300, , "Cannot export CSV because the source workbook folder could not be found."
-                ExportRangeToCsv pivot.TableRange2, BuildCsvPath(csvFolder, csvFileName)
+                ExportRangeToCsv PivotExportRange(pivot), BuildCsvPath(csvFolder, csvFileName)
                 csvCount = csvCount + 1
             End If
-            outputRow = pivot.TableRange2.Row + pivot.TableRange2.Rows.Count + 3
+
+            currentBlockBottom = pivot.TableRange2.Row + pivot.TableRange2.Rows.Count + 2
+            currentBlockRight = pivot.TableRange2.Column + pivot.TableRange2.Columns.Count + 2
+            If currentBlockBottom > rowBandBottom Then rowBandBottom = currentBlockBottom
+
+            nextPivotRight = YesNoValue(CStr(setupWs.Cells(rowIndex, "M").Value))
+            If nextPivotRight Then
+                outputCol = currentBlockRight
+            Else
+                outputRow = rowBandBottom + 1
+                outputCol = 1
+                rowBandBottom = outputRow
+            End If
         End If
     Next rowIndex
 
@@ -1517,6 +1574,7 @@ Private Function CreateOnePivot( _
     ByVal cache As PivotCache, _
     ByVal outputWs As Worksheet, _
     ByVal outputRow As Long, _
+    ByVal outputCol As Long, _
     ByVal pivotName As String, _
     ByVal rowFieldsText As String, _
     ByVal rowNamesText As String, _
@@ -1567,9 +1625,10 @@ Private Function CreateOnePivot( _
     If reservedRows < 2 Then reservedRows = 2
     pivotStartRow = outputRow + 2 + reservedRows
 
-    outputWs.Cells(outputRow, 1).Value = displayName
-    outputWs.Cells(outputRow, 1).Font.Bold = True
-    With outputWs.Cells(outputRow + 1, 1)
+    outputWs.Cells(outputRow, outputCol).Value = displayName
+    outputWs.Cells(outputRow, outputCol).Font.Bold = True
+    outputWs.Cells(outputRow, outputCol).Font.Size = 14
+    With outputWs.Cells(outputRow + 1, outputCol)
         .Value = RowFieldDisplayText(rowFields, rowNames, rowGroups)
         .Font.Italic = True
         .Font.Color = RGB(90, 96, 104)
@@ -1577,7 +1636,7 @@ Private Function CreateOnePivot( _
         .ShrinkToFit = True
     End With
 
-    Set pivot = CreateCompatiblePivotTable(cache, outputWs.Cells(pivotStartRow, 1), finalName & "_" & CStr(outputRow))
+    Set pivot = CreateCompatiblePivotTable(cache, outputWs.Cells(pivotStartRow, outputCol), finalName & "_" & CStr(outputRow) & "_" & CStr(outputCol))
 
     For position = 0 To MaxLong(UBoundSafe(rowFields), MaxLong(UBoundSafe(rowNames), UBoundSafe(rowGroups)))
         sourceInput = ""
@@ -2075,6 +2134,13 @@ Private Sub ExportRangeToCsv(ByVal sourceRange As Range, ByVal outputPath As Str
 
     Close #fileNumber
 End Sub
+
+Private Function PivotExportRange(ByVal pivot As PivotTable) As Range
+    On Error Resume Next
+    Set PivotExportRange = pivot.TableRange1
+    If PivotExportRange Is Nothing Then Set PivotExportRange = pivot.TableRange2
+    On Error GoTo 0
+End Function
 
 Private Function CsvEscape(ByVal valueText As String) As String
     If InStr(1, valueText, """", vbBinaryCompare) > 0 Then
@@ -2602,15 +2668,15 @@ Private Function FieldSuggestionArray(ByVal setupWs As Worksheet) As Variant
     Dim fields() As String
     Dim count As Long
 
-    lastRow = setupWs.Cells(setupWs.Rows.Count, "N").End(xlUp).Row
+    lastRow = setupWs.Cells(setupWs.Rows.Count, "O").End(xlUp).Row
     If lastRow < 4 Then Exit Function
 
     count = -1
     For rowIndex = 4 To lastRow
-        If Trim$(CStr(setupWs.Cells(rowIndex, "N").Value)) <> "" Then
+        If Trim$(CStr(setupWs.Cells(rowIndex, "O").Value)) <> "" Then
             count = count + 1
             ReDim Preserve fields(0 To count)
-            fields(count) = Trim$(CStr(setupWs.Cells(rowIndex, "N").Value))
+            fields(count) = Trim$(CStr(setupWs.Cells(rowIndex, "O").Value))
         End If
     Next rowIndex
 
@@ -2649,9 +2715,65 @@ Private Function FirstOutputSheetName(ByVal setupWs As Worksheet, ByVal template
 End Function
 
 Private Function IsBuildSetupRow(ByVal setupWs As Worksheet, ByVal rowIndex As Long, ByVal templateName As String) As Boolean
-    IsBuildSetupRow = StrComp(Trim$(CStr(setupWs.Cells(rowIndex, "A").Value)), templateName, vbTextCompare) = 0 _
+    IsBuildSetupRow = TemplateSelected(Trim$(CStr(setupWs.Cells(rowIndex, "A").Value)), templateName) _
         And Trim$(CStr(setupWs.Cells(rowIndex, "B").Value)) <> ""
 End Function
+
+Private Function TemplateSelected(ByVal rowTemplate As String, ByVal selectedTemplates As String) As Boolean
+    Dim templates As Variant
+    Dim item As Variant
+
+    rowTemplate = Trim$(rowTemplate)
+    selectedTemplates = Trim$(selectedTemplates)
+    If rowTemplate = "" Or selectedTemplates = "" Then Exit Function
+    If StrComp(selectedTemplates, "All", vbTextCompare) = 0 _
+        Or StrComp(selectedTemplates, "All Templates", vbTextCompare) = 0 Then
+        TemplateSelected = True
+        Exit Function
+    End If
+
+    templates = SplitList(selectedTemplates)
+    If UBoundSafe(templates) < 0 Then
+        TemplateSelected = StrComp(rowTemplate, selectedTemplates, vbTextCompare) = 0
+        Exit Function
+    End If
+
+    For Each item In templates
+        If StrComp(Trim$(CStr(item)), "All", vbTextCompare) = 0 _
+            Or StrComp(Trim$(CStr(item)), "All Templates", vbTextCompare) = 0 Then
+            TemplateSelected = True
+            Exit Function
+        End If
+        If StrComp(rowTemplate, Trim$(CStr(item)), vbTextCompare) = 0 Then
+            TemplateSelected = True
+            Exit Function
+        End If
+    Next item
+End Function
+
+Private Sub ApplyTemplateRowVisibility(ByVal setupWs As Worksheet)
+    Dim selectedTemplates As String
+    Dim rowIndex As Long
+    Dim rowTemplate As String
+    Dim lastRow As Long
+
+    On Error Resume Next
+    selectedTemplates = Trim$(CStr(setupWs.Range("B5").Value))
+    lastRow = Application.Max(200, LastTemplateRow(setupWs))
+
+    For rowIndex = 9 To lastRow
+        rowTemplate = Trim$(CStr(setupWs.Cells(rowIndex, "A").Value))
+        If selectedTemplates = "" _
+            Or StrComp(selectedTemplates, "All", vbTextCompare) = 0 _
+            Or rowTemplate = "" _
+            Or TemplateSelected(rowTemplate, selectedTemplates) Then
+            setupWs.Rows(rowIndex).Hidden = False
+        Else
+            setupWs.Rows(rowIndex).Hidden = True
+        End If
+    Next rowIndex
+    On Error GoTo 0
+End Sub
 
 Private Function TemplateExists(ByVal setupWs As Worksheet, ByVal templateName As String) As Boolean
     Dim rowIndex As Long
@@ -2751,17 +2873,53 @@ Private Sub AddDataSheetDropdown(ByVal setupWs As Worksheet, ByVal targetAddress
 End Sub
 
 Private Sub AddTemplateDropdown(ByVal setupWs As Worksheet)
+    PopulateTemplateChoices setupWs
     setupWs.Range("B5").Validation.Delete
-    setupWs.Range("B5").Validation.Add Type:=xlValidateList, Formula1:="=$A$9:$A$200"
+    setupWs.Range("B5").Validation.Add Type:=xlValidateList, Formula1:="=$Q$4:$Q$500"
     setupWs.Range("A9:A200").Validation.Delete
-    setupWs.Range("A9:A200").Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertInformation, Formula1:="=$A$9:$A$200"
+    setupWs.Range("A9:A200").Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertInformation, Formula1:="=$Q$5:$Q$500"
     setupWs.Range("A9:A200").Validation.ShowError = False
 End Sub
 
+Private Sub PopulateTemplateChoices(ByVal setupWs As Worksheet)
+    Dim rowIndex As Long
+    Dim templateName As String
+    Dim outputRow As Long
+
+    setupWs.Range("Q3:Q500").ClearContents
+    setupWs.Range("Q3").Value = "Template Choices"
+    setupWs.Range("Q4").Value = "All"
+    outputRow = 5
+
+    For rowIndex = 9 To 200
+        templateName = Trim$(CStr(setupWs.Cells(rowIndex, "A").Value))
+        If templateName <> "" Then
+            If Not TemplateChoiceExists(setupWs, templateName, 5, outputRow - 1) Then
+                setupWs.Cells(outputRow, "Q").Value = templateName
+                outputRow = outputRow + 1
+            End If
+        End If
+    Next rowIndex
+
+    If outputRow = 5 Then setupWs.Range("Q5").Value = "Default"
+End Sub
+
+Private Function TemplateChoiceExists(ByVal setupWs As Worksheet, ByVal templateName As String, ByVal firstRow As Long, ByVal lastRow As Long) As Boolean
+    Dim rowIndex As Long
+
+    If lastRow < firstRow Then Exit Function
+    For rowIndex = firstRow To lastRow
+        If StrComp(Trim$(CStr(setupWs.Cells(rowIndex, "Q").Value)), templateName, vbTextCompare) = 0 Then
+            TemplateChoiceExists = True
+            Exit Function
+        End If
+    Next rowIndex
+End Function
+
 Private Sub AddFieldValidations(ByVal setupWs As Worksheet)
     On Error Resume Next
-    AddSuggestionValidation setupWs.Range("E9:E200"), "=$N$4:$N$500"
-    AddSuggestionValidation setupWs.Range("G9:K200"), "=$N$4:$N$500"
+    AddSuggestionValidation setupWs.Range("E9:E200"), "=$O$4:$O$500"
+    AddSuggestionValidation setupWs.Range("G9:K200"), "=$O$4:$O$500"
     AddSuggestionValidation setupWs.Range("L9:L200"), "=$B$9:$B$200"
     setupWs.Range("F9:F200").Validation.Delete
     On Error GoTo 0
@@ -2777,9 +2935,9 @@ End Sub
 
 Private Sub PopulateFieldSuggestions(ByVal setupWs As Worksheet, ByVal headers As Variant)
     Dim index As Long
-    setupWs.Range("N4:N500").ClearContents
+    setupWs.Range("O4:O500").ClearContents
     For index = LBound(headers) To UBound(headers)
-        setupWs.Cells(3 + index, "N").Value = CStr(headers(index))
+        setupWs.Cells(3 + index, "O").Value = CStr(headers(index))
     Next index
     AddFieldValidations setupWs
 End Sub
@@ -2790,27 +2948,31 @@ Private Sub ApplyBrandLayout(ByVal ws As Worksheet)
         .Cells.Font.Size = 10
         .Cells.Interior.Color = RGB(242, 244, 247)
 
-        .Range("A1:M1").Interior.Color = RGB(141, 2, 31)
-        .Range("A1:M1").Font.Color = RGB(255, 255, 255)
-        .Range("A1:M1").Font.Bold = True
-        .Range("A1:M1").Font.Size = 16
+        .Range("A1:N1").Interior.Color = RGB(141, 2, 31)
+        .Range("A1:N1").Font.Color = RGB(255, 255, 255)
+        .Range("A1:N1").Font.Bold = True
+        .Range("A1:N1").Font.Size = 16
 
         .Range("A3:D5").Interior.Color = RGB(255, 255, 255)
         .Range("A3:A6").Font.Bold = True
 
-        .Range("A8:M8").Interior.Color = RGB(0, 0, 0)
-        .Range("A8:M8").Font.Color = RGB(255, 255, 255)
-        .Range("A8:M8").Font.Bold = True
-        .Range("A9:M200").Interior.Color = RGB(255, 255, 255)
-        .Range("A8:M200").Borders.Color = RGB(200, 205, 212)
+        .Range("A8:N8").Interior.Color = RGB(0, 0, 0)
+        .Range("A8:N8").Font.Color = RGB(255, 255, 255)
+        .Range("A8:N8").Font.Bold = True
+        .Range("A9:N200").Interior.Color = RGB(255, 255, 255)
+        .Range("A8:N200").Borders.Color = RGB(200, 205, 212)
 
-        .Range("N1:Q1").Interior.Color = RGB(141, 2, 31)
-        .Range("N1:Q1").Font.Color = RGB(255, 255, 255)
-        .Range("N1:Q1").Font.Bold = True
-        .Range("N3:O3").Interior.Color = RGB(0, 0, 0)
-        .Range("N3:O3").Font.Color = RGB(255, 255, 255)
-        .Range("N3:O3").Font.Bold = True
-        .Range("N4:N500").Interior.Color = RGB(255, 255, 255)
+        .Range("O1:R1").Interior.Color = RGB(141, 2, 31)
+        .Range("O1:R1").Font.Color = RGB(255, 255, 255)
+        .Range("O1:R1").Font.Bold = True
+        .Range("O3").Interior.Color = RGB(0, 0, 0)
+        .Range("O3").Font.Color = RGB(255, 255, 255)
+        .Range("O3").Font.Bold = True
+        .Range("O4:O500").Interior.Color = RGB(255, 255, 255)
+        .Range("Q3").Interior.Color = RGB(0, 0, 0)
+        .Range("Q3").Font.Color = RGB(255, 255, 255)
+        .Range("Q3").Font.Bold = True
+        .Range("Q4:Q500").Interior.Color = RGB(255, 255, 255)
 
         .Columns("A").ColumnWidth = 18
         .Columns("B").ColumnWidth = 22
@@ -2824,9 +2986,11 @@ Private Sub ApplyBrandLayout(ByVal ws As Worksheet)
         .Columns("J").ColumnWidth = 16
         .Columns("K").ColumnWidth = 26
         .Columns("L").ColumnWidth = 18
-        .Columns("M").ColumnWidth = 38
-        .Columns("N:Q").ColumnWidth = 22
-        .Range("A8:M200").WrapText = False
+        .Columns("M").ColumnWidth = 16
+        .Columns("N").ColumnWidth = 38
+        .Columns("O:R").ColumnWidth = 22
+        .Range("A8:N200").WrapText = True
+        .Range("A8:N200").ShrinkToFit = True
         .Range("E9:G200").WrapText = True
         .Range("K9:K200").WrapText = True
         .Rows("1:1").RowHeight = 28
@@ -2850,10 +3014,12 @@ Private Sub AddSetupComments(ByVal ws As Worksheet)
     ClearComment ws.Range("J8")
     ClearComment ws.Range("K8")
     ClearComment ws.Range("L8")
+    ClearComment ws.Range("M8")
+    ClearComment ws.Range("N8")
 
     AddCommentText ws.Range("B3"), "Click the small Choose button beside this box. This is the workbook where PivotTables will be created and saved."
     AddCommentText ws.Range("B4"), "Choose the source sheet inside the selected input workbook. Field suggestions refresh after this changes."
-    AddCommentText ws.Range("B5"), "Choose which template name to run. Use New Template to copy the current template, then Save Template after editing."
+    AddCommentText ws.Range("B5"), "Choose All to build every template, choose one template name, or type multiple names separated by commas to combine templates."
     AddCommentText ws.Range("B8"), "Name this setup row/PivotTable, such as Open East Calls. Blank Pivot Name rows are skipped."
     AddCommentText ws.Range("E8"), "Rows group the data. Choose one or more source fields from the dropdown."
     AddCommentText ws.Range("F8"), "Optional friendly name for the row group, such as Time Period or id Group."
@@ -2863,6 +3029,7 @@ Private Sub AddSetupComments(ByVal ws As Worksheet)
     AddCommentText ws.Range("J8"), "Filters become PivotTable filter dropdowns at the top of the pivot."
     AddCommentText ws.Range("K8"), "Optional filter values. Choose a field from the dropdown; it adds Field=. Then type the value after the equals sign."
     AddCommentText ws.Range("L8"), "Used only when Save Behavior is Export CSV. If Save Behavior is Save to input file, this cell is cleared and grayed out."
+    AddCommentText ws.Range("M8"), "Choose Yes when the next PivotTable should start to the right of this PivotTable instead of below it."
 End Sub
 
 Private Sub ClearComment(ByVal target As Range)
