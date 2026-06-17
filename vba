@@ -1777,25 +1777,23 @@ Private Function RowFieldDisplayText(ByVal rowFields As Variant, ByVal rowNames 
 End Function
 
 Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupWs As Worksheet, ByVal selectedTemplate As String, ByVal lastSetupRow As Long) As Variant
-    Dim headers() As String
-    Dim seen As Object
+    Dim headerList As Collection
     Dim rowFields As Variant
     Dim rowNames As Variant
     Dim rowGroups As Variant
     Dim setupRow As Long
     Dim index As Long
-    Dim count As Long
     Dim helperHeader As String
     Dim groupText As String
+    Dim rowFieldText As String
+    Dim rowNameText As String
+    Dim rowGroupText As String
     Dim maxIndex As Long
 
-    Set seen = CreateObject("Scripting.Dictionary")
-    seen.CompareMode = vbTextCompare
-    ReDim headers(1 To 1)
-    count = 0
+    Set headerList = New Collection
 
     For index = LBound(baseHeaders) To UBound(baseHeaders)
-        AddHeaderIfMissing headers, seen, count, CStr(baseHeaders(index))
+        AddHeaderToCollection headerList, CStr(baseHeaders(index))
     Next index
 
     For setupRow = 9 To lastSetupRow
@@ -1806,47 +1804,58 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
             maxIndex = MaxLong(UBoundSafe(rowFields), MaxLong(UBoundSafe(rowNames), UBoundSafe(rowGroups)))
             If maxIndex >= 0 Then
                 For index = 0 To maxIndex
-                    If index <= UBoundSafe(rowGroups) And Trim$(CStr(rowGroups(index))) <> "" Then
-                        groupText = BuildRowGroupText(ListItemOrBlank(rowNames, index), ListItemOrBlank(rowFields, index), CStr(rowGroups(index)))
-                        helperHeader = RowGroupHeader(ListItemOrBlank(rowFields, index), groupText)
-                        AddHeaderIfMissing headers, seen, count, helperHeader
-                    ElseIf index <= UBoundSafe(rowFields) And HasRowGroupRule(CStr(rowFields(index))) Then
-                        helperHeader = RowGroupHeader("", CStr(rowFields(index)))
-                        AddHeaderIfMissing headers, seen, count, helperHeader
-                    ElseIf index <= UBoundSafe(rowNames) Then
-                        If HasRowGroupRule(CStr(rowNames(index))) Then
-                            helperHeader = RowGroupHeader(ListItemOrBlank(rowFields, index), CStr(rowNames(index)))
-                            AddHeaderIfMissing headers, seen, count, helperHeader
-                        End If
+                    rowFieldText = ListItemOrBlank(rowFields, index)
+                    rowNameText = ListItemOrBlank(rowNames, index)
+                    rowGroupText = ListItemOrBlank(rowGroups, index)
+
+                    If Trim$(rowGroupText) <> "" Then
+                        groupText = BuildRowGroupText(rowNameText, rowFieldText, rowGroupText)
+                        helperHeader = RowGroupHeader(rowFieldText, groupText)
+                        AddHeaderToCollection headerList, helperHeader
+                    ElseIf HasRowGroupRule(rowFieldText) Then
+                        helperHeader = RowGroupHeader("", rowFieldText)
+                        AddHeaderToCollection headerList, helperHeader
+                    ElseIf HasRowGroupRule(rowNameText) Then
+                        helperHeader = RowGroupHeader(rowFieldText, rowNameText)
+                        AddHeaderToCollection headerList, helperHeader
                     End If
                 Next index
             End If
         End If
     Next setupRow
 
-    If count = 0 Then
+    If headerList.Count = 0 Then
         HeadersWithRowGroups = Array()
         Exit Function
     End If
 
-    HeadersWithRowGroups = headers
+    HeadersWithRowGroups = CollectionToStringArray(headerList)
 End Function
 
-Private Sub AddHeaderIfMissing(ByRef headers() As String, ByVal seen As Object, ByRef count As Long, ByVal headerText As String)
+Private Sub AddHeaderToCollection(ByVal headerList As Collection, ByVal headerText As String)
     Dim cleanHeader As String
+    Dim item As Variant
 
     cleanHeader = Trim$(CStr(headerText))
     If cleanHeader = "" Then Exit Sub
-    If seen.Exists(cleanHeader) Then Exit Sub
 
-    count = count + 1
-    If count = 1 Then
-        ReDim headers(1 To 1)
-    Else
-        ReDim Preserve headers(1 To count)
-    End If
-    headers(count) = cleanHeader
-    seen.Add cleanHeader, True
+    For Each item In headerList
+        If StrComp(CStr(item), cleanHeader, vbTextCompare) = 0 Then Exit Sub
+    Next item
+
+    headerList.Add cleanHeader
+End Sub
+
+Private Function CollectionToStringArray(ByVal headerList As Collection) As Variant
+    Dim headers() As String
+    Dim index As Long
+
+    ReDim headers(1 To headerList.Count)
+    For index = 1 To headerList.Count
+        headers(index) = CStr(headerList.Item(index))
+    Next index
+
+    CollectionToStringArray = headers
 End Sub
 
 Private Function HasRowGroupRule(ByVal rowNameText As String) As Boolean
@@ -2164,6 +2173,8 @@ Private Sub FillRowGroupColumns(ByVal helperWs As Worksheet, ByVal dataRange As 
     Dim helperHeader As String
     Dim groupText As String
     Dim sourceField As String
+    Dim rowNameText As String
+    Dim rowGroupText As String
     Dim groupRange As Range
     Dim maxIndex As Long
 
@@ -2176,10 +2187,13 @@ Private Sub FillRowGroupColumns(ByVal helperWs As Worksheet, ByVal dataRange As 
 
             If maxIndex >= 0 Then
                 For index = 0 To maxIndex
-                    If index <= UBoundSafe(rowGroups) And Trim$(CStr(rowGroups(index))) <> "" Then
-                        sourceField = ListItemOrBlank(rowFields, index)
+                    sourceField = ListItemOrBlank(rowFields, index)
+                    rowNameText = ListItemOrBlank(rowNames, index)
+                    rowGroupText = ListItemOrBlank(rowGroups, index)
+
+                    If Trim$(rowGroupText) <> "" Then
                         sourceCol = HeaderIndex(headers, sourceField)
-                        groupText = BuildRowGroupText(ListItemOrBlank(rowNames, index), sourceField, CStr(rowGroups(index)))
+                        groupText = BuildRowGroupText(rowNameText, sourceField, rowGroupText)
                         helperHeader = RowGroupHeader(sourceField, groupText)
                         helperCol = HeaderIndex(headers, helperHeader)
                         rulesText = RowGroupRules(groupText)
@@ -2196,37 +2210,34 @@ Private Sub FillRowGroupColumns(ByVal helperWs As Worksheet, ByVal dataRange As 
                             Set groupRange = helperWs.Cells(2, helperCol).Resize(dataRange.Rows.Count - 1, 1)
                             WarnIfGroupMatchedNothing groupRange, RowGroupCaption(groupText, sourceField)
                         End If
-                    ElseIf index <= UBoundSafe(rowFields) And HasRowGroupRule(CStr(rowFields(index))) Then
+                    ElseIf HasRowGroupRule(sourceField) Then
                         sourceCol = 0
-                        helperHeader = RowGroupHeader("", CStr(rowFields(index)))
+                        helperHeader = RowGroupHeader("", sourceField)
                         helperCol = HeaderIndex(headers, helperHeader)
-                        rulesText = RowGroupRules(CStr(rowFields(index)))
+                        rulesText = RowGroupRules(sourceField)
 
                         If helperCol > 0 Then
                             helperWs.Columns(helperCol).NumberFormat = "@"
                             For rowIndex = 2 To dataRange.Rows.Count
-                                helperWs.Cells(rowIndex, helperCol).Value = ApplyRowGroupRules("", rulesText, dataRange, headers, rowIndex, RowGroupCaption(CStr(rowFields(index)), "Condition Group"))
+                                helperWs.Cells(rowIndex, helperCol).Value = ApplyRowGroupRules("", rulesText, dataRange, headers, rowIndex, RowGroupCaption(sourceField, "Condition Group"))
                             Next rowIndex
                             Set groupRange = helperWs.Cells(2, helperCol).Resize(dataRange.Rows.Count - 1, 1)
-                            WarnIfGroupMatchedNothing groupRange, RowGroupCaption(CStr(rowFields(index)), "Condition Group")
+                            WarnIfGroupMatchedNothing groupRange, RowGroupCaption(sourceField, "Condition Group")
                         End If
-                    ElseIf index <= UBoundSafe(rowNames) Then
-                        If HasRowGroupRule(CStr(rowNames(index))) Then
-                            sourceField = ListItemOrBlank(rowFields, index)
+                    ElseIf HasRowGroupRule(rowNameText) Then
                             sourceCol = HeaderIndex(headers, sourceField)
-                            helperHeader = RowGroupHeader(sourceField, CStr(rowNames(index)))
+                            helperHeader = RowGroupHeader(sourceField, rowNameText)
                             helperCol = HeaderIndex(headers, helperHeader)
-                            rulesText = RowGroupRules(CStr(rowNames(index)))
+                            rulesText = RowGroupRules(rowNameText)
 
                             If sourceCol > 0 And helperCol > 0 Then
                                 helperWs.Columns(helperCol).NumberFormat = "@"
                                 For rowIndex = 2 To dataRange.Rows.Count
-                                    helperWs.Cells(rowIndex, helperCol).Value = ApplyRowGroupRules(dataRange.Cells(rowIndex, sourceCol).Value, rulesText, dataRange, headers, rowIndex, RowGroupCaption(CStr(rowNames(index)), sourceField))
+                                    helperWs.Cells(rowIndex, helperCol).Value = ApplyRowGroupRules(dataRange.Cells(rowIndex, sourceCol).Value, rulesText, dataRange, headers, rowIndex, RowGroupCaption(rowNameText, sourceField))
                                 Next rowIndex
                                 Set groupRange = helperWs.Cells(2, helperCol).Resize(dataRange.Rows.Count - 1, 1)
-                                WarnIfGroupMatchedNothing groupRange, RowGroupCaption(CStr(rowNames(index)), sourceField)
+                                WarnIfGroupMatchedNothing groupRange, RowGroupCaption(rowNameText, sourceField)
                             End If
-                        End If
                     End If
                 Next index
             End If
