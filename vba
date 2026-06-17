@@ -620,6 +620,9 @@ Private Sub ApplySaveBehaviorDisplay(ByVal setupWs As Worksheet)
     For rowIndex = 9 To 200
         behavior = NormalizedSaveBehavior(CStr(setupWs.Cells(rowIndex, "D").Value))
         If behavior = "EXPORT XLSX" Then
+            If Trim$(CStr(setupWs.Cells(rowIndex, "L").Value)) <> "" Then
+                setupWs.Cells(rowIndex, "L").Value = EnsureXlsxFileName(CStr(setupWs.Cells(rowIndex, "L").Value))
+            End If
             setupWs.Cells(rowIndex, "L").Interior.Color = RGB(255, 255, 255)
             setupWs.Cells(rowIndex, "L").Font.Color = RGB(0, 0, 0)
         Else
@@ -2041,18 +2044,27 @@ End Function
 
 Private Function BuildXlsxPath(ByVal folderPath As String, ByVal fileName As String) As String
     Dim cleanName As String
-    cleanName = SafeFileName(fileName)
-    If LCase$(Right$(cleanName, 5)) = ".xlsm" Or LCase$(Right$(cleanName, 4)) = ".xls" Then
-        cleanName = Left$(cleanName, InStrRev(cleanName, ".") - 1) & ".xlsx"
-    ElseIf LCase$(Right$(cleanName, 5)) <> ".xlsx" Then
-        cleanName = cleanName & ".xlsx"
-    End If
+    cleanName = EnsureXlsxFileName(fileName)
 
     If Right$(folderPath, 1) = Application.PathSeparator Then
         BuildXlsxPath = folderPath & cleanName
     Else
         BuildXlsxPath = folderPath & Application.PathSeparator & cleanName
     End If
+End Function
+
+Private Function EnsureXlsxFileName(ByVal fileName As String) As String
+    Dim cleanName As String
+    Dim dotPos As Long
+
+    cleanName = SafeFileName(fileName)
+    dotPos = InStrRev(cleanName, ".")
+
+    If dotPos > 1 Then
+        cleanName = Left$(cleanName, dotPos - 1)
+    End If
+
+    EnsureXlsxFileName = cleanName & ".xlsx"
 End Function
 
 Private Sub AddUniqueString(ByVal items As Collection, ByVal textValue As String)
