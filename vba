@@ -1090,10 +1090,14 @@ Public Sub BuildPivotTablesFromSetup()
         Exit Sub
     End If
 
-    buildStage = "reading source data headers"
+    buildStage = "selecting source data sheet"
     Set dataWs = targetWb.Worksheets(dataSheetName)
     lastSetupRow = setupWs.Cells(setupWs.Rows.Count, "A").End(xlUp).Row
-    headers = HeadersWithRowGroups(NormalizedHeaders(dataWs.UsedRange), setupWs, selectedTemplate, lastSetupRow)
+    buildStage = "normalizing source data headers"
+    headers = NormalizedHeaders(dataWs.UsedRange)
+    buildStage = "adding row group headers from setup"
+    headers = HeadersWithRowGroups(headers, setupWs, selectedTemplate, lastSetupRow)
+    buildStage = "writing field suggestions"
     PopulateFieldSuggestions setupWs, headers
     buildStage = "creating helper source table"
     Set sourceWs = CreateNormalizedSourceSheet(targetWb, dataWs, headers, setupWs, selectedTemplate, lastSetupRow)
@@ -1774,6 +1778,7 @@ End Function
 
 Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupWs As Worksheet, ByVal selectedTemplate As String, ByVal lastSetupRow As Long) As Variant
     Dim headers() As String
+    Dim seen As Object
     Dim rowFields As Variant
     Dim rowNames As Variant
     Dim rowGroups As Variant
@@ -1784,11 +1789,14 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
     Dim groupText As String
     Dim maxIndex As Long
 
-    ReDim headers(LBound(baseHeaders) To UBound(baseHeaders))
+    Set seen = CreateObject("Scripting.Dictionary")
+    seen.CompareMode = vbTextCompare
+    ReDim headers(1 To 1)
+    count = 0
+
     For index = LBound(baseHeaders) To UBound(baseHeaders)
-        headers(index) = CStr(baseHeaders(index))
+        AddHeaderIfMissing headers, seen, count, CStr(baseHeaders(index))
     Next index
-    count = UBound(headers)
 
     For setupRow = 9 To lastSetupRow
         If IsBuildSetupRow(setupWs, setupRow, selectedTemplate) Then
@@ -1801,26 +1809,14 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
                     If index <= UBoundSafe(rowGroups) And Trim$(CStr(rowGroups(index))) <> "" Then
                         groupText = BuildRowGroupText(ListItemOrBlank(rowNames, index), ListItemOrBlank(rowFields, index), CStr(rowGroups(index)))
                         helperHeader = RowGroupHeader(ListItemOrBlank(rowFields, index), groupText)
-                        If helperHeader <> "" And Not FieldExists(headers, helperHeader) Then
-                            count = count + 1
-                            ReDim Preserve headers(LBound(baseHeaders) To count)
-                            headers(count) = helperHeader
-                        End If
+                        AddHeaderIfMissing headers, seen, count, helperHeader
                     ElseIf index <= UBoundSafe(rowFields) And HasRowGroupRule(CStr(rowFields(index))) Then
                         helperHeader = RowGroupHeader("", CStr(rowFields(index)))
-                        If helperHeader <> "" And Not FieldExists(headers, helperHeader) Then
-                            count = count + 1
-                            ReDim Preserve headers(LBound(baseHeaders) To count)
-                            headers(count) = helperHeader
-                        End If
+                        AddHeaderIfMissing headers, seen, count, helperHeader
                     ElseIf index <= UBoundSafe(rowNames) Then
                         If HasRowGroupRule(CStr(rowNames(index))) Then
                             helperHeader = RowGroupHeader(ListItemOrBlank(rowFields, index), CStr(rowNames(index)))
-                            If helperHeader <> "" And Not FieldExists(headers, helperHeader) Then
-                                count = count + 1
-                                ReDim Preserve headers(LBound(baseHeaders) To count)
-                                headers(count) = helperHeader
-                            End If
+                            AddHeaderIfMissing headers, seen, count, helperHeader
                         End If
                     End If
                 Next index
@@ -1828,8 +1824,30 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
         End If
     Next setupRow
 
+    If count = 0 Then
+        HeadersWithRowGroups = Array()
+        Exit Function
+    End If
+
     HeadersWithRowGroups = headers
 End Function
+
+Private Sub AddHeaderIfMissing(ByRef headers() As String, ByVal seen As Object, ByRef count As Long, ByVal headerText As String)
+    Dim cleanHeader As String
+
+    cleanHeader = Trim$(CStr(headerText))
+    If cleanHeader = "" Then Exit Sub
+    If seen.Exists(cleanHeader) Then Exit Sub
+
+    count = count + 1
+    If count = 1 Then
+        ReDim headers(1 To 1)
+    Else
+        ReDim Preserve headers(1 To count)
+    End If
+    headers(count) = cleanHeader
+    seen.Add cleanHeader, True
+End Sub
 
 Private Function HasRowGroupRule(ByVal rowNameText As String) As Boolean
     HasRowGroupRule = InStr(1, rowNameText, "{", vbTextCompare) > 0 And InStr(1, rowNameText, "}", vbTextCompare) > InStr(1, rowNameText, "{", vbTextCompare)
