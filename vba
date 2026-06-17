@@ -1789,6 +1789,7 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
     Dim rowNameText As String
     Dim rowGroupText As String
     Dim maxIndex As Long
+    Dim resultHeaders As Variant
 
     Set headerList = New Collection
 
@@ -1829,10 +1830,15 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
         Exit Function
     End If
 
-    HeadersWithRowGroups = CollectionToStringArray(headerList)
+    ReDim resultHeaders(1 To headerList.Count)
+    For index = 1 To headerList.Count
+        resultHeaders(index) = CStr(headerList.Item(index))
+    Next index
+
+    HeadersWithRowGroups = resultHeaders
 End Function
 
-Private Sub AddHeaderToCollection(ByVal headerList As Collection, ByVal headerText As String)
+Private Sub AddHeaderToCollection(ByVal headerList As Variant, ByVal headerText As String)
     Dim cleanHeader As String
     Dim item As Variant
 
@@ -1846,8 +1852,8 @@ Private Sub AddHeaderToCollection(ByVal headerList As Collection, ByVal headerTe
     headerList.Add cleanHeader
 End Sub
 
-Private Function CollectionToStringArray(ByVal headerList As Collection) As Variant
-    Dim headers() As String
+Private Function CollectionToStringArray(ByVal headerList As Variant) As Variant
+    Dim headers As Variant
     Dim index As Long
 
     ReDim headers(1 To headerList.Count)
