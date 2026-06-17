@@ -1025,6 +1025,7 @@ Public Sub BuildPivotTablesFromSetup()
     Dim currentBuildRow As Long
     Dim currentPivotName As String
     Dim saveMessage As String
+    Dim buildErrorText As String
 
     On Error GoTo BuildError
 
@@ -1167,12 +1168,34 @@ Public Sub BuildPivotTablesFromSetup()
     Exit Sub
 
 BuildError:
+    buildErrorText = Err.Description
+    If Trim$(buildErrorText) = "" Then buildErrorText = "Excel did not return a detailed error message."
     Application.DisplayAlerts = True
     Application.ScreenUpdating = True
+    WriteBuildErrorLog controllerWb, BuildErrorMessage(buildErrorText, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers)
     On Error Resume Next
     If Not targetWb Is Nothing Then targetWb.Close SaveChanges:=False
     On Error GoTo 0
-    MsgBox BuildErrorMessage(Err.Description, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers), vbExclamation
+    MsgBox BuildErrorMessage(buildErrorText, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers) & vbCrLf & vbCrLf & _
+        "A copy of this message was written to the PivotBuilder_ErrorLog sheet.", vbExclamation
+End Sub
+
+Private Sub WriteBuildErrorLog(ByVal wb As Workbook, ByVal messageText As String)
+    Dim logWs As Worksheet
+
+    On Error Resume Next
+    If wb Is Nothing Then Set wb = ThisWorkbook
+    Set logWs = GetOrCreateSheet(wb, "PivotBuilder_ErrorLog")
+    logWs.Cells.Clear
+    logWs.Range("A1").Value = "Pivot Builder Error Log"
+    logWs.Range("A2").Value = Format(Now, "yyyy-mm-dd hh:mm:ss")
+    logWs.Range("A4").Value = messageText
+    logWs.Range("A1").Font.Bold = True
+    logWs.Range("A4").WrapText = True
+    logWs.Columns("A").ColumnWidth = 120
+    logWs.Rows("4:4").RowHeight = 220
+    logWs.Visible = xlSheetVisible
+    On Error GoTo 0
 End Sub
 
 Public Sub RunPivotBuilderDiagnostic()
