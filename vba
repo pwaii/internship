@@ -107,7 +107,7 @@ Public Sub SetupPivotBuilderSheet()
         "Values To Count/Sum", _
         "Filters", _
         "Conditions", _
-        "CSV File Name", _
+        "Export XLSX File Name", _
         "Next Pivot Right", _
         "Notes" _
     )
@@ -159,7 +159,7 @@ Public Sub SetupPivotBuilderSheet()
             "Pivot_1", _
             "Pivot_Output", _
             "Save to input file", _
-            "01", _
+            "", _
             "", _
             "", _
             "", _
@@ -168,7 +168,7 @@ Public Sub SetupPivotBuilderSheet()
             "", _
             "", _
             "No", _
-            "Conditions are optional. Use Field=Value; Field2=Value2" _
+            "" _
         )
     End If
 
@@ -619,7 +619,7 @@ Private Sub ApplySaveBehaviorDisplay(ByVal setupWs As Worksheet)
 
     For rowIndex = 9 To 200
         behavior = NormalizedSaveBehavior(CStr(setupWs.Cells(rowIndex, "D").Value))
-        If behavior = "EXPORT CSV" Then
+        If behavior = "EXPORT XLSX" Then
             setupWs.Cells(rowIndex, "L").Interior.Color = RGB(255, 255, 255)
             setupWs.Cells(rowIndex, "L").Font.Color = RGB(0, 0, 0)
         Else
@@ -633,7 +633,7 @@ End Sub
 Private Sub AddSaveBehaviorValidation(ByVal setupWs As Worksheet)
     With setupWs.Range("D9:D200")
         .Validation.Delete
-        .Validation.Add Type:=xlValidateList, Formula1:="Save to input file,Export CSV"
+        .Validation.Add Type:=xlValidateList, Formula1:="Save to input file,Export XLSX"
         .Validation.IgnoreBlank = True
         .Validation.InCellDropdown = True
     End With
@@ -651,8 +651,8 @@ Private Function NormalizedSaveBehavior(ByVal textValue As String) As String
     cleanValue = UCase$(Trim$(textValue))
     If cleanValue = "" Then
         NormalizedSaveBehavior = "SAVE TO INPUT FILE"
-    ElseIf cleanValue = "EXPORT CSV" Or cleanValue = "CSV" Then
-        NormalizedSaveBehavior = "EXPORT CSV"
+    ElseIf cleanValue = "EXPORT XLSX" Or cleanValue = "XLSX" Or cleanValue = "EXPORT CSV" Or cleanValue = "CSV" Then
+        NormalizedSaveBehavior = "EXPORT XLSX"
     Else
         NormalizedSaveBehavior = "SAVE TO INPUT FILE"
     End If
@@ -1061,10 +1061,11 @@ Public Sub BuildPivotTablesFromSetup()
     Dim cache As PivotCache
     Dim pivot As PivotTable
     Dim builtCount As Long
-    Dim csvCount As Long
-    Dim csvFileName As String
+    Dim exportCount As Long
+    Dim exportFileName As String
+    Dim exportPaths As Collection
     Dim saveBehavior As String
-    Dim csvFolder As String
+    Dim exportFolder As String
     Dim convertedFromCsv As Boolean
     Dim convertedWorkbookPath As String
     Dim currentBuildRow As Long
@@ -1127,7 +1128,7 @@ Public Sub BuildPivotTablesFromSetup()
         setupWs.Range("B3").Value = convertedWorkbookPath
         setupWs.Range("B4").Value = dataSheetName
     End If
-    csvFolder = WorkbookFolder(targetWb, sourceWorkbookPath)
+    exportFolder = WorkbookFolder(targetWb, sourceWorkbookPath)
 
     buildStage = "checking data sheet"
     If Not WorksheetExists(targetWb, dataSheetName) Then
@@ -1164,7 +1165,8 @@ Public Sub BuildPivotTablesFromSetup()
     outputCol = 1
     rowBandBottom = 1
     builtCount = 0
-    csvCount = 0
+    exportCount = 0
+    Set exportPaths = New Collection
 
     Application.ScreenUpdating = False
     Application.DisplayAlerts = False
@@ -1193,14 +1195,13 @@ Public Sub BuildPivotTablesFromSetup()
 
             builtCount = builtCount + 1
             saveBehavior = NormalizedSaveBehavior(CStr(setupWs.Cells(rowIndex, "D").Value))
-            If saveBehavior = "EXPORT CSV" Then
-                buildStage = "exporting CSV for setup row " & CStr(currentBuildRow)
-                csvFileName = Trim$(CStr(setupWs.Cells(rowIndex, "L").Value))
-                If csvFileName = "" Then csvFileName = Trim$(CStr(setupWs.Cells(rowIndex, "B").Value))
-                If csvFileName = "" Then csvFileName = "Pivot_" & CStr(builtCount)
-                If csvFolder = "" Then Err.Raise vbObjectError + 300, , "Cannot export CSV because the source workbook folder could not be found."
-                ExportRangeToCsv PivotExportRange(pivot), BuildCsvPath(csvFolder, csvFileName)
-                csvCount = csvCount + 1
+            If saveBehavior = "EXPORT XLSX" Then
+                buildStage = "remembering XLSX export for setup row " & CStr(currentBuildRow)
+                exportFileName = Trim$(CStr(setupWs.Cells(rowIndex, "L").Value))
+                If exportFileName = "" Then exportFileName = Trim$(CStr(setupWs.Cells(rowIndex, "B").Value))
+                If exportFileName = "" Then exportFileName = outputSheetName
+                If exportFolder = "" Then Err.Raise vbObjectError + 300, , "Cannot export XLSX because the source workbook folder could not be found."
+                AddUniqueString exportPaths, BuildXlsxPath(exportFolder, exportFileName)
             End If
 
             currentBlockBottom = pivot.TableRange2.Row + pivot.TableRange2.Rows.Count + 2
@@ -1233,11 +1234,9 @@ Public Sub BuildPivotTablesFromSetup()
 
     buildStage = "saving workbook"
     saveMessage = SaveBuiltWorkbook(targetWb, sourceWorkbookPath, convertedFromCsv, convertedWorkbookPath)
-    If convertedFromCsv Then
-        MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s)." & vbCrLf & saveMessage, vbInformation
-    Else
-        MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s)." & vbCrLf & saveMessage, vbInformation
-    End If
+    buildStage = "exporting XLSX workbook copies"
+    exportCount = ExportXlsxCopies(targetWb, exportPaths)
+    MsgBox "Created " & builtCount & " PivotTable(s), exported " & exportCount & " XLSX file(s)." & vbCrLf & saveMessage, vbInformation
 
     targetWb.Close SaveChanges:=False
     Exit Sub
@@ -1629,7 +1628,7 @@ Private Function CreateOnePivot( _
     outputWs.Cells(outputRow, outputCol).Font.Bold = True
     outputWs.Cells(outputRow, outputCol).Font.Size = 14
     With outputWs.Cells(outputRow + 1, outputCol)
-        .Value = RowFieldDisplayText(rowFields, rowNames, rowGroups)
+        .Value = FilterConditionDisplayText(filterFieldsText, conditionsText)
         .Font.Italic = True
         .Font.Color = RGB(90, 96, 104)
         .WrapText = True
@@ -1716,12 +1715,16 @@ Private Function CreateOnePivot( _
         End If
     Next item
 
-    ApplyConditions pivot, conditionsText, headers
-
     On Error Resume Next
     pivot.RowAxisLayout xlTabularRow
     pivot.TableStyle2 = "PivotStyleMedium9"
     pivot.PivotCache.Refresh
+    pivot.RefreshTable
+    On Error GoTo 0
+
+    ApplyConditions pivot, conditionsText, headers
+
+    On Error Resume Next
     pivot.RefreshTable
     On Error GoTo 0
 
@@ -2036,10 +2039,85 @@ Private Function BuildCsvPath(ByVal folderPath As String, ByVal fileName As Stri
     End If
 End Function
 
+Private Function BuildXlsxPath(ByVal folderPath As String, ByVal fileName As String) As String
+    Dim cleanName As String
+    cleanName = SafeFileName(fileName)
+    If LCase$(Right$(cleanName, 5)) = ".xlsm" Or LCase$(Right$(cleanName, 4)) = ".xls" Then
+        cleanName = Left$(cleanName, InStrRev(cleanName, ".") - 1) & ".xlsx"
+    ElseIf LCase$(Right$(cleanName, 5)) <> ".xlsx" Then
+        cleanName = cleanName & ".xlsx"
+    End If
+
+    If Right$(folderPath, 1) = Application.PathSeparator Then
+        BuildXlsxPath = folderPath & cleanName
+    Else
+        BuildXlsxPath = folderPath & Application.PathSeparator & cleanName
+    End If
+End Function
+
+Private Sub AddUniqueString(ByVal items As Collection, ByVal textValue As String)
+    Dim item As Variant
+
+    For Each item In items
+        If StrComp(CStr(item), textValue, vbTextCompare) = 0 Then Exit Sub
+    Next item
+
+    items.Add textValue
+End Sub
+
+Private Function ExportXlsxCopies(ByVal targetWb As Workbook, ByVal exportPaths As Collection) As Long
+    Dim item As Variant
+
+    If exportPaths Is Nothing Then Exit Function
+
+    For Each item In exportPaths
+        ExportWorkbookAsXlsx targetWb, CStr(item)
+        ExportXlsxCopies = ExportXlsxCopies + 1
+    Next item
+End Function
+
+Private Sub ExportWorkbookAsXlsx(ByVal targetWb As Workbook, ByVal outputPath As String)
+    Dim tempPath As String
+    Dim exportWb As Workbook
+    Dim finalPath As String
+    Dim exportErr As String
+
+    On Error GoTo ExportFailed
+
+    finalPath = outputPath
+    If StrComp(finalPath, targetWb.FullName, vbTextCompare) = 0 Then
+        finalPath = UniqueFilePath(Left$(finalPath, InStrRev(finalPath, ".") - 1) & "_Export.xlsx")
+    End If
+
+    tempPath = Environ$("TEMP") & Application.PathSeparator & "PivotBuilderExport_" & Format$(Now, "yyyymmddhhmmss") & "_" & CStr(Int(Rnd() * 1000000)) & ".xlsx"
+    targetWb.SaveCopyAs tempPath
+
+    Set exportWb = Application.Workbooks.Open(tempPath)
+    Application.DisplayAlerts = False
+    If Dir(finalPath) <> "" Then Kill finalPath
+    exportWb.SaveAs Filename:=finalPath, FileFormat:=xlOpenXMLWorkbook
+    exportWb.Close SaveChanges:=False
+    Application.DisplayAlerts = True
+
+    On Error Resume Next
+    Kill tempPath
+    On Error GoTo 0
+    Exit Sub
+
+ExportFailed:
+    exportErr = Err.Description
+    Application.DisplayAlerts = True
+    On Error Resume Next
+    If Not exportWb Is Nothing Then exportWb.Close SaveChanges:=False
+    If tempPath <> "" Then Kill tempPath
+    On Error GoTo 0
+    Err.Raise vbObjectError + 302, , "Could not export XLSX file: " & finalPath & ". " & exportErr
+End Sub
+
 Private Function SafeFileName(ByVal fileName As String) As String
     Dim result As String
     result = Trim$(fileName)
-    If result = "" Then result = "pivot.csv"
+    If result = "" Then result = "Pivot_Output"
     result = Replace(result, "\", "_")
     result = Replace(result, "/", "_")
     result = Replace(result, ":", "_")
@@ -2112,12 +2190,37 @@ Private Function ConditionsDisplayName(ByVal conditionsText As String) As String
     ConditionsDisplayName = result
 End Function
 
+Private Function FilterConditionDisplayText(ByVal filterFieldsText As String, ByVal conditionsText As String) As String
+    Dim filtersText As String
+    Dim cleanedConditions As String
+    Dim result As String
+
+    filtersText = Trim$(Replace(filterFieldsText, vbCrLf, ", "))
+    filtersText = Trim$(Replace(filtersText, vbLf, ", "))
+    cleanedConditions = Trim$(Replace(conditionsText, vbCrLf, "; "))
+    cleanedConditions = Trim$(Replace(cleanedConditions, vbLf, "; "))
+
+    If cleanedConditions <> "" Then
+        result = "Conditions: " & cleanedConditions
+    Else
+        result = "Conditions: none"
+    End If
+
+    If filtersText <> "" Then
+        result = result & " | Filter fields: " & filtersText
+    End If
+
+    FilterConditionDisplayText = result
+End Function
+
 Private Sub ExportRangeToCsv(ByVal sourceRange As Range, ByVal outputPath As String)
     Dim fileNumber As Integer
     Dim rowIndex As Long
     Dim colIndex As Long
     Dim lineText As String
     Dim valueText As String
+
+    If sourceRange Is Nothing Then Err.Raise vbObjectError + 301, , "Cannot export CSV because the PivotTable output range was not found."
 
     fileNumber = FreeFile
     Open outputPath For Output As #fileNumber
@@ -2135,11 +2238,25 @@ Private Sub ExportRangeToCsv(ByVal sourceRange As Range, ByVal outputPath As Str
     Close #fileNumber
 End Sub
 
-Private Function PivotExportRange(ByVal pivot As PivotTable) As Range
+Private Function PivotExportRange(ByVal pivot As PivotTable, Optional ByVal titleRow As Long = 0, Optional ByVal titleCol As Long = 0) As Range
+    Dim pivotRange As Range
+    Dim bottomRow As Long
+    Dim rightCol As Long
+
     On Error Resume Next
-    Set PivotExportRange = pivot.TableRange1
-    If PivotExportRange Is Nothing Then Set PivotExportRange = pivot.TableRange2
+    Set pivotRange = pivot.TableRange2
+    If pivotRange Is Nothing Then Set pivotRange = pivot.TableRange1
     On Error GoTo 0
+
+    If pivotRange Is Nothing Then Exit Function
+
+    If titleRow > 0 And titleCol > 0 Then
+        bottomRow = pivotRange.Row + pivotRange.Rows.Count - 1
+        rightCol = pivotRange.Column + pivotRange.Columns.Count - 1
+        Set PivotExportRange = pivot.Parent.Range(pivot.Parent.Cells(titleRow, titleCol), pivot.Parent.Cells(bottomRow, rightCol))
+    Else
+        Set PivotExportRange = pivotRange
+    End If
 End Function
 
 Private Function CsvEscape(ByVal valueText As String) As String
@@ -2177,18 +2294,47 @@ Private Sub ApplyConditions(ByVal pivot As PivotTable, ByVal conditionsText As S
                 End If
 
                 Set pf = pivot.PivotFields(fieldName)
-                pf.Orientation = xlPageField
                 On Error Resume Next
-                pf.CurrentPage = fieldValue
-                If Err.Number <> 0 Then
-                    Err.Clear
-                    pf.ClearAllFilters
-                    pf.PivotFilters.Add Type:=xlCaptionEquals, Value1:=fieldValue
+                pf.ClearAllFilters
+                If pf.Orientation = xlRowField Or pf.Orientation = xlColumnField Then
+                    ApplyPivotItemEqualsFilter pf, fieldValue
+                Else
+                    pf.Orientation = xlPageField
+                    pf.EnableMultiplePageItems = False
+                    pf.CurrentPage = fieldValue
+                    If Err.Number <> 0 Then
+                        Err.Clear
+                        pf.PivotFilters.Add Type:=xlCaptionEquals, Value1:=fieldValue
+                    End If
                 End If
                 On Error GoTo 0
             End If
         End If
     Next condition
+End Sub
+
+Private Sub ApplyPivotItemEqualsFilter(ByVal pf As PivotField, ByVal fieldValue As String)
+    Dim item As PivotItem
+    Dim matched As Boolean
+
+    For Each item In pf.PivotItems
+        If StrComp(Trim$(CStr(item.Name)), Trim$(fieldValue), vbTextCompare) = 0 Then
+            matched = True
+            item.Visible = True
+        End If
+    Next item
+
+    If matched Then
+        For Each item In pf.PivotItems
+            If StrComp(Trim$(CStr(item.Name)), Trim$(fieldValue), vbTextCompare) <> 0 Then
+                On Error Resume Next
+                item.Visible = False
+                On Error GoTo 0
+            End If
+        Next item
+    Else
+        pf.PivotFilters.Add Type:=xlCaptionEquals, Value1:=fieldValue
+    End If
 End Sub
 
 Private Function CreateNormalizedSourceSheet(ByVal wb As Workbook, ByVal dataWs As Worksheet, ByVal headers As Variant, ByVal setupWs As Worksheet, ByVal selectedTemplate As String, ByVal lastSetupRow As Long) As Worksheet
@@ -2803,7 +2949,7 @@ Private Function FirstSaveAsFlag(ByVal setupWs As Worksheet, ByVal templateName 
     Dim rowIndex As Long
     For rowIndex = 9 To lastSetupRow
         If IsBuildSetupRow(setupWs, rowIndex, templateName) Then
-            FirstSaveAsFlag = NormalizedSaveBehavior(CStr(setupWs.Cells(rowIndex, "D").Value)) <> "EXPORT CSV"
+            FirstSaveAsFlag = NormalizedSaveBehavior(CStr(setupWs.Cells(rowIndex, "D").Value)) <> "EXPORT XLSX"
             Exit Function
         End If
     Next rowIndex
@@ -3028,7 +3174,7 @@ Private Sub AddSetupComments(ByVal ws As Worksheet)
     AddCommentText ws.Range("I8"), "Values To Count/Sum are calculated. Numeric fields are summed; text fields are counted."
     AddCommentText ws.Range("J8"), "Filters become PivotTable filter dropdowns at the top of the pivot."
     AddCommentText ws.Range("K8"), "Optional filter values. Choose a field from the dropdown; it adds Field=. Then type the value after the equals sign."
-    AddCommentText ws.Range("L8"), "Used only when Save Behavior is Export CSV. If Save Behavior is Save to input file, this cell is cleared and grayed out."
+    AddCommentText ws.Range("L8"), "Used only when Save Behavior is Export XLSX. This names the exported workbook copy. If Save Behavior is Save to input file, this cell is cleared and grayed out."
     AddCommentText ws.Range("M8"), "Choose Yes when the next PivotTable should start to the right of this PivotTable instead of below it."
 End Sub
 
