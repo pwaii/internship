@@ -1026,9 +1026,11 @@ Public Sub BuildPivotTablesFromSetup()
     Dim currentPivotName As String
     Dim saveMessage As String
     Dim buildErrorText As String
+    Dim buildStage As String
 
     On Error GoTo BuildError
 
+    buildStage = "starting build"
     Set controllerWb = ThisWorkbook
 
     If Not WorksheetExists(controllerWb, SETUP_SHEET) Then
@@ -1036,6 +1038,7 @@ Public Sub BuildPivotTablesFromSetup()
         Exit Sub
     End If
 
+    buildStage = "reading setup sheet"
     Set setupWs = controllerWb.Worksheets(SETUP_SHEET)
     ApplyDropdownAppend setupWs
     selectedTemplate = Trim(CStr(setupWs.Range("B5").Value))
@@ -1065,8 +1068,10 @@ Public Sub BuildPivotTablesFromSetup()
     End If
 
     convertedFromCsv = IsCsvPath(sourceWorkbookPath)
+    buildStage = "opening source workbook"
     Set targetWb = Workbooks.Open(sourceWorkbookPath)
     If convertedFromCsv Then
+        buildStage = "converting CSV to XLSX"
         convertedWorkbookPath = CsvConvertedWorkbookPath(sourceWorkbookPath)
         Application.DisplayAlerts = False
         targetWb.SaveAs Filename:=convertedWorkbookPath, FileFormat:=xlOpenXMLWorkbook
@@ -1078,21 +1083,27 @@ Public Sub BuildPivotTablesFromSetup()
     End If
     csvFolder = WorkbookFolder(targetWb, sourceWorkbookPath)
 
+    buildStage = "checking data sheet"
     If Not WorksheetExists(targetWb, dataSheetName) Then
         MsgBox "Data sheet not found: " & dataSheetName, vbExclamation
         targetWb.Close SaveChanges:=False
         Exit Sub
     End If
 
+    buildStage = "reading source data headers"
     Set dataWs = targetWb.Worksheets(dataSheetName)
     lastSetupRow = setupWs.Cells(setupWs.Rows.Count, "A").End(xlUp).Row
     headers = HeadersWithRowGroups(NormalizedHeaders(dataWs.UsedRange), setupWs, selectedTemplate, lastSetupRow)
     PopulateFieldSuggestions setupWs, headers
+    buildStage = "creating helper source table"
     Set sourceWs = CreateNormalizedSourceSheet(targetWb, dataWs, headers, setupWs, selectedTemplate, lastSetupRow)
-    Set sourceRange = sourceWs.UsedRange
+    Set sourceRange = PivotSourceRange(sourceWs)
+    buildStage = "validating helper source table"
     ValidatePivotSourceRange sourceRange, dataSheetName
+    buildStage = "creating PivotCache"
     Set cache = CreateCompatiblePivotCache(targetWb, sourceRange)
 
+    buildStage = "creating output sheet"
     outputSheetName = FirstOutputSheetName(setupWs, selectedTemplate, lastSetupRow)
     If outputSheetName = "" Then outputSheetName = "Pivot_Output"
 
@@ -1114,6 +1125,7 @@ Public Sub BuildPivotTablesFromSetup()
         If IsBuildSetupRow(setupWs, rowIndex, selectedTemplate) Then
             currentBuildRow = rowIndex
             currentPivotName = Trim$(CStr(setupWs.Cells(rowIndex, "B").Value))
+            buildStage = "building setup row " & CStr(currentBuildRow) & " (" & currentPivotName & ")"
 
             Set pivot = CreateOnePivot( _
                 cache, _
@@ -1133,6 +1145,7 @@ Public Sub BuildPivotTablesFromSetup()
             builtCount = builtCount + 1
             saveBehavior = NormalizedSaveBehavior(CStr(setupWs.Cells(rowIndex, "D").Value))
             If saveBehavior = "EXPORT CSV" Then
+                buildStage = "exporting CSV for setup row " & CStr(currentBuildRow)
                 csvFileName = Trim$(CStr(setupWs.Cells(rowIndex, "L").Value))
                 If csvFileName = "" Then csvFileName = Trim$(CStr(setupWs.Cells(rowIndex, "B").Value))
                 If csvFileName = "" Then csvFileName = "Pivot_" & CStr(builtCount)
@@ -1157,6 +1170,7 @@ Public Sub BuildPivotTablesFromSetup()
         Exit Sub
     End If
 
+    buildStage = "saving workbook"
     saveMessage = SaveBuiltWorkbook(targetWb, sourceWorkbookPath, convertedFromCsv, convertedWorkbookPath)
     If convertedFromCsv Then
         MsgBox "Created " & builtCount & " PivotTable(s), exported " & csvCount & " CSV file(s)." & vbCrLf & saveMessage, vbInformation
@@ -1172,11 +1186,11 @@ BuildError:
     If Trim$(buildErrorText) = "" Then buildErrorText = "Excel did not return a detailed error message."
     Application.DisplayAlerts = True
     Application.ScreenUpdating = True
-    WriteBuildErrorLog controllerWb, BuildErrorMessage(buildErrorText, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers)
+    WriteBuildErrorLog controllerWb, BuildErrorMessage(buildErrorText, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers, buildStage)
     On Error Resume Next
     If Not targetWb Is Nothing Then targetWb.Close SaveChanges:=False
     On Error GoTo 0
-    MsgBox BuildErrorMessage(buildErrorText, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers) & vbCrLf & vbCrLf & _
+    MsgBox BuildErrorMessage(buildErrorText, selectedTemplate, dataSheetName, currentBuildRow, currentPivotName, headers, buildStage) & vbCrLf & vbCrLf & _
         "A copy of this message was written to the PivotBuilder_ErrorLog sheet.", vbExclamation
 End Sub
 
@@ -1266,13 +1280,15 @@ Private Function BuildErrorMessage( _
     ByVal dataSheetName As String, _
     ByVal setupRow As Long, _
     ByVal pivotName As String, _
-    ByVal headers As Variant _
+    ByVal headers As Variant, _
+    ByVal buildStage As String _
 ) As String
     Dim result As String
 
     result = "Could not build PivotTables." & vbCrLf & vbCrLf
     If selectedTemplate <> "" Then result = result & "Template: " & selectedTemplate & vbCrLf
     If dataSheetName <> "" Then result = result & "Data sheet: " & dataSheetName & vbCrLf
+    If buildStage <> "" Then result = result & "Build stage: " & buildStage & vbCrLf
     If setupRow >= 9 Then result = result & "Setup row: " & CStr(setupRow) & vbCrLf
     If pivotName <> "" Then result = result & "Pivot name: " & pivotName & vbCrLf
     result = result & vbCrLf & "Problem: " & errorText & vbCrLf & vbCrLf
@@ -1470,6 +1486,14 @@ Private Function CreateCompatiblePivotTable(ByVal cache As PivotCache, ByVal des
     End If
 
     Set CreateCompatiblePivotTable = pivot
+End Function
+
+Private Function PivotSourceRange(ByVal sourceWs As Worksheet) As Range
+    If sourceWs.ListObjects.Count > 0 Then
+        Set PivotSourceRange = sourceWs.ListObjects(sourceWs.ListObjects.Count).Range
+    Else
+        Set PivotSourceRange = sourceWs.UsedRange
+    End If
 End Function
 
 Private Function SourceRangeTableName(ByVal sourceRange As Range) As String
@@ -2076,6 +2100,7 @@ Private Function CreateNormalizedSourceSheet(ByVal wb As Workbook, ByVal dataWs 
     Dim totalColsCount As Long
     Dim colIndex As Long
     Dim sourceTable As ListObject
+    Dim tableRange As Range
 
     Set dataRange = dataWs.UsedRange
     rowsCount = dataRange.Rows.Count
@@ -2094,13 +2119,14 @@ Private Function CreateNormalizedSourceSheet(ByVal wb As Workbook, ByVal dataWs 
         FillRowGroupColumns helperWs, dataRange, headers, setupWs, selectedTemplate, lastSetupRow
     End If
 
-    Set sourceTable = helperWs.ListObjects.Add( _
-        SourceType:=xlSrcRange, _
-        Source:=helperWs.Cells(1, 1).Resize(Application.Max(1, rowsCount), totalColsCount), _
-        XlListObjectHasHeaders:=xlYes _
-    )
-    sourceTable.Name = UniqueTableName(wb, "PBSourceTable")
-    sourceTable.TableStyle = "TableStyleLight1"
+    Set tableRange = helperWs.Cells(1, 1).Resize(Application.Max(1, rowsCount), totalColsCount)
+    On Error Resume Next
+    Set sourceTable = helperWs.ListObjects.Add(xlSrcRange, tableRange, , xlYes)
+    On Error GoTo 0
+    If Not sourceTable Is Nothing Then
+        sourceTable.Name = UniqueTableName(wb, "PBSourceTable")
+        sourceTable.TableStyle = "TableStyleLight1"
+    End If
 
     dataWs.Activate
     helperWs.Visible = xlSheetVisible
