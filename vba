@@ -17,7 +17,6 @@ Private Const FIELD_PICKER_SHEET As String = "PivotBuilder_FieldPicker"
 Private Const CONDITION_BUILDER_SHEET As String = "PivotBuilder_Conditions"
 Private mNextAutoFieldRefresh As Date
 Private mLastAutoFieldKey As String
-Private mLastConditionValueKey As String
 Private mSetupCellCache As Object
 Private mApplyingDropdownAppend As Boolean
 
@@ -186,11 +185,6 @@ Public Sub SetupPivotBuilderSheet()
     ws.Range("P3").Font.Color = RGB(255, 255, 255)
     ws.Range("P3").Interior.Color = RGB(0, 0, 0)
     ws.Range("P4:P500").Interior.Color = RGB(255, 255, 255)
-    ws.Range("Q3").Value = "Condition Values"
-    ws.Range("Q3").Font.Bold = True
-    ws.Range("Q3").Font.Color = RGB(255, 255, 255)
-    ws.Range("Q3").Interior.Color = RGB(0, 0, 0)
-    ws.Range("Q4:Q500").Interior.Color = RGB(255, 255, 255)
     ws.Range("S3").Value = "Template Choices"
     ws.Range("S3").Font.Bold = True
     ws.Range("S3").Font.Color = RGB(255, 255, 255)
@@ -234,7 +228,6 @@ Public Sub SetupPivotBuilderSheet()
     ApplySaveBehaviorDisplay ws
 
     ws.Activate
-    StartAutoFieldRefresh ws
     ws.Range("B3").Select
 
     MsgBox "Setup sheet refreshed. Existing template rows were preserved.", vbInformation
@@ -382,7 +375,9 @@ Public Sub ChooseSourceWorkbook()
     Set sourceWb = Workbooks.Open(CStr(sourcePath), ReadOnly:=True)
     firstSheet = FirstVisibleDataSheetName(sourceWb)
     sheetNames = VisibleSheetList(sourceWb)
-    If firstSheet <> "" Then headers = NormalizedHeaders(sourceWb.Worksheets(firstSheet).UsedRange)
+    If firstSheet <> "" Then
+        headers = NormalizedHeaders(sourceWb.Worksheets(firstSheet).UsedRange)
+    End If
     sourceWb.Close SaveChanges:=False
     Application.ScreenUpdating = True
 
@@ -395,8 +390,10 @@ Public Sub ChooseSourceWorkbook()
     setupWs.Range("B4").Value = firstSheet
     AddListValidation setupWs.Range("B4"), sheetNames
     If IsArray(headers) Then PopulateFieldSuggestions setupWs, headers
+    AddSaveBehaviorValidation setupWs
+    ApplySaveBehaviorDisplay setupWs
     mLastAutoFieldKey = FieldRefreshKey(setupWs)
-    ScheduleAutoFieldRefresh
+    CaptureSetupCellCache setupWs
     MsgBox "Source workbook selected:" & vbCrLf & CStr(sourcePath) & vbCrLf & vbCrLf & "Source sheet: " & firstSheet, vbInformation
 End Sub
 
@@ -456,91 +453,9 @@ RefreshError:
     If showMessage Then MsgBox "Field suggestions could not be refreshed: " & errText, vbExclamation
 End Function
 
-Private Sub StartAutoFieldRefresh(ByVal setupWs As Worksheet)
-    mLastAutoFieldKey = FieldRefreshKey(setupWs)
-    CaptureSetupCellCache setupWs
-    ScheduleAutoFieldRefresh
-End Sub
-
-Private Sub ScheduleAutoFieldRefresh()
-    On Error Resume Next
-    If mNextAutoFieldRefresh <> 0 Then
-        Application.OnTime EarliestTime:=mNextAutoFieldRefresh, Procedure:="AutoRefreshFieldSuggestionsTick", Schedule:=False
-    End If
-    On Error GoTo 0
-
-    mNextAutoFieldRefresh = Now + TimeSerial(0, 0, 2)
-    On Error Resume Next
-    Application.OnTime EarliestTime:=mNextAutoFieldRefresh, Procedure:="AutoRefreshFieldSuggestionsTick", Schedule:=True
-    On Error GoTo 0
-End Sub
-
-Public Sub AutoRefreshFieldSuggestionsTick()
-    Dim setupWs As Worksheet
-    Dim currentKey As String
-
-    On Error GoTo Finish
-
-    If WorksheetExists(ThisWorkbook, SETUP_SHEET) Then
-        Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
-        ApplyDropdownAppend setupWs
-        ApplySaveBehaviorDisplay setupWs
-        ApplyTemplateRowVisibility setupWs
-        TryPopulateConditionValueSuggestions setupWs
-        currentKey = FieldRefreshKey(setupWs)
-        If currentKey <> mLastAutoFieldKey Then
-            If TryRefreshFieldSuggestions(setupWs, False) Then
-                mLastAutoFieldKey = currentKey
-                CaptureSetupCellCache setupWs
-            Else
-                mLastAutoFieldKey = currentKey
-            End If
-        End If
-    End If
-
-Finish:
-    ScheduleAutoFieldRefresh
-End Sub
-
 Private Function FieldRefreshKey(ByVal setupWs As Worksheet) As String
     FieldRefreshKey = Trim$(CStr(setupWs.Range("B3").Value)) & "|" & Trim$(CStr(setupWs.Range("B4").Value))
 End Function
-
-Private Sub TryPopulateConditionValueSuggestions(ByVal setupWs As Worksheet)
-    Dim target As Range
-    Dim fieldName As String
-    Dim sourceWorkbookPath As String
-    Dim dataSheetName As String
-    Dim valueKey As String
-
-    If ActiveSheet.Name <> SETUP_SHEET Then Exit Sub
-    If TypeName(Selection) <> "Range" Then Exit Sub
-    If Selection.Cells.CountLarge <> 1 Then Exit Sub
-
-    Set target = Selection.Cells(1, 1)
-    If target.Column <> 11 Or target.Row < 9 Or target.Row > 200 Then Exit Sub
-
-    fieldName = LastConditionFieldName(CStr(target.Value))
-    sourceWorkbookPath = NormalizeInputPath(Trim$(CStr(setupWs.Range("B3").Value)))
-    dataSheetName = Trim$(CStr(setupWs.Range("B4").Value))
-    valueKey = sourceWorkbookPath & "|" & dataSheetName & "|" & target.Address(False, False) & "|" & CStr(target.Value)
-
-    If fieldName = "" Then
-        setupWs.Range("Q4:Q500").ClearContents
-        AddSuggestionValidation target, "=$P$4:$P$500"
-        mLastConditionValueKey = valueKey
-        Exit Sub
-    End If
-
-    If valueKey = mLastConditionValueKey Then Exit Sub
-    mLastConditionValueKey = valueKey
-
-    If PopulateConditionValuesForField(setupWs, sourceWorkbookPath, dataSheetName, fieldName) Then
-        AddSuggestionValidation target, "=$Q$4:$Q$500"
-    Else
-        AddSuggestionValidation target, "=$P$4:$P$500"
-    End If
-End Sub
 
 Private Function LastConditionFieldName(ByVal conditionText As String) As String
     Dim parts As Variant
@@ -553,55 +468,6 @@ Private Function LastConditionFieldName(ByVal conditionText As String) As String
     If eqPos <= 1 Then Exit Function
 
     LastConditionFieldName = Trim$(Left$(lastPart, eqPos - 1))
-End Function
-
-Private Function PopulateConditionValuesForField(ByVal setupWs As Worksheet, ByVal sourceWorkbookPath As String, ByVal dataSheetName As String, ByVal fieldName As String) As Boolean
-    Dim sourceWb As Workbook
-    Dim dataWs As Worksheet
-    Dim dataRange As Range
-    Dim headers As Variant
-    Dim fieldIndex As Long
-    Dim rowIndex As Long
-    Dim outputRow As Long
-    Dim valueText As String
-    Dim seen As Object
-
-    On Error GoTo Failed
-    setupWs.Range("Q4:Q500").ClearContents
-    If sourceWorkbookPath = "" Or Dir(sourceWorkbookPath) = "" Then Exit Function
-
-    Application.ScreenUpdating = False
-    Set sourceWb = Workbooks.Open(sourceWorkbookPath, ReadOnly:=True)
-    If IsCsvPath(sourceWorkbookPath) Then dataSheetName = sourceWb.Worksheets(1).Name
-    If Not WorksheetExists(sourceWb, dataSheetName) Then GoTo Failed
-
-    Set dataWs = sourceWb.Worksheets(dataSheetName)
-    Set dataRange = dataWs.UsedRange
-    headers = NormalizedHeaders(dataRange)
-    fieldIndex = HeaderIndex(headers, fieldName)
-    If fieldIndex < 1 Then GoTo Failed
-
-    Set seen = CreateObject("Scripting.Dictionary")
-    outputRow = 4
-    For rowIndex = 2 To dataRange.Rows.Count
-        valueText = Trim$(CStr(dataRange.Cells(rowIndex, fieldIndex).Text))
-        If valueText <> "" Then
-            If Not seen.Exists(UCase$(valueText)) Then
-                seen.Add UCase$(valueText), True
-                setupWs.Cells(outputRow, "Q").Value = valueText
-                outputRow = outputRow + 1
-                If outputRow > 500 Then Exit For
-            End If
-        End If
-    Next rowIndex
-
-    PopulateConditionValuesForField = outputRow > 4
-
-Failed:
-    On Error Resume Next
-    If Not sourceWb Is Nothing Then sourceWb.Close SaveChanges:=False
-    Application.ScreenUpdating = True
-    On Error GoTo 0
 End Function
 
 Private Sub CaptureSetupCellCache(ByVal setupWs As Worksheet)
@@ -665,9 +531,7 @@ Private Function AppendedDropdownText(ByVal oldText As String, ByVal newText As 
             AppendedDropdownText = cleanOld & "; " & cleanNew & "="
         End If
     ElseIf columnNumber = 11 Then
-        If IsSuggestedConditionValue(cleanNew) And InStr(1, cleanOld, "=", vbTextCompare) > 0 Then
-            AppendedDropdownText = AppendConditionValue(cleanOld, cleanNew)
-        ElseIf Not IsSuggestedField(cleanNew) Then
+        If Not IsSuggestedField(cleanNew) Then
             Exit Function
         ElseIf cleanOld = "" Then
             AppendedDropdownText = cleanNew & "="
@@ -695,57 +559,6 @@ Private Function IsSuggestedField(ByVal fieldName As String) As Boolean
     Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
     Set found = setupWs.Range("P4:P500").Find(What:=fieldName, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
     IsSuggestedField = Not found Is Nothing
-End Function
-
-Private Function IsSuggestedConditionValue(ByVal valueText As String) As Boolean
-    Dim setupWs As Worksheet
-    Dim found As Range
-
-    If Not WorksheetExists(ThisWorkbook, SETUP_SHEET) Then Exit Function
-    Set setupWs = ThisWorkbook.Worksheets(SETUP_SHEET)
-    Set found = setupWs.Range("Q4:Q500").Find(What:=valueText, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
-    IsSuggestedConditionValue = Not found Is Nothing
-End Function
-
-Private Function AppendConditionValue(ByVal oldText As String, ByVal newValue As String) As String
-    Dim trimmedOld As String
-    Dim lastSemi As Long
-    Dim prefixText As String
-    Dim currentCondition As String
-    Dim eqPos As Long
-    Dim fieldPart As String
-    Dim valuePart As String
-
-    trimmedOld = Trim$(oldText)
-    lastSemi = InStrRev(trimmedOld, ";")
-    If lastSemi > 0 Then
-        prefixText = Left$(trimmedOld, lastSemi)
-        currentCondition = Trim$(Mid$(trimmedOld, lastSemi + 1))
-    Else
-        currentCondition = trimmedOld
-    End If
-
-    eqPos = InStr(1, currentCondition, "=", vbTextCompare)
-    If eqPos <= 0 Then
-        AppendConditionValue = oldText
-        Exit Function
-    End If
-
-    fieldPart = Trim$(Left$(currentCondition, eqPos - 1))
-    valuePart = Trim$(Mid$(currentCondition, eqPos + 1))
-    If valuePart = "" Then
-        valuePart = newValue
-    ElseIf Right$(valuePart, 1) = "," Then
-        valuePart = valuePart & newValue
-    ElseIf Not CommaListHasItem(valuePart, newValue) Then
-        valuePart = valuePart & "," & newValue
-    End If
-
-    If prefixText <> "" Then
-        AppendConditionValue = prefixText & " " & fieldPart & "=" & valuePart
-    Else
-        AppendConditionValue = fieldPart & "=" & valuePart
-    End If
 End Function
 
 Private Function CommaListHasItem(ByVal listText As String, ByVal itemText As String) As Boolean
@@ -1370,8 +1183,8 @@ Public Sub BuildPivotTablesFromSetup()
                 AddUniqueString exportPaths, BuildXlsxPath(exportFolder, exportFileName)
             End If
 
-            currentBlockBottom = pivot.TableRange2.Row + pivot.TableRange2.Rows.Count + 2
-            currentBlockRight = pivot.TableRange2.Column + pivot.TableRange2.Columns.Count + 2
+            currentBlockBottom = PivotBlockBottom(pivot, outputRow) + 3
+            currentBlockRight = PivotBlockRight(pivot, outputCol) + 2
             If currentBlockBottom > rowBandBottom Then rowBandBottom = currentBlockBottom
 
             nextPivotRight = YesNoValue(CStr(setupWs.Cells(rowIndex, "M").Value))
@@ -1772,6 +1585,7 @@ Private Function CreateOnePivot( _
     Dim rowCaptions() As String
     Dim rowFieldCount As Long
     Dim filterCount As Long
+    Dim conditionCount As Long
     Dim reservedRows As Long
     Dim pivotStartRow As Long
 
@@ -1786,8 +1600,9 @@ Private Function CreateOnePivot( _
     sumFields = SplitList(sumFieldsText)
     filterFields = SplitList(filterFieldsText)
     filterCount = UBoundSafe(filterFields) + 1
-    reservedRows = filterCount + 2
-    If reservedRows < 2 Then reservedRows = 2
+    conditionCount = ConditionCount(conditionsText)
+    reservedRows = filterCount + conditionCount + 4
+    If reservedRows < 4 Then reservedRows = 4
     pivotStartRow = outputRow + 2 + reservedRows
 
     outputWs.Cells(outputRow, outputCol).Value = displayName
@@ -1895,6 +1710,38 @@ Private Function CreateOnePivot( _
     On Error GoTo 0
 
     Set CreateOnePivot = pivot
+End Function
+
+Private Function PivotBlockBottom(ByVal pivot As PivotTable, ByVal titleRow As Long) As Long
+    Dim bottomRow As Long
+
+    bottomRow = titleRow + 1
+    On Error Resume Next
+    If Not pivot.TableRange2 Is Nothing Then
+        bottomRow = Application.Max(bottomRow, pivot.TableRange2.Row + pivot.TableRange2.Rows.Count - 1)
+    End If
+    If Not pivot.TableRange1 Is Nothing Then
+        bottomRow = Application.Max(bottomRow, pivot.TableRange1.Row + pivot.TableRange1.Rows.Count - 1)
+    End If
+    On Error GoTo 0
+
+    PivotBlockBottom = bottomRow
+End Function
+
+Private Function PivotBlockRight(ByVal pivot As PivotTable, ByVal titleCol As Long) As Long
+    Dim rightCol As Long
+
+    rightCol = titleCol
+    On Error Resume Next
+    If Not pivot.TableRange2 Is Nothing Then
+        rightCol = Application.Max(rightCol, pivot.TableRange2.Column + pivot.TableRange2.Columns.Count - 1)
+    End If
+    If Not pivot.TableRange1 Is Nothing Then
+        rightCol = Application.Max(rightCol, pivot.TableRange1.Column + pivot.TableRange1.Columns.Count - 1)
+    End If
+    On Error GoTo 0
+
+    PivotBlockRight = rightCol
 End Function
 
 Private Function PivotFieldLooksNumeric(ByVal pf As PivotField) As Boolean
@@ -2082,7 +1929,7 @@ Private Function HeadersWithRowGroups(ByVal baseHeaders As Variant, ByVal setupW
 End Function
 
 Private Function ConditionFilterHeader(ByVal fieldName As String) As String
-    ConditionFilterHeader = Trim$(fieldName) & " (Condition Filter)"
+    ConditionFilterHeader = Trim$(fieldName) & " Filter"
 End Function
 
 Private Sub AddHeaderToCollection(ByVal headerList As Variant, ByVal headerText As String)
@@ -2382,6 +2229,24 @@ Private Function ConditionsDisplayName(ByVal conditionsText As String) As String
     Next condition
 
     ConditionsDisplayName = result
+End Function
+
+Private Function ConditionCount(ByVal conditionsText As String) As Long
+    Dim conditions As Variant
+    Dim condition As Variant
+    Dim parts As Variant
+    Dim fieldName As String
+    Dim fieldValue As String
+
+    conditions = Split(conditionsText, ";")
+    For Each condition In conditions
+        If InStr(1, CStr(condition), "=", vbTextCompare) > 0 Then
+            parts = Split(CStr(condition), "=", 2)
+            fieldName = Trim$(CStr(parts(0)))
+            fieldValue = Trim$(CStr(parts(1)))
+            If fieldName <> "" And fieldValue <> "" Then ConditionCount = ConditionCount + 1
+        End If
+    Next condition
 End Function
 
 Private Function FilterConditionDisplayText(ByVal filterFieldsText As String, ByVal conditionsText As String) As String
@@ -3402,7 +3267,7 @@ Private Sub PopulateFieldSuggestions(ByVal setupWs As Worksheet, ByVal headers A
     setupWs.Range("P4:P500").ClearContents
     outputRow = 4
     For index = LBound(headers) To UBound(headers)
-        If InStr(1, CStr(headers(index)), " (Condition Filter)", vbTextCompare) = 0 Then
+        If Right$(CStr(headers(index)), 7) <> " Filter" Then
             setupWs.Cells(outputRow, "P").Value = CStr(headers(index))
             outputRow = outputRow + 1
         End If
@@ -3500,7 +3365,7 @@ Private Sub AddSetupComments(ByVal ws As Worksheet)
     AddCommentText ws.Range("H8"), "Display Values are shown as labels instead of summed. Dropdown choices are added to the current list."
     AddCommentText ws.Range("I8"), "Values To Count/Sum are calculated. Numeric fields are summed; text fields are counted."
     AddCommentText ws.Range("J8"), "Filters become PivotTable filter dropdowns at the top of the pivot."
-    AddCommentText ws.Range("K8"), "Optional filter values. Choose a field from the dropdown; it adds Field=. Then type the value after the equals sign."
+    AddCommentText ws.Range("K8"), "Optional filter values. Choose a field so it becomes Field=. Type the value manually after the equals sign."
     AddCommentText ws.Range("L8"), "Used only when Save Behavior is Export XLSX. This names the exported workbook copy. If Save Behavior is Save to input file, this cell is cleared and grayed out."
     AddCommentText ws.Range("M8"), "Choose Yes when the next PivotTable should start to the right of this PivotTable instead of below it."
 End Sub
@@ -3560,7 +3425,7 @@ Private Sub AddSetupButtons(ByVal setupWs As Worksheet)
     End With
 
     Set shape = setupWs.Shapes.AddShape(msoShapeRoundedRectangle, setupWs.Range("E5").Left + 100, setupWs.Range("E5").Top, buttonWidth, buttonHeight)
-    With shape 
+    With shape
         .Name = "PivotBuilderNewTemplateButton"
         .TextFrame.Characters.Text = "New Template"
         .TextFrame.Characters.Font.Size = 8
