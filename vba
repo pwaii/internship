@@ -3560,7 +3560,7 @@ Private Sub AddSetupButtons(ByVal setupWs As Worksheet)
     End With
 
     Set shape = setupWs.Shapes.AddShape(msoShapeRoundedRectangle, setupWs.Range("E5").Left + 100, setupWs.Range("E5").Top, buttonWidth, buttonHeight)
-    With shape
+    With shape 
         .Name = "PivotBuilderNewTemplateButton"
         .TextFrame.Characters.Text = "New Template"
         .TextFrame.Characters.Font.Size = 8
