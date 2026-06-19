@@ -608,7 +608,10 @@ function applyGroupRules(row: CellValue[], headerIndex: Map<string, number>, rul
 }
 
 function rowMatches(row: CellValue[], headerIndex: Map<string, number>, conditionsText: string): boolean {
-  const conditions = conditionsText.split(";").map(item => item.trim()).filter(Boolean);
+  const conditions = conditionsText
+    .split(";")
+    .map((item: string) => item.trim())
+    .filter((item: string) => item.length > 0);
   if (conditions.length === 0) return false;
   return conditions.every(condition => {
     const match = condition.match(/^(.+?)(<=|>=|<>|!=|=|<|>)(.*)$/);
@@ -720,11 +723,19 @@ function safeObjectName(value: string): string {
 }
 
 function splitList(value: string): string[] {
-  return value.replace(/\r?\n/g, ",").split(",").map(item => item.trim()).filter(Boolean);
+  return value
+    .replace(/\r?\n/g, ",")
+    .split(",")
+    .map((item: string) => item.trim())
+    .filter((item: string) => item.length > 0);
 }
 
 function splitSemicolon(value: string): string[] {
-  return value.replace(/\r?\n/g, ";").split(";").map(item => item.trim()).filter(Boolean);
+  return value
+    .replace(/\r?\n/g, ";")
+    .split(";")
+    .map((item: string) => item.trim())
+    .filter((item: string) => item.length > 0);
 }
 
 function splitRuleSets(value: string): string[] {
