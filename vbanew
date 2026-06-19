@@ -81,6 +81,7 @@ function main(workbook: ExcelScript.Workbook) {
     const source = buildNormalizedSource(workbook, dataSheet, builds);
     populateFieldSuggestions(setup, source.baseHeaders);
     buildAllPivots(workbook, setup, source, builds);
+    source.sheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
 
     writeStatus(setup, `Finished: ${builds.length} PivotTable(s) built in this cloud workbook.`);
   } catch (error) {
@@ -359,8 +360,6 @@ function buildNormalizedSource(
   range.setValues(matrix);
   const table = helper.addTable(range, true);
   table.setName(uniqueTableName(workbook, "PBSourceTable"));
-  helper.setVisibility(ExcelScript.SheetVisibility.veryHidden);
-
   const numericByHeader = new Map<string, boolean>();
   headers.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(outputRows, col)));
   return { sheet: helper, range: table.getRange(), headers, baseHeaders, helperByKey, numericByHeader };
@@ -434,7 +433,13 @@ function buildOnePivot(
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setColor("#5A6068");
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
-  const pivot = sheet.addPivotTable(pivotName, source.range, sheet.getCell(pivotStartRow, titleCol));
+  // Address strings are more compatible across Excel web tenants than passing
+  // Range objects from a hidden helper sheet directly.
+  const pivot = sheet.addPivotTable(
+    pivotName,
+    source.range.getAddress(),
+    sheet.getCell(pivotStartRow, titleCol).getAddress()
+  );
 
   const maxRows = Math.max(rowFields.length, rowNames.length, ruleSets.length);
   for (let position = 0; position < maxRows; position++) {
@@ -587,7 +592,11 @@ function parseConditions(value: string): FieldCondition[] {
 }
 
 function applyGroupRules(row: CellValue[], headerIndex: Map<string, number>, rulesText: string): string {
-  const rules = rulesText.split("|").map(item => item.trim()).filter(Boolean);
+  const safeRulesText = typeof rulesText === "string" ? rulesText : "";
+  const rules = safeRulesText
+    .split("|")
+    .map((item: string) => item.trim())
+    .filter((item: string) => item.length > 0);
   for (const rule of rules) {
     const colon = rule.indexOf(":");
     if (colon < 1) continue;
