@@ -503,12 +503,13 @@ function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
     const rowsPerChunk = chunkRowCount(chunkColumns);
     for (let rowOffset = 0; rowOffset < rowCount; rowOffset += rowsPerChunk) {
       const chunkRows = Math.min(rowsPerChunk, rowCount - rowOffset);
-      const values = sheet.getRangeByIndexes(
+      const values = readChunkWithRetry(
+        sheet,
         startRow + rowOffset,
         startColumn + columnOffset,
         chunkRows,
         chunkColumns
-      ).getValues() as CellValue[][];
+      );
       for (let row = 0; row < values.length; row++) {
         for (let column = 0; column < chunkColumns; column++) {
           result[rowOffset + row][columnOffset + column] = values[row][column];
@@ -517,6 +518,52 @@ function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
     }
   }
   return result;
+}
+
+function readChunkWithRetry(
+  sheet: ExcelScript.Worksheet,
+  startRow: number,
+  startColumn: number,
+  rowCount: number,
+  columnCount: number
+): CellValue[][] {
+  try {
+    return sheet.getRangeByIndexes(
+      startRow,
+      startColumn,
+      rowCount,
+      columnCount
+    ).getValues() as CellValue[][];
+  } catch (error) {
+    if (rowCount > 1) {
+      const firstCount = Math.floor(rowCount / 2);
+      const top = readChunkWithRetry(sheet, startRow, startColumn, firstCount, columnCount);
+      const bottom = readChunkWithRetry(
+        sheet,
+        startRow + firstCount,
+        startColumn,
+        rowCount - firstCount,
+        columnCount
+      );
+      return [...top, ...bottom];
+    }
+    if (columnCount > 1) {
+      const firstCount = Math.floor(columnCount / 2);
+      const left = readChunkWithRetry(sheet, startRow, startColumn, rowCount, firstCount);
+      const right = readChunkWithRetry(
+        sheet,
+        startRow,
+        startColumn + firstCount,
+        rowCount,
+        columnCount - firstCount
+      );
+      return left.map((row, index) => [...row, ...right[index]]);
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not read source cell at row ${startRow + 1}, column ${startColumn + 1}: ${detail}`
+    );
+  }
 }
 
 function writeValuesInChunks(
@@ -543,14 +590,47 @@ function writeValuesInChunks(
         chunk.push(nextRow);
         estimatedBytes += nextBytes;
       }
-      sheet.getRangeByIndexes(
+      writeChunkWithRetry(
+        sheet,
         startRow + rowOffset,
         startColumn + columnOffset,
-        chunk.length,
-        chunkColumns
-      ).setValues(chunk);
+        chunk
+      );
       rowOffset += chunk.length;
     }
+  }
+}
+
+function writeChunkWithRetry(
+  sheet: ExcelScript.Worksheet,
+  startRow: number,
+  startColumn: number,
+  values: CellValue[][]
+): void {
+  const rowCount = values.length;
+  const columnCount = values[0].length;
+  try {
+    sheet.getRangeByIndexes(startRow, startColumn, rowCount, columnCount).setValues(values);
+    return;
+  } catch (error) {
+    if (rowCount > 1) {
+      const firstCount = Math.floor(rowCount / 2);
+      writeChunkWithRetry(sheet, startRow, startColumn, values.slice(0, firstCount));
+      writeChunkWithRetry(sheet, startRow + firstCount, startColumn, values.slice(firstCount));
+      return;
+    }
+    if (columnCount > 1) {
+      const firstCount = Math.floor(columnCount / 2);
+      const left = values.map(row => row.slice(0, firstCount));
+      const right = values.map(row => row.slice(firstCount));
+      writeChunkWithRetry(sheet, startRow, startColumn, left);
+      writeChunkWithRetry(sheet, startRow, startColumn + firstCount, right);
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not write source cell at row ${startRow + 1}, column ${startColumn + 1}: ${detail}`
+    );
   }
 }
 
@@ -569,8 +649,8 @@ function estimateRowPayloadBytes(row: CellValue[]): number {
 }
 
 const MAX_READ_COLUMNS_PER_CHUNK = 50;
-const MAX_WRITE_COLUMNS_PER_CHUNK = 10;
-const MAX_WRITE_PAYLOAD_BYTES = 1000000;
+const MAX_WRITE_COLUMNS_PER_CHUNK = 5;
+const MAX_WRITE_PAYLOAD_BYTES = 250000;
 
 function chunkRowCount(columnCount: number): number {
   // Keep individual Excel API requests comfortably below the documented
