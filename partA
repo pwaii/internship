@@ -89,7 +89,7 @@ function main(workbook: ExcelScript.Workbook): string {
     rows
   };
   const result = JSON.stringify(payload);
-  setBuilderStatus(setup, `Ready for Power Automate: ${action}; ${rows.length} PivotTable configuration row(s).`);
+  setBuilderStatus(setup, `Configuration prepared: ${action}; ${rows.length} row(s). Run the complete Power Automate flow to load fields.`);
   return result;
 }
 
