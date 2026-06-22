@@ -3,7 +3,8 @@
  *
  * Run this script inside the raw-data workbook.
  * First run creates PivotBuilder_Setup. Later runs refresh fields and build pivots
- * directly in the same workbook. No JSON or Power Automate flow is required.
+ * directly in the same workbook. Direct builds need no Power Automate flow.
+ * The optional Create output copy action returns instructions for one SharePoint flow.
  */
 
 const SETUP_SHEET = "PivotBuilder_Setup";
@@ -17,6 +18,7 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
+const SETUP_STYLE_VERSION = "PB_STYLE_2";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "Save in this workbook",
@@ -35,6 +37,7 @@ interface PivotSetup {
   values: string;
   filters: string;
   conditions: string;
+  outputFileName: string;
   nextRight: boolean;
   sourceRow: number;
 }
@@ -71,7 +74,11 @@ function main(workbook: ExcelScript.Workbook): string {
   try {
     ensureEmbeddedTemplatesSeeded(setup);
     ensureCurrentSetupSchema(setup);
-    applySetupStyle(setup);
+    if (text(setup.getRange("Z2").getValue()) !== SETUP_STYLE_VERSION) {
+      applySetupStyle(setup);
+    } else {
+      resetSetupErrorStyle(setup);
+    }
     refreshCloudSetup(workbook, setup);
 
     const action = text(setup.getRange("B5").getValue());
@@ -99,6 +106,33 @@ function main(workbook: ExcelScript.Workbook): string {
     const builds = allSetups.filter(row => templateSelected(row.template, selectedTemplates));
     if (builds.length === 0) throw new Error(`No PivotTable rows match template selection: ${selectedTemplates}`);
 
+    if (equalsText(action, "Create output copy")) {
+      const outputFileName = selectedOutputFileName(builds);
+      const currentFileName = workbook.getName();
+      let originalFileName = text(setup.getRange("Z3").getValue());
+      if (!originalFileName) {
+        originalFileName = currentFileName;
+        setup.getRange("Z3").setValue(originalFileName);
+      }
+      if (equalsText(currentFileName, originalFileName)) {
+        if (equalsText(outputFileName, originalFileName)) {
+          throw new Error("Output File Name must be different from the raw workbook name.");
+        }
+        writeStatus(setup, `Ready to copy as ${outputFileName}. Run the Create Pivot Output flow.`);
+        return JSON.stringify({
+          action: "Create output copy",
+          outputFileName,
+          originalFileName,
+          dataSheet: dataSheetName,
+          selectedTemplate: selectedTemplates
+        });
+      }
+      if (!equalsText(currentFileName, outputFileName)) {
+        throw new Error(`Copied workbook name is '${currentFileName}', but Output File Name is '${outputFileName}'.`);
+      }
+      setup.getRange("B5").setValue("Build pivots");
+    }
+
     writeStatus(setup, `Preparing source data for ${builds.length} PivotTable(s)...`);
     const used = dataSheet.getUsedRange(true);
     if (!used) throw new Error(`Data sheet '${dataSheet.getName()}' is empty.`);
@@ -106,7 +140,6 @@ function main(workbook: ExcelScript.Workbook): string {
     const source = needsNormalizedSource(builds) || headersNeedNormalization(used)
       ? buildNormalizedSource(workbook, dataSheet, builds)
       : buildDirectSource(dataSheet, used);
-    populateFieldSuggestions(setup, source.baseHeaders);
     buildAllPivots(workbook, setup, source, builds);
     if (source.sheet.getName() === SOURCE_SHEET) {
       source.sheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
@@ -151,7 +184,7 @@ function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet
   sheet.getRange("A8:N8").setValues([[
     "Template", "Pivot Name", "Output Sheet", "Save Behavior", "Rows", "Row Names",
     "Group Rules", "", "Values To Count/Sum", "Filters", "Conditions",
-    "Export File Name", "Next Pivot Right", "Notes"
+    "Output File Name", "Next Pivot Right", "Notes"
   ]]);
   seedMissingEmbeddedTemplates(sheet);
   sheet.getRange("Z1").setValue(EMBEDDED_TEMPLATE_VERSION);
@@ -218,6 +251,13 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   Object.keys(widths).forEach(column => sheet.getRange(`${column}:${column}`).getFormat().setColumnWidth(widths[column]));
   sheet.getRange("H:H").setColumnHidden(true);
   sheet.getFreezePanes().freezeRows(8);
+  sheet.getRange("Z2").setValue(SETUP_STYLE_VERSION);
+}
+
+function resetSetupErrorStyle(sheet: ExcelScript.Worksheet) {
+  const body = sheet.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`);
+  body.getFormat().getFill().setColor("#FFFFFF");
+  body.getFormat().getFont().setColor("#000000");
 }
 
 function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
@@ -225,6 +265,7 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("I8").setValue("Values To Count/Sum");
   sheet.getRange("J8").setValue("Filters");
   sheet.getRange("K8").setValue("Conditions");
+  sheet.getRange("L8").setValue("Output File Name");
 }
 
 function refreshCloudSetup(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
@@ -283,7 +324,7 @@ function populateFieldSuggestions(setup: ExcelScript.Worksheet, headers: string[
 function applySetupValidations(setup: ExcelScript.Worksheet) {
   setListValidation(setup.getRange("B3"), "=$T$4:$T$500");
   setListValidation(setup.getRange("B4"), "=$S$4:$S$500");
-  setListValidation(setup.getRange("B5"), "Build pivots,Refresh fields,Restore starter template");
+  setListValidation(setup.getRange("B5"), "Build pivots,Create output copy,Refresh fields,Restore starter template");
   setListValidation(setup.getRange(`A${FIRST_SETUP_ROW}:A${LAST_SETUP_ROW}`), "=$S$5:$S$500");
   setListValidation(setup.getRange(`D${FIRST_SETUP_ROW}:D${LAST_SETUP_ROW}`), "Save in this workbook");
   setListValidation(setup.getRange(`M${FIRST_SETUP_ROW}:M${LAST_SETUP_ROW}`), "No,Yes");
@@ -384,11 +425,34 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
       values: text(row[8]),
       filters: text(row[9]),
       conditions: text(row[10]),
+      outputFileName: text(row[11]),
       nextRight: yes(text(row[12])),
       sourceRow: FIRST_SETUP_ROW + index
     });
   });
   return result;
+}
+
+function selectedOutputFileName(setups: PivotSetup[]): string {
+  const names: string[] = [];
+  setups.forEach(setup => {
+    const raw = setup.outputFileName.trim();
+    if (!raw) {
+      throw new Error(`Setup row ${setup.sourceRow}: Output File Name is required for Create output copy.`);
+    }
+    const normalized = raw.toLowerCase().endsWith(".xlsx") ? raw : `${raw}.xlsx`;
+    if (/[\\/:*?"<>|]/.test(normalized)) {
+      throw new Error(`Setup row ${setup.sourceRow}: Output File Name contains an invalid character.`);
+    }
+    if (normalized.length > 120) {
+      throw new Error(`Setup row ${setup.sourceRow}: Output File Name is too long.`);
+    }
+    if (!names.some(name => equalsText(name, normalized))) names.push(normalized);
+  });
+  if (names.length > 1) {
+    throw new Error("Selected setup rows must use the same Output File Name because they build into one workbook.");
+  }
+  return names[0];
 }
 
 function validateSetups(setups: PivotSetup[], headers: string[]) {
@@ -468,17 +532,12 @@ function flagSetupError(setup: ExcelScript.Worksheet, message: string) {
 function needsNormalizedSource(setups: PivotSetup[]): boolean {
   return setups.some(setup => {
     const rows = splitList(setup.rows);
-    const rowNames = splitList(setup.rowNames);
     const values = splitList(setup.values);
     const filterOverlap = parseFilterSpecs(setup.filters).some(filter =>
       containsText(rows, filter.field) || containsText(values, filter.field)
     );
-    const renamedRow = rows.some((field, index) => rowNames[index] && !equalsText(field, rowNames[index]));
-    const overlappingValue = values.some(field => containsText(rows, field));
     return setup.groupRules.trim() !== "" ||
       setup.conditions.trim() !== "" ||
-      renamedRow ||
-      overlappingValue ||
       filterOverlap;
   });
 }
@@ -579,18 +638,8 @@ function buildNormalizedSource(
         const caption = rowName || (field ? `${field} Group` : "Condition Group");
         const key = groupKey(field, caption, rules);
         addHelper(key, `PB Group - ${caption}`, dataRows.map(row => applyGroupRules(row, baseIndex, rules)));
-      } else if (rowName && field && !equalsText(rowName, field)) {
-        const fieldIndex = requireHeader(baseIndex, field, `Rows, setup row ${setup.sourceRow}`);
-        addHelper(aliasKey(field, rowName), `PB Row - ${rowName}`, dataRows.map(row => row[fieldIndex]));
       }
     }
-
-    valueFields.forEach(field => {
-      const fieldIndex = requireHeader(baseIndex, field, `Values To Count/Sum, setup row ${setup.sourceRow}`);
-      if (containsText(rowFields, field)) {
-        addHelper(valueKey(field), `PB Value - ${field}`, dataRows.map(row => row[fieldIndex]));
-      }
-    });
 
     parseFilterSpecs(setup.filters).forEach(spec => {
       if (!containsText(rowFields, spec.field) && !containsText(valueFields, spec.field)) return;
@@ -861,15 +910,15 @@ function estimateRowPayloadBytes(row: CellValue[]): number {
   return bytes;
 }
 
-const MAX_READ_COLUMNS_PER_CHUNK = 50;
-const MAX_WRITE_COLUMNS_PER_CHUNK = 5;
-const MAX_WRITE_PAYLOAD_BYTES = 250000;
+const MAX_READ_COLUMNS_PER_CHUNK = 100;
+const MAX_WRITE_COLUMNS_PER_CHUNK = 20;
+const MAX_WRITE_PAYLOAD_BYTES = 750000;
 
 function chunkRowCount(columnCount: number): number {
   // Keep individual Excel API requests comfortably below the documented
   // payload ceiling, including workbooks containing longer text values.
-  const targetCells = 5000;
-  return Math.max(1, Math.min(5000, Math.floor(targetCells / Math.max(1, columnCount))));
+  const targetCells = 25000;
+  return Math.max(1, Math.min(10000, Math.floor(targetCells / Math.max(1, columnCount))));
 }
 
 function buildAllPivots(
@@ -907,7 +956,7 @@ function buildAllPivots(
       // Full-sheet autofit can time out when a PivotTable contains many rows.
       // A representative preview gives useful widths without scanning the
       // entire output. Pivot rows retain Excel's normal default height.
-      const previewRows = Math.min(500, used.getRowCount());
+      const previewRows = Math.min(100, used.getRowCount());
       const previewColumns = Math.min(50, used.getColumnCount());
       sheet.getRangeByIndexes(
         used.getRowIndex(),
@@ -964,8 +1013,6 @@ function buildOnePivot(
     if (rules) {
       caption = rowName || (field ? `${field} Group` : "Condition Group");
       actual = requiredHelper(source, groupKey(field, caption, rules));
-    } else if (rowName && field && !equalsText(rowName, field)) {
-      actual = requiredHelper(source, aliasKey(field, rowName));
     }
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
@@ -974,7 +1021,7 @@ function buildOnePivot(
   }
 
   valueFields.forEach(field => {
-    const actual = source.helperByKey.get(valueKey(field)) || requirePivotHeader(source, field);
+    const actual = requirePivotHeader(source, field);
     addDataHierarchy(pivot, source, actual, field);
   });
 
@@ -1004,8 +1051,6 @@ function buildOnePivot(
   });
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
-  pivot.refresh();
-
   const pivotRange = pivot.getLayout().getRange();
   const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1) + 5;
   const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1) + 4;
