@@ -17,7 +17,7 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
-const SETUP_STYLE_VERSION = "PB_STYLE_2";
+const SETUP_STYLE_VERSION = "PB_STYLE_3";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "Save in this workbook",
@@ -44,6 +44,8 @@ interface FieldCondition {
   field: string;
   values: string[];
   rawValue: string;
+  measureField?: string;
+  caption?: string;
 }
 
 interface Placement {
@@ -146,11 +148,11 @@ function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet
   sheet.getRange("A3").setValue("Data sheet");
   sheet.getRange("A4").setValue("Selected template");
   sheet.getRange("A5").setValue("Action");
-  sheet.getRange("A6").setValue("Status");
+  sheet.getRange("A7").setValue("Status");
   sheet.getRange("B3").setValue(firstDataSheetName(workbook));
   sheet.getRange("B4").setValue("All");
   sheet.getRange("B5").setValue("Build pivots");
-  sheet.getRange("B6:N6").merge(false);
+  sheet.getRange("B7:N7").merge(false);
 
   sheet.getRange("A8:N8").setValues([[
     "Template", "Pivot Name", "Output Sheet", "Save Behavior", "Rows", "Row Names",
@@ -190,8 +192,10 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   title.getFormat().getFont().setSize(16);
   title.getFormat().setRowHeight(28);
 
-  sheet.getRange("A3:N6").getFormat().getFill().setColor(white);
-  sheet.getRange("A3:A6").getFormat().getFont().setBold(true);
+  sheet.getRange("A3:N7").getFormat().getFill().setColor(white);
+  sheet.getRange("A3:A7").getFormat().getFont().setBold(true);
+  sheet.getRange("A3:N7").getFormat().setWrapText(false);
+  sheet.getRange("A3:N7").getFormat().setShrinkToFit(true);
 
   const headers = sheet.getRange("A8:N8");
   headers.getFormat().getFill().setColor(black);
@@ -202,8 +206,9 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
 
   const body = sheet.getRange(`A9:N${LAST_SETUP_ROW}`);
   body.getFormat().getFill().setColor(white);
-  body.getFormat().setWrapText(true);
-  body.getFormat().setRowHeight(48);
+  body.getFormat().setWrapText(false);
+  body.getFormat().setShrinkToFit(true);
+  body.getFormat().setRowHeight(24);
   applySetupGridBorders(body, border);
 
   sheet.getRange("P1:T1").getFormat().getFill().setColor(burgundy);
@@ -213,6 +218,8 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("P3:T3").getFormat().getFont().setColor(white);
   sheet.getRange("P3:T3").getFormat().getFont().setBold(true);
   sheet.getRange("P4:T500").getFormat().getFill().setColor(white);
+  sheet.getRange("P4:T500").getFormat().setWrapText(false);
+  sheet.getRange("P4:T500").getFormat().setShrinkToFit(true);
 
   const widths: { [key: string]: number } = {
     A: 110, B: 145, C: 120, D: 135, E: 160, F: 145, G: 250,
@@ -237,6 +244,12 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
     sheet.getRange("B5").setValue("Build pivots");
   }
   sheet.getRange("Z3").clear(ExcelScript.ClearApplyTo.contents);
+  sheet.getRange("B6:N6").unmerge();
+  sheet.getRange("B6:N6").clear(ExcelScript.ClearApplyTo.contents);
+  sheet.getRange("A6").clear(ExcelScript.ClearApplyTo.contents);
+  sheet.getRange("A7").setValue("Status");
+  sheet.getRange("B7:N7").unmerge();
+  sheet.getRange("B7:N7").merge(false);
   sheet.getRange("H8").setValue("");
   sheet.getRange("I8").setValue("Values To Count/Sum");
   sheet.getRange("J8").setValue("Filters");
@@ -438,8 +451,13 @@ function validateSetups(setups: PivotSetup[], headers: string[]) {
       throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
     }
     filters.forEach(filter => requireSetupHeader(index, filter.field, setup.sourceRow, "Filters"));
-    conditions.forEach(condition => requireSetupHeader(index, condition.field, setup.sourceRow, "Conditions"));
-    if (conditions.length > 0 && valueFields.length === 0) {
+    conditions.forEach(condition => {
+      requireSetupHeader(index, condition.field, setup.sourceRow, "Conditions");
+      if (condition.measureField) {
+        requireSetupHeader(index, condition.measureField, setup.sourceRow, "Conditions measure");
+      }
+    });
+    if (conditions.some(condition => !condition.measureField) && valueFields.length === 0) {
       throw new Error(`Setup row ${setup.sourceRow}: Conditions need at least one Values To Count/Sum field.`);
     }
   });
@@ -604,7 +622,8 @@ function buildNormalizedSource(
 
     parseConditions(setup.conditions).forEach(condition => {
       const conditionIndex = requireHeader(baseIndex, condition.field, `Conditions, setup row ${setup.sourceRow}`);
-      valueFields.forEach(valueField => {
+      const conditionValueFields = condition.measureField ? [condition.measureField] : valueFields;
+      conditionValueFields.forEach(valueField => {
         const valueIndex = requireHeader(baseIndex, valueField, `Values To Count/Sum, setup row ${setup.sourceRow}`);
         addHelper(
           measureKey(condition.field, condition.rawValue, valueField),
@@ -944,9 +963,12 @@ function buildOnePivot(
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
+  title.getFormat().setShrinkToFit(true);
   sheet.getCell(titleRow + 1, titleCol).setValue(summaryText(setup));
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setItalic(true);
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setColor("#5A6068");
+  sheet.getCell(titleRow + 1, titleCol).getFormat().setWrapText(false);
+  sheet.getCell(titleRow + 1, titleCol).getFormat().setShrinkToFit(true);
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
   // Address strings are more compatible across Excel web tenants than passing
@@ -981,9 +1003,11 @@ function buildOnePivot(
   });
 
   conditions.forEach(condition => {
-    valueFields.forEach(valueField => {
+    const conditionValueFields = condition.measureField ? [condition.measureField] : valueFields;
+    conditionValueFields.forEach(valueField => {
       const actual = requiredHelper(source, measureKey(condition.field, condition.rawValue, valueField));
-      const caption = valueFields.length === 1 ? condition.rawValue : `${condition.rawValue} - ${valueField}`;
+      const caption = condition.caption ||
+        (conditionValueFields.length === 1 ? condition.rawValue : `${condition.rawValue} - ${valueField}`);
       addDataHierarchy(pivot, source, actual, caption);
     });
   });
@@ -997,10 +1021,9 @@ function buildOnePivot(
     if (spec.values.length > 0) {
       try {
         added.getFields()[0].applyFilter({ manualFilter: { selectedItems: spec.values } });
-      } catch (error) {
-        throw new Error(
-          `Setup row ${setup.sourceRow}: Filter '${spec.field}' could not select '${spec.rawValue}': ${errorDetail(error)}`
-        );
+      } catch (_ignored) {
+        // Keep the filter dropdown when a requested item is absent, but leave
+        // it unselected instead of failing the entire PivotTable build.
       }
     }
   });
@@ -1100,12 +1123,29 @@ function parseFilterSpecs(value: string): FieldCondition[] {
 
 function parseConditions(value: string): FieldCondition[] {
   return splitSemicolon(value).map(piece => {
-    const equals = piece.indexOf("=");
+    const arrow = piece.indexOf("=>");
+    let expression = arrow >= 0 ? piece.slice(0, arrow).trim() : piece.trim();
+    const measureField = arrow >= 0 ? piece.slice(arrow + 2).trim() : "";
+    if (arrow >= 0 && !measureField) throw new Error(`Condition measure field is blank: ${piece}`);
+    const equals = expression.indexOf("=");
     if (equals < 1) throw new Error(`Condition must use Field=Value: ${piece}`);
-    const field = piece.slice(0, equals).trim();
-    const rawValue = piece.slice(equals + 1).trim();
+    let caption = "";
+    const colon = expression.indexOf(":");
+    if (colon > 0 && colon < equals) {
+      caption = expression.slice(0, colon).trim();
+      expression = expression.slice(colon + 1).trim();
+    }
+    const adjustedEquals = expression.indexOf("=");
+    const field = expression.slice(0, adjustedEquals).trim();
+    const rawValue = expression.slice(adjustedEquals + 1).trim();
     if (!rawValue) throw new Error(`Condition value is blank: ${piece}`);
-    return { field, values: splitList(rawValue), rawValue };
+    return {
+      field,
+      values: splitList(rawValue),
+      rawValue,
+      measureField: measureField || undefined,
+      caption: caption || undefined
+    };
   });
 }
 
@@ -1306,8 +1346,10 @@ function yes(value: string): boolean {
 }
 
 function writeStatus(setup: ExcelScript.Worksheet, message: string) {
-  setup.getRange("B6").setValue(message);
-  setup.getRange("B6").getFormat().getFont().setColor(message.startsWith("ERROR") ? "#8D021F" : "#000000");
+  setup.getRange("B7").setValue(message);
+  setup.getRange("B7").getFormat().setWrapText(false);
+  setup.getRange("B7").getFormat().setShrinkToFit(true);
+  setup.getRange("B7").getFormat().getFont().setColor(message.startsWith("ERROR") ? "#8D021F" : "#000000");
 }
 
 function aliasKey(field: string, alias: string): string {
