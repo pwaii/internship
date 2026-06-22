@@ -125,7 +125,7 @@ function headerPayloadJson(dataSheet: ExcelScript.Worksheet): string {
 
 function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet {
   const existing = workbook.getWorksheet(SETUP_SHEET);
-  if (existing) existing.delete();
+  if (existing) return existing;
   const sheet = workbook.addWorksheet(SETUP_SHEET);
   sheet.setShowGridlines(false);
 
@@ -233,7 +233,7 @@ function readHeaderRow(used: ExcelScript.Range): string[] {
     1,
     used.getColumnCount()
   );
-  return normalizeHeaders(firstRow.getValues()[0] as CellValue[]);
+  return normalizeHeaders(readValuesInChunks(firstRow)[0]);
 }
 
 function populateSheetChoices(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
@@ -317,7 +317,7 @@ function ensureEmbeddedTemplatesSeeded(setup: ExcelScript.Worksheet) {
 
 function seedMissingEmbeddedTemplates(setup: ExcelScript.Worksheet) {
   const target = setup.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`);
-  const values = target.getValues() as CellValue[][];
+  const values = readValuesInChunks(target);
   const embeddedNames = distinct(EMBEDDED_TEMPLATE_ROWS.map(row => text(row[0])));
 
   embeddedNames.forEach(templateName => {
@@ -333,12 +333,12 @@ function seedMissingEmbeddedTemplates(setup: ExcelScript.Worksheet) {
       });
   });
 
-  target.setValues(values);
+  writeValuesInChunks(setup, values, 14, FIRST_SETUP_ROW - 1, 0);
 }
 
 function restoreEmbeddedTemplates(setup: ExcelScript.Worksheet) {
   const target = setup.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`);
-  const values = target.getValues() as CellValue[][];
+  const values = readValuesInChunks(target);
   const embeddedNames = distinct(EMBEDDED_TEMPLATE_ROWS.map(row => text(row[0])));
 
   for (let index = 0; index < values.length; index++) {
@@ -346,13 +346,13 @@ function restoreEmbeddedTemplates(setup: ExcelScript.Worksheet) {
       values[index] = ["", "", "", "", "", "", "", "", "", "", "", "", "", ""];
     }
   }
-  target.setValues(values);
+  writeValuesInChunks(setup, values, 14, FIRST_SETUP_ROW - 1, 0);
   seedMissingEmbeddedTemplates(setup);
   setup.getRange("Z1").setValue(EMBEDDED_TEMPLATE_VERSION);
 }
 
 function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
-  const values = setup.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`).getValues();
+  const values = readValuesInChunks(setup.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`));
   const result: PivotSetup[] = [];
   values.forEach((row, index) => {
     const pivotName = text(row[1]);
@@ -459,9 +459,13 @@ function buildNormalizedSource(
   if (!helper) helper = workbook.addWorksheet(SOURCE_SHEET);
   const existingTables = helper.getTables();
   const existingTable = existingTables.length > 0 ? existingTables[0] : undefined;
-  const oldUsed = helper.getUsedRange();
-  if (oldUsed) oldUsed.clear(ExcelScript.ClearApplyTo.contents);
   const matrix: CellValue[][] = [headers, ...outputRows];
+  if (matrix.length > 1048576) {
+    throw new Error(`Source has ${matrix.length} rows after adding headers; Excel allows at most 1,048,576.`);
+  }
+  if (headers.length > 16384) {
+    throw new Error(`Source has ${headers.length} columns after helper fields; Excel allows at most 16,384.`);
+  }
   const range = helper.getRangeByIndexes(0, 0, matrix.length, headers.length);
   writeValuesInChunks(helper, matrix, headers.length);
   let table: ExcelScript.Table;
@@ -483,15 +487,28 @@ function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
   const startColumn = range.getColumnIndex();
   const rowCount = range.getRowCount();
   const columnCount = range.getColumnCount();
-  const rowsPerChunk = chunkRowCount(columnCount);
-  const result: CellValue[][] = [];
+  const result: CellValue[][] = Array.from(
+    { length: rowCount },
+    () => Array(columnCount).fill("") as CellValue[]
+  );
 
-  for (let offset = 0; offset < rowCount; offset += rowsPerChunk) {
-    const count = Math.min(rowsPerChunk, rowCount - offset);
-    const values = sheet
-      .getRangeByIndexes(startRow + offset, startColumn, count, columnCount)
-      .getValues() as CellValue[][];
-    values.forEach(row => result.push(row));
+  for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_COLUMNS_PER_CHUNK) {
+    const chunkColumns = Math.min(MAX_COLUMNS_PER_CHUNK, columnCount - columnOffset);
+    const rowsPerChunk = chunkRowCount(chunkColumns);
+    for (let rowOffset = 0; rowOffset < rowCount; rowOffset += rowsPerChunk) {
+      const chunkRows = Math.min(rowsPerChunk, rowCount - rowOffset);
+      const values = sheet.getRangeByIndexes(
+        startRow + rowOffset,
+        startColumn + columnOffset,
+        chunkRows,
+        chunkColumns
+      ).getValues() as CellValue[][];
+      for (let row = 0; row < values.length; row++) {
+        for (let column = 0; column < chunkColumns; column++) {
+          result[rowOffset + row][columnOffset + column] = values[row][column];
+        }
+      }
+    }
   }
   return result;
 }
@@ -499,14 +516,30 @@ function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
 function writeValuesInChunks(
   sheet: ExcelScript.Worksheet,
   values: CellValue[][],
-  columnCount: number
+  columnCount: number,
+  startRow = 0,
+  startColumn = 0
 ) {
-  const rowsPerChunk = chunkRowCount(columnCount);
-  for (let offset = 0; offset < values.length; offset += rowsPerChunk) {
-    const chunk = values.slice(offset, Math.min(offset + rowsPerChunk, values.length));
-    sheet.getRangeByIndexes(offset, 0, chunk.length, columnCount).setValues(chunk);
+  for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_COLUMNS_PER_CHUNK) {
+    const chunkColumns = Math.min(MAX_COLUMNS_PER_CHUNK, columnCount - columnOffset);
+    const rowsPerChunk = chunkRowCount(chunkColumns);
+    for (let rowOffset = 0; rowOffset < values.length; rowOffset += rowsPerChunk) {
+      const chunkRows = Math.min(rowsPerChunk, values.length - rowOffset);
+      const chunk: CellValue[][] = [];
+      for (let row = 0; row < chunkRows; row++) {
+        chunk.push(values[rowOffset + row].slice(columnOffset, columnOffset + chunkColumns));
+      }
+      sheet.getRangeByIndexes(
+        startRow + rowOffset,
+        startColumn + columnOffset,
+        chunkRows,
+        chunkColumns
+      ).setValues(chunk);
+    }
   }
 }
+
+const MAX_COLUMNS_PER_CHUNK = 50;
 
 function chunkRowCount(columnCount: number): number {
   // Keep individual Excel API requests comfortably below the documented
@@ -968,4 +1001,3 @@ function filterKey(field: string): string {
 function measureKey(conditionField: string, conditionValue: string, valueField: string): string {
   return `measure|${lower(conditionField)}|${lower(conditionValue)}|${lower(valueField)}`;
 }
-
