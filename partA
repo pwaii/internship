@@ -455,14 +455,23 @@ function buildNormalizedSource(
     });
   });
 
-  const oldHelper = workbook.getWorksheet(SOURCE_SHEET);
-  if (oldHelper) oldHelper.delete();
-  const helper = workbook.addWorksheet(SOURCE_SHEET);
+  let helper = workbook.getWorksheet(SOURCE_SHEET);
+  if (!helper) helper = workbook.addWorksheet(SOURCE_SHEET);
+  const existingTables = helper.getTables();
+  const existingTable = existingTables.length > 0 ? existingTables[0] : undefined;
+  const oldUsed = helper.getUsedRange();
+  if (oldUsed) oldUsed.clear(ExcelScript.ClearApplyTo.contents);
   const matrix: CellValue[][] = [headers, ...outputRows];
   const range = helper.getRangeByIndexes(0, 0, matrix.length, headers.length);
   writeValuesInChunks(helper, matrix, headers.length);
-  const table = helper.addTable(range, true);
-  table.setName(uniqueTableName(workbook, "PBSourceTable"));
+  let table: ExcelScript.Table;
+  if (existingTable) {
+    existingTable.resize(range);
+    table = existingTable;
+  } else {
+    table = helper.addTable(range, true);
+    table.setName(uniqueTableName(workbook, "PBSourceTable"));
+  }
   const numericByHeader = new Map<string, boolean>();
   headers.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(outputRows, col)));
   return { sheet: helper, range: table.getRange(), headers, baseHeaders, helperByKey, numericByHeader };
@@ -500,7 +509,9 @@ function writeValuesInChunks(
 }
 
 function chunkRowCount(columnCount: number): number {
-  const targetCells = 50000;
+  // Keep individual Excel API requests comfortably below the documented
+  // payload ceiling, including workbooks containing longer text values.
+  const targetCells = 5000;
   return Math.max(1, Math.min(5000, Math.floor(targetCells / Math.max(1, columnCount))));
 }
 
@@ -957,3 +968,4 @@ function filterKey(field: string): string {
 function measureKey(conditionField: string, conditionValue: string, valueField: string): string {
   return `measure|${lower(conditionField)}|${lower(conditionValue)}|${lower(valueField)}`;
 }
+
