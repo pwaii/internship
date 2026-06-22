@@ -519,6 +519,21 @@ function validateGroupRuleSet(rulesText: string, index: Map<string, number>, set
   });
 }
 
+function groupRuleFields(rulesText: string): string[] {
+  const fields: string[] = [];
+  rulesText.split("|").forEach(rule => {
+    const colon = rule.indexOf(":");
+    if (colon < 1) return;
+    rule.slice(colon + 1).split(";").forEach(condition => {
+      const match = condition.trim().match(/^(.+?)(<=|>=|<>|!=|=|<|>)(.+)$/);
+      if (!match) return;
+      const field = match[1].trim();
+      if (field && !fields.some(existing => equalsText(existing, field))) fields.push(field);
+    });
+  });
+  return fields;
+}
+
 function flagSetupError(setup: ExcelScript.Worksheet, message: string) {
   const match = message.match(/Setup row (\d+)/i);
   if (!match) return;
@@ -602,11 +617,47 @@ function buildNormalizedSource(
     throw new Error(`Data sheet '${dataSheet.getName()}' needs one header row and at least one data row.`);
   }
 
-  const sourceValues = readValuesInChunks(used);
-  const baseHeaders = normalizeHeaders(sourceValues[0]);
-  // Chunk reads already return rectangular rows. Reuse those rows instead of
-  // keeping several full copies of a large source dataset in script memory.
-  const dataRows = sourceValues.slice(1);
+  const allHeaders = readHeaderRow(used);
+  const allHeaderIndex = headerIndexMap(allHeaders);
+  const requiredFields: string[] = [];
+  const addRequiredField = (field: string) => {
+    if (!field) return;
+    const originalIndex = requireHeader(allHeaderIndex, field, "selected PivotTable fields");
+    const canonical = allHeaders[originalIndex];
+    if (!requiredFields.some(existing => equalsText(existing, canonical))) requiredFields.push(canonical);
+  };
+  setups.forEach(setup => {
+    splitList(setup.rows).forEach(addRequiredField);
+    splitList(setup.values).forEach(addRequiredField);
+    parseFilterSpecs(setup.filters).forEach(filter => addRequiredField(filter.field));
+    parseConditions(setup.conditions).forEach(condition => {
+      addRequiredField(condition.field);
+      if (condition.measureField) addRequiredField(condition.measureField);
+    });
+    splitRuleSets(setup.groupRules).forEach(rules => {
+      groupRuleFields(rules).forEach(addRequiredField);
+    });
+  });
+  if (requiredFields.length === 0) requiredFields.push(allHeaders[0]);
+
+  const baseHeaders = requiredFields;
+  const dataRowCount = used.getRowCount() - 1;
+  const dataRows: CellValue[][] = Array.from(
+    { length: dataRowCount },
+    () => Array(baseHeaders.length).fill("") as CellValue[]
+  );
+  baseHeaders.forEach((header, compactColumn) => {
+    const originalColumn = requireHeader(allHeaderIndex, header, "selected PivotTable fields");
+    const columnValues = readValuesInChunks(dataSheet.getRangeByIndexes(
+      used.getRowIndex() + 1,
+      used.getColumnIndex() + originalColumn,
+      dataRowCount,
+      1
+    ));
+    columnValues.forEach((row, rowIndex) => {
+      dataRows[rowIndex][compactColumn] = row[0];
+    });
+  });
   const headers = [...baseHeaders];
   const outputRows = dataRows;
   const helperByKey = new Map<string, string>();
@@ -661,20 +712,8 @@ function buildNormalizedSource(
     });
   });
 
-  const requiredBaseFields: string[] = [];
-  setups.forEach(setup => {
-    splitList(setup.rows).forEach(field => requiredBaseFields.push(field));
-    splitList(setup.values).forEach(field => requiredBaseFields.push(field));
-    parseFilterSpecs(setup.filters).forEach(filter => requiredBaseFields.push(filter.field));
-  });
-  const requiredKeys = distinct(requiredBaseFields).map(field => lower(field));
-  const keptColumns: number[] = [];
-  headers.forEach((header, index) => {
-    if (index >= baseHeaders.length || requiredKeys.includes(lower(header))) keptColumns.push(index);
-  });
-  if (keptColumns.length === 0) keptColumns.push(0);
-  const finalHeaders = keptColumns.map(index => headers[index]);
-  const finalRows = outputRows.map(row => keptColumns.map(index => row[index]));
+  const finalHeaders = headers;
+  const finalRows = outputRows;
 
   let helper = workbook.getWorksheet(SOURCE_SHEET);
   if (!helper) helper = workbook.addWorksheet(SOURCE_SHEET);
@@ -985,8 +1024,7 @@ function buildOnePivot(
 
   const titleRow = placement.row;
   const titleCol = placement.col;
-  const reportFilterCount = filters.filter(spec => !containsText(valueFields, spec.field)).length;
-  const pivotStartRow = titleRow + 4 + reportFilterCount;
+  const pivotStartRow = titleRow + 4 + filters.length;
   const title = sheet.getCell(titleRow, titleCol);
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
@@ -1042,20 +1080,12 @@ function buildOnePivot(
 
   filters.forEach(spec => {
     const duplicateFilterField = source.helperByKey.get(filterKey(spec.field));
-    const placeInColumns = containsText(valueFields, spec.field);
     const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Filter field not found: ${spec.field}`);
-    let filterField: ExcelScript.PivotField;
-    if (placeInColumns) {
-      const added = pivot.addColumnHierarchy(hierarchy);
-      added.setName(spec.field);
-      filterField = added.getFields()[0];
-    } else {
-      const added = pivot.addFilterHierarchy(hierarchy);
-      added.setName(spec.field);
-      filterField = added.getFields()[0];
-    }
+    const added = pivot.addFilterHierarchy(hierarchy);
+    added.setName(spec.field);
+    const filterField = added.getFields()[0];
     if (spec.values.length > 0) {
       try {
         filterField.applyFilter({ manualFilter: { selectedItems: spec.values } });
