@@ -1,0 +1,31 @@
+/** Called automatically by Power Automate to refresh central field choices. */
+
+function main(workbook: ExcelScript.Workbook, headersJson: string) {
+  const setup = workbook.getWorksheet("PivotBuilder_Setup");
+  if (!setup) throw new Error("PivotBuilder_Setup does not exist. Run the Central Builder once first.");
+
+  const payload = JSON.parse(headersJson) as { dataSheet: string; headers: string[] };
+  if (!payload || !Array.isArray(payload.headers)) throw new Error("Header JSON is invalid.");
+  const headers = payload.headers
+    .map((header: string) => String(header || "").trim())
+    .filter((header: string) => header.length > 0)
+    .slice(0, 497);
+
+  setup.getRange("P4:P500").clear(ExcelScript.ClearApplyTo.contents);
+  if (headers.length > 0) {
+    setup.getRangeByIndexes(3, 15, headers.length, 1).setValues(headers.map((header: string) => [header]));
+  }
+
+  ["E", "H", "I", "J", "K"].forEach((column: string) => {
+    const validation = setup.getRange(`${column}9:${column}200`).getDataValidation();
+    validation.clear();
+    validation.setRule({ list: { inCellDropDown: true, source: "=$P$4:$P$500" } });
+    validation.setIgnoreBlanks(true);
+    validation.setErrorAlert({
+      showAlert: false,
+      title: "Central Pivot Builder",
+      message: "Choose a field or type a comma/semicolon expression."
+    });
+  });
+  setup.getRange("B6").setValue(`Loaded ${headers.length} field choices from ${payload.dataSheet || "the input workbook"}.`);
+}
