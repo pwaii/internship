@@ -32,7 +32,6 @@ interface PivotSetup {
   rows: string;
   rowNames: string;
   groupRules: string;
-  displayValues: string;
   values: string;
   filters: string;
   conditions: string;
@@ -71,6 +70,7 @@ function main(workbook: ExcelScript.Workbook): string {
 
   try {
     ensureEmbeddedTemplatesSeeded(setup);
+    ensureCurrentSetupSchema(setup);
     applySetupStyle(setup);
     refreshCloudSetup(workbook, setup);
 
@@ -100,15 +100,23 @@ function main(workbook: ExcelScript.Workbook): string {
     if (builds.length === 0) throw new Error(`No PivotTable rows match template selection: ${selectedTemplates}`);
 
     writeStatus(setup, `Preparing source data for ${builds.length} PivotTable(s)...`);
-    const source = buildNormalizedSource(workbook, dataSheet, builds);
+    const used = dataSheet.getUsedRange(true);
+    if (!used) throw new Error(`Data sheet '${dataSheet.getName()}' is empty.`);
+    validateSetups(builds, readHeaderRow(used));
+    const source = needsNormalizedSource(builds) || headersNeedNormalization(used)
+      ? buildNormalizedSource(workbook, dataSheet, builds)
+      : buildDirectSource(dataSheet, used);
     populateFieldSuggestions(setup, source.baseHeaders);
     buildAllPivots(workbook, setup, source, builds);
-    source.sheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
+    if (source.sheet.getName() === SOURCE_SHEET) {
+      source.sheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
+    }
 
     writeStatus(setup, `Finished: ${builds.length} PivotTable(s) built in this workbook.`);
     return headerPayloadJson(dataSheet);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    flagSetupError(setup, message);
     writeStatus(setup, `ERROR: ${message}`);
     throw error;
   }
@@ -142,7 +150,7 @@ function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet
 
   sheet.getRange("A8:N8").setValues([[
     "Template", "Pivot Name", "Output Sheet", "Save Behavior", "Rows", "Row Names",
-    "Group Rules", "Display Values", "Values To Count/Sum", "Filters", "Conditions",
+    "Group Rules", "", "Values To Count/Sum", "Filters", "Conditions",
     "Export File Name", "Next Pivot Right", "Notes"
   ]]);
   seedMissingEmbeddedTemplates(sheet);
@@ -208,7 +216,15 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
     O: 25, P: 145, Q: 25, R: 25, S: 145, T: 145
   };
   Object.keys(widths).forEach(column => sheet.getRange(`${column}:${column}`).getFormat().setColumnWidth(widths[column]));
+  sheet.getRange("H:H").setColumnHidden(true);
   sheet.getFreezePanes().freezeRows(8);
+}
+
+function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
+  sheet.getRange("H8").setValue("");
+  sheet.getRange("I8").setValue("Values To Count/Sum");
+  sheet.getRange("J8").setValue("Filters");
+  sheet.getRange("K8").setValue("Conditions");
 }
 
 function refreshCloudSetup(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
@@ -272,7 +288,7 @@ function applySetupValidations(setup: ExcelScript.Worksheet) {
   setListValidation(setup.getRange(`D${FIRST_SETUP_ROW}:D${LAST_SETUP_ROW}`), "Save in this workbook");
   setListValidation(setup.getRange(`M${FIRST_SETUP_ROW}:M${LAST_SETUP_ROW}`), "No,Yes");
 
-  ["E", "H", "I", "J", "K"].forEach(column => {
+  ["E", "I", "J", "K"].forEach(column => {
     setListValidation(setup.getRange(`${column}${FIRST_SETUP_ROW}:${column}${LAST_SETUP_ROW}`), "=$P$4:$P$500", false);
   });
 }
@@ -365,7 +381,6 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
       rows: text(row[4]),
       rowNames: text(row[5]),
       groupRules: text(row[6]),
-      displayValues: text(row[7]),
       values: text(row[8]),
       filters: text(row[9]),
       conditions: text(row[10]),
@@ -374,6 +389,148 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
     });
   });
   return result;
+}
+
+function validateSetups(setups: PivotSetup[], headers: string[]) {
+  const index = headerIndexMap(headers);
+  setups.forEach(setup => {
+    const rowFields = splitList(setup.rows);
+    const rowNames = splitList(setup.rowNames);
+    const ruleSets = splitRuleSets(setup.groupRules);
+    const valueFields = splitList(setup.values);
+
+    rowFields.forEach(field => requireSetupHeader(index, field, setup.sourceRow, "Rows"));
+    valueFields.forEach(field => requireSetupHeader(index, field, setup.sourceRow, "Values To Count/Sum"));
+    if (rowNames.length > rowFields.length && rowNames.some((name, position) => name && !rowFields[position] && !ruleSets[position])) {
+      throw new Error(`Setup row ${setup.sourceRow}: Row Names contains a name without a matching Rows field or Group Rule.`);
+    }
+    ruleSets.forEach(rules => validateGroupRuleSet(rules, index, setup.sourceRow));
+
+    let filters: FieldCondition[];
+    let conditions: FieldCondition[];
+    try {
+      filters = parseFilterSpecs(setup.filters);
+    } catch (error) {
+      throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
+    }
+    try {
+      conditions = parseConditions(setup.conditions);
+    } catch (error) {
+      throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
+    }
+    filters.forEach(filter => requireSetupHeader(index, filter.field, setup.sourceRow, "Filters"));
+    conditions.forEach(condition => requireSetupHeader(index, condition.field, setup.sourceRow, "Conditions"));
+    if (conditions.length > 0 && valueFields.length === 0) {
+      throw new Error(`Setup row ${setup.sourceRow}: Conditions need at least one Values To Count/Sum field.`);
+    }
+  });
+}
+
+function requireSetupHeader(
+  index: Map<string, number>,
+  field: string,
+  setupRow: number,
+  columnName: string
+) {
+  if (!index.has(lower(field))) {
+    throw new Error(`Setup row ${setupRow}: ${columnName} field '${field}' was not found in the data headers.`);
+  }
+}
+
+function validateGroupRuleSet(rulesText: string, index: Map<string, number>, setupRow: number) {
+  const rules = rulesText.split("|").map(rule => rule.trim()).filter(rule => rule !== "");
+  if (rules.length === 0) throw new Error(`Setup row ${setupRow}: Group Rules is blank or invalid.`);
+  rules.forEach(rule => {
+    const colon = rule.indexOf(":");
+    if (colon < 1 || colon === rule.length - 1) {
+      throw new Error(`Setup row ${setupRow}: Group Rule must use Name:Field=Value: '${rule}'.`);
+    }
+    const conditions = rule.slice(colon + 1).split(";").map(value => value.trim()).filter(value => value !== "");
+    if (conditions.length === 0) throw new Error(`Setup row ${setupRow}: Group Rule has no conditions: '${rule}'.`);
+    conditions.forEach(condition => {
+      const match = condition.match(/^(.+?)(<=|>=|<>|!=|=|<|>)(.+)$/);
+      if (!match) throw new Error(`Setup row ${setupRow}: Invalid Group Rule condition '${condition}'.`);
+      requireSetupHeader(index, match[1].trim(), setupRow, "Group Rules");
+    });
+  });
+}
+
+function flagSetupError(setup: ExcelScript.Worksheet, message: string) {
+  const match = message.match(/Setup row (\d+)/i);
+  if (!match) return;
+  const row = Number(match[1]);
+  if (row < FIRST_SETUP_ROW || row > LAST_SETUP_ROW) return;
+  const range = setup.getRange(`A${row}:N${row}`);
+  range.getFormat().getFill().setColor("#FCE8EC");
+  range.getFormat().getFont().setColor("#8D021F");
+}
+
+function needsNormalizedSource(setups: PivotSetup[]): boolean {
+  return setups.some(setup => {
+    const rows = splitList(setup.rows);
+    const rowNames = splitList(setup.rowNames);
+    const values = splitList(setup.values);
+    const filterOverlap = parseFilterSpecs(setup.filters).some(filter =>
+      containsText(rows, filter.field) || containsText(values, filter.field)
+    );
+    const renamedRow = rows.some((field, index) => rowNames[index] && !equalsText(field, rowNames[index]));
+    const overlappingValue = values.some(field => containsText(rows, field));
+    return setup.groupRules.trim() !== "" ||
+      setup.conditions.trim() !== "" ||
+      renamedRow ||
+      overlappingValue ||
+      filterOverlap;
+  });
+}
+
+function headersNeedNormalization(used: ExcelScript.Range): boolean {
+  const firstRow = used.getWorksheet().getRangeByIndexes(
+    used.getRowIndex(),
+    used.getColumnIndex(),
+    1,
+    used.getColumnCount()
+  );
+  const raw = readValuesInChunks(firstRow)[0].map(value => text(value));
+  const seen: string[] = [];
+  return raw.some(header => {
+    if (!header) return true;
+    const duplicate = seen.some(existing => equalsText(existing, header));
+    seen.push(header);
+    return duplicate;
+  });
+}
+
+function buildDirectSource(
+  dataSheet: ExcelScript.Worksheet,
+  used: ExcelScript.Range
+): SourceModel {
+  const headers = readHeaderRow(used);
+  const sampleRowCount = Math.min(31, used.getRowCount());
+  const sample = readValuesInChunks(dataSheet.getRangeByIndexes(
+    used.getRowIndex(),
+    used.getColumnIndex(),
+    sampleRowCount,
+    used.getColumnCount()
+  ));
+  const sampleRows = sample.slice(1);
+  const numericByHeader = new Map<string, boolean>();
+  headers.forEach((header, column) => {
+    numericByHeader.set(lower(header), columnLooksNumeric(sampleRows, column));
+  });
+  return {
+    sheet: dataSheet,
+    sourceAddress: worksheetRangeAddress(
+      dataSheet.getName(),
+      used.getRowCount(),
+      used.getColumnCount(),
+      used.getRowIndex(),
+      used.getColumnIndex()
+    ),
+    headers,
+    baseHeaders: headers,
+    helperByKey: new Map<string, string>(),
+    numericByHeader
+  };
 }
 
 function buildNormalizedSource(
@@ -408,7 +565,6 @@ function buildNormalizedSource(
     const rowFields = splitList(setup.rows);
     const rowNames = splitList(setup.rowNames);
     const ruleSets = splitRuleSets(setup.groupRules);
-    const displayFields = splitList(setup.displayValues);
     const valueFields = splitList(setup.values);
 
     const maxRows = Math.max(rowFields.length, rowNames.length, ruleSets.length);
@@ -431,13 +587,13 @@ function buildNormalizedSource(
 
     valueFields.forEach(field => {
       const fieldIndex = requireHeader(baseIndex, field, `Values To Count/Sum, setup row ${setup.sourceRow}`);
-      if (containsText(rowFields, field) || containsText(displayFields, field)) {
+      if (containsText(rowFields, field)) {
         addHelper(valueKey(field), `PB Value - ${field}`, dataRows.map(row => row[fieldIndex]));
       }
     });
 
     parseFilterSpecs(setup.filters).forEach(spec => {
-      if (spec.values.length === 0) return;
+      if (!containsText(rowFields, spec.field) && !containsText(valueFields, spec.field)) return;
       const fieldIndex = requireHeader(baseIndex, spec.field, `Filters, setup row ${setup.sourceRow}`);
       addHelper(filterKey(spec.field), `PB Filter - ${spec.field}`, dataRows.map(row => row[fieldIndex]));
     });
@@ -455,25 +611,48 @@ function buildNormalizedSource(
     });
   });
 
+  const requiredBaseFields: string[] = [];
+  setups.forEach(setup => {
+    splitList(setup.rows).forEach(field => requiredBaseFields.push(field));
+    splitList(setup.values).forEach(field => requiredBaseFields.push(field));
+    parseFilterSpecs(setup.filters).forEach(filter => requiredBaseFields.push(filter.field));
+  });
+  const requiredKeys = distinct(requiredBaseFields).map(field => lower(field));
+  const keptColumns: number[] = [];
+  headers.forEach((header, index) => {
+    if (index >= baseHeaders.length || requiredKeys.includes(lower(header))) keptColumns.push(index);
+  });
+  if (keptColumns.length === 0) keptColumns.push(0);
+  const finalHeaders = keptColumns.map(index => headers[index]);
+  const finalRows = outputRows.map(row => keptColumns.map(index => row[index]));
+
   let helper = workbook.getWorksheet(SOURCE_SHEET);
   if (!helper) helper = workbook.addWorksheet(SOURCE_SHEET);
-  const matrix: CellValue[][] = [headers, ...outputRows];
+  const matrix: CellValue[][] = [finalHeaders, ...finalRows];
   if (matrix.length > 1048576) {
     throw new Error(`Source has ${matrix.length} rows after adding headers; Excel allows at most 1,048,576.`);
   }
-  if (headers.length > 16384) {
-    throw new Error(`Source has ${headers.length} columns after helper fields; Excel allows at most 16,384.`);
+  if (finalHeaders.length > 16384) {
+    throw new Error(`Source has ${finalHeaders.length} columns after helper fields; Excel allows at most 16,384.`);
   }
-  writeValuesInChunks(helper, matrix, headers.length);
-  const sourceAddress = worksheetRangeAddress(helper.getName(), matrix.length, headers.length);
+  writeValuesInChunks(helper, matrix, finalHeaders.length);
+  const sourceAddress = worksheetRangeAddress(helper.getName(), matrix.length, finalHeaders.length);
   const numericByHeader = new Map<string, boolean>();
-  headers.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(outputRows, col)));
-  return { sheet: helper, sourceAddress, headers, baseHeaders, helperByKey, numericByHeader };
+  finalHeaders.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(finalRows, col)));
+  return { sheet: helper, sourceAddress, headers: finalHeaders, baseHeaders, helperByKey, numericByHeader };
 }
 
-function worksheetRangeAddress(sheetName: string, rowCount: number, columnCount: number): string {
+function worksheetRangeAddress(
+  sheetName: string,
+  rowCount: number,
+  columnCount: number,
+  startRow = 0,
+  startColumn = 0
+): string {
   const escapedSheet = sheetName.replace(/'/g, "''");
-  return `'${escapedSheet}'!$A$1:$${columnLetters(columnCount)}$${rowCount}`;
+  const firstColumn = columnLetters(startColumn + 1);
+  const lastColumn = columnLetters(startColumn + columnCount);
+  return `'${escapedSheet}'!$${firstColumn}$${startRow + 1}:$${lastColumn}$${startRow + rowCount}`;
 }
 
 function columnLetters(columnCount: number): string {
@@ -750,11 +929,9 @@ function buildOnePivot(
   const rowFields = splitList(setup.rows);
   const rowNames = splitList(setup.rowNames);
   const ruleSets = splitRuleSets(setup.groupRules);
-  const displayFields = splitList(setup.displayValues);
   const valueFields = splitList(setup.values);
   const filters = parseFilterSpecs(setup.filters);
   const conditions = parseConditions(setup.conditions);
-  if (valueFields.length === 0) throw new Error(`Setup row ${setup.sourceRow}: Values To Count/Sum is required.`);
 
   const titleRow = placement.row;
   const titleCol = placement.col;
@@ -796,12 +973,6 @@ function buildOnePivot(
     if (caption) added.setName(caption);
   }
 
-  displayFields.forEach(field => {
-    const hierarchy = pivot.getHierarchy(requirePivotHeader(source, field));
-    if (!hierarchy) throw new Error(`Display field not found: ${field}`);
-    pivot.addRowHierarchy(hierarchy);
-  });
-
   valueFields.forEach(field => {
     const actual = source.helperByKey.get(valueKey(field)) || requirePivotHeader(source, field);
     addDataHierarchy(pivot, source, actual, field);
@@ -816,13 +987,19 @@ function buildOnePivot(
   });
 
   filters.forEach(spec => {
-    const actual = spec.values.length > 0 ? requiredHelper(source, filterKey(spec.field)) : requirePivotHeader(source, spec.field);
+    const actual = source.helperByKey.get(filterKey(spec.field)) || requirePivotHeader(source, spec.field);
     const hierarchy = pivot.getHierarchy(actual);
-    if (!hierarchy) throw new Error(`Filter field not found: ${spec.field}`);
+    if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Filter field not found: ${spec.field}`);
     const added = pivot.addFilterHierarchy(hierarchy);
     added.setName(spec.field);
     if (spec.values.length > 0) {
-      added.getFields()[0].applyFilter({ manualFilter: { selectedItems: spec.values } });
+      try {
+        added.getFields()[0].applyFilter({ manualFilter: { selectedItems: spec.values } });
+      } catch (error) {
+        throw new Error(
+          `Setup row ${setup.sourceRow}: Filter '${spec.field}' could not select '${spec.rawValue}': ${errorDetail(error)}`
+        );
+      }
     }
   });
 
@@ -908,9 +1085,15 @@ function parseFilterSpecs(value: string): FieldCondition[] {
   const pieces = normalized.includes("=") ? splitSemicolon(normalized) : splitList(normalized);
   return pieces.map(piece => {
     const equals = piece.indexOf("=");
-    if (equals < 0) return { field: piece.trim(), values: [], rawValue: "" };
+    if (equals < 0) {
+      const field = piece.trim();
+      if (!field) throw new Error("Filter field is blank.");
+      return { field, values: [], rawValue: "" };
+    }
+    if (equals < 1) throw new Error(`Filter must use Field or Field=Value: ${piece}`);
     const field = piece.slice(0, equals).trim();
     const rawValue = piece.slice(equals + 1).trim();
+    if (!rawValue) throw new Error(`Filter value is blank: ${piece}`);
     return { field, values: splitList(rawValue), rawValue };
   }).filter(item => item.field !== "");
 }
