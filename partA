@@ -386,11 +386,13 @@ function buildNormalizedSource(
     throw new Error(`Data sheet '${dataSheet.getName()}' needs one header row and at least one data row.`);
   }
 
-  const sourceValues = used.getValues() as CellValue[][];
+  const sourceValues = readValuesInChunks(used);
   const baseHeaders = normalizeHeaders(sourceValues[0]);
-  const dataRows = sourceValues.slice(1).map(row => row.slice(0, baseHeaders.length));
+  // Chunk reads already return rectangular rows. Reuse those rows instead of
+  // keeping several full copies of a large source dataset in script memory.
+  const dataRows = sourceValues.slice(1);
   const headers = [...baseHeaders];
-  const outputRows = dataRows.map(row => row.slice());
+  const outputRows = dataRows;
   const helperByKey = new Map<string, string>();
   const baseIndex = headerIndexMap(baseHeaders);
 
@@ -458,12 +460,48 @@ function buildNormalizedSource(
   const helper = workbook.addWorksheet(SOURCE_SHEET);
   const matrix: CellValue[][] = [headers, ...outputRows];
   const range = helper.getRangeByIndexes(0, 0, matrix.length, headers.length);
-  range.setValues(matrix);
+  writeValuesInChunks(helper, matrix, headers.length);
   const table = helper.addTable(range, true);
   table.setName(uniqueTableName(workbook, "PBSourceTable"));
   const numericByHeader = new Map<string, boolean>();
   headers.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(outputRows, col)));
   return { sheet: helper, range: table.getRange(), headers, baseHeaders, helperByKey, numericByHeader };
+}
+
+function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
+  const sheet = range.getWorksheet();
+  const startRow = range.getRowIndex();
+  const startColumn = range.getColumnIndex();
+  const rowCount = range.getRowCount();
+  const columnCount = range.getColumnCount();
+  const rowsPerChunk = chunkRowCount(columnCount);
+  const result: CellValue[][] = [];
+
+  for (let offset = 0; offset < rowCount; offset += rowsPerChunk) {
+    const count = Math.min(rowsPerChunk, rowCount - offset);
+    const values = sheet
+      .getRangeByIndexes(startRow + offset, startColumn, count, columnCount)
+      .getValues() as CellValue[][];
+    values.forEach(row => result.push(row));
+  }
+  return result;
+}
+
+function writeValuesInChunks(
+  sheet: ExcelScript.Worksheet,
+  values: CellValue[][],
+  columnCount: number
+) {
+  const rowsPerChunk = chunkRowCount(columnCount);
+  for (let offset = 0; offset < values.length; offset += rowsPerChunk) {
+    const chunk = values.slice(offset, Math.min(offset + rowsPerChunk, values.length));
+    sheet.getRangeByIndexes(offset, 0, chunk.length, columnCount).setValues(chunk);
+  }
+}
+
+function chunkRowCount(columnCount: number): number {
+  const targetCells = 50000;
+  return Math.max(1, Math.min(5000, Math.floor(targetCells / Math.max(1, columnCount))));
 }
 
 function buildAllPivots(
@@ -498,8 +536,17 @@ function buildAllPivots(
   outputSheets.forEach(sheet => {
     const used = sheet.getUsedRange();
     if (used) {
-      used.getFormat().autofitColumns();
-      used.getFormat().autofitRows();
+      // Full-sheet autofit can time out when a PivotTable contains many rows.
+      // A representative preview gives useful widths without scanning the
+      // entire output. Pivot rows retain Excel's normal default height.
+      const previewRows = Math.min(500, used.getRowCount());
+      const previewColumns = Math.min(50, used.getColumnCount());
+      sheet.getRangeByIndexes(
+        used.getRowIndex(),
+        used.getColumnIndex(),
+        previewRows,
+        previewColumns
+      ).getFormat().autofitColumns();
     }
   });
 }
