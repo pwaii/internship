@@ -17,7 +17,7 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
-const SETUP_STYLE_VERSION = "PB_STYLE_4";
+const SETUP_STYLE_VERSION = "PB_STYLE_5";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "Save in this workbook",
@@ -195,7 +195,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("A3:N7").getFormat().getFill().setColor(white);
   sheet.getRange("A3:A7").getFormat().getFont().setBold(true);
   sheet.getRange("A3:N7").getFormat().setWrapText(false);
-  sheet.getRange("A3:N7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
+  sheet.getRange("A3:N7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
 
   const headers = sheet.getRange("A8:N8");
   headers.getFormat().getFill().setColor(black);
@@ -207,7 +207,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   const body = sheet.getRange(`A9:N${LAST_SETUP_ROW}`);
   body.getFormat().getFill().setColor(white);
   body.getFormat().setWrapText(false);
-  body.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
+  body.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   body.getFormat().setRowHeight(24);
   applySetupGridBorders(body, border);
 
@@ -219,7 +219,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("P3:T3").getFormat().getFont().setBold(true);
   sheet.getRange("P4:T500").getFormat().getFill().setColor(white);
   sheet.getRange("P4:T500").getFormat().setWrapText(false);
-  sheet.getRange("P4:T500").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
+  sheet.getRange("P4:T500").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
 
   const widths: { [key: string]: number } = {
     A: 110, B: 145, C: 120, D: 135, E: 160, F: 145, G: 250,
@@ -285,9 +285,9 @@ function readHeaderRow(used: ExcelScript.Range): string[] {
 }
 
 function populateSheetChoices(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
-  const names = workbook.getWorksheets()
+  const names = distinct(workbook.getWorksheets()
     .map(sheet => sheet.getName())
-    .filter(name => name !== SETUP_SHEET && name !== SOURCE_SHEET && !name.startsWith("Pivot_Output"));
+    .filter(name => name !== SETUP_SHEET && name !== SOURCE_SHEET && !name.startsWith("Pivot_Output")));
   setup.getRange("T4:T500").clear(ExcelScript.ClearApplyTo.contents);
   if (names.length > 0) setup.getRangeByIndexes(3, 19, names.length, 1).setValues(names.map(name => [name]));
 }
@@ -964,12 +964,12 @@ function buildOnePivot(
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
-  title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
+  title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   sheet.getCell(titleRow + 1, titleCol).setValue(summaryText(setup));
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setItalic(true);
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setColor("#5A6068");
   sheet.getCell(titleRow + 1, titleCol).getFormat().setWrapText(false);
-  sheet.getCell(titleRow + 1, titleCol).getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
+  sheet.getCell(titleRow + 1, titleCol).getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
   // Address strings are more compatible across Excel web tenants than passing
@@ -1359,7 +1359,7 @@ function yes(value: string): boolean {
 function writeStatus(setup: ExcelScript.Worksheet, message: string) {
   setup.getRange("B7").setValue(message);
   setup.getRange("B7").getFormat().setWrapText(false);
-  setup.getRange("B7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
+  setup.getRange("B7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   setup.getRange("B7").getFormat().getFont().setColor(message.startsWith("ERROR") ? "#8D021F" : "#000000");
 }
 
