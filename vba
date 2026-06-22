@@ -17,7 +17,7 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
-const SETUP_STYLE_VERSION = "PB_STYLE_5";
+const SETUP_STYLE_VERSION = "PB_STYLE_6";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "Save in this workbook",
@@ -162,11 +162,12 @@ function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet
   seedMissingEmbeddedTemplates(sheet);
   sheet.getRange("Z1").setValue(EMBEDDED_TEMPLATE_VERSION);
 
-  sheet.getRange("P1:T1").merge(false);
+  sheet.getRange("P1:U1").merge(false);
   sheet.getRange("P1").setValue("Suggestions");
   sheet.getRange("P3").setValue("Available Fields");
   sheet.getRange("S3").setValue("Template Choices");
   sheet.getRange("T3").setValue("Sheet Choices");
+  sheet.getRange("U3").setValue("Output Sheet Choices");
 
   applySetupStyle(sheet);
   refreshCloudSetup(workbook, sheet);
@@ -180,7 +181,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   const coolGray = "#F2F4F7";
   const border = "#C8CDD4";
 
-  const used = sheet.getRange("A1:T500");
+  const used = sheet.getRange("A1:U500");
   used.getFormat().getFont().setName("Aptos");
   used.getFormat().getFont().setSize(10);
   used.getFormat().getFill().setColor(coolGray);
@@ -196,6 +197,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("A3:A7").getFormat().getFont().setBold(true);
   sheet.getRange("A3:N7").getFormat().setWrapText(false);
   sheet.getRange("A3:N7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  sheet.getRange("A3:N7").getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
 
   const headers = sheet.getRange("A8:N8");
   headers.getFormat().getFill().setColor(black);
@@ -208,23 +210,25 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   body.getFormat().getFill().setColor(white);
   body.getFormat().setWrapText(false);
   body.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  body.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
   body.getFormat().setRowHeight(24);
   applySetupGridBorders(body, border);
 
-  sheet.getRange("P1:T1").getFormat().getFill().setColor(burgundy);
-  sheet.getRange("P1:T1").getFormat().getFont().setColor(white);
-  sheet.getRange("P1:T1").getFormat().getFont().setBold(true);
-  sheet.getRange("P3:T3").getFormat().getFill().setColor(black);
-  sheet.getRange("P3:T3").getFormat().getFont().setColor(white);
-  sheet.getRange("P3:T3").getFormat().getFont().setBold(true);
-  sheet.getRange("P4:T500").getFormat().getFill().setColor(white);
-  sheet.getRange("P4:T500").getFormat().setWrapText(false);
-  sheet.getRange("P4:T500").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  sheet.getRange("P1:U1").getFormat().getFill().setColor(burgundy);
+  sheet.getRange("P1:U1").getFormat().getFont().setColor(white);
+  sheet.getRange("P1:U1").getFormat().getFont().setBold(true);
+  sheet.getRange("P3:U3").getFormat().getFill().setColor(black);
+  sheet.getRange("P3:U3").getFormat().getFont().setColor(white);
+  sheet.getRange("P3:U3").getFormat().getFont().setBold(true);
+  sheet.getRange("P4:U500").getFormat().getFill().setColor(white);
+  sheet.getRange("P4:U500").getFormat().setWrapText(false);
+  sheet.getRange("P4:U500").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  sheet.getRange("P4:U500").getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
 
   const widths: { [key: string]: number } = {
     A: 110, B: 145, C: 120, D: 135, E: 160, F: 145, G: 250,
     H: 125, I: 140, J: 145, K: 185, L: 130, M: 110, N: 220,
-    O: 25, P: 145, Q: 25, R: 25, S: 145, T: 145
+    O: 25, P: 145, Q: 25, R: 25, S: 145, T: 145, U: 145
   };
   Object.keys(widths).forEach(column => sheet.getRange(`${column}:${column}`).getFormat().setColumnWidth(widths[column]));
   sheet.getRange("H:H").setColumnHidden(true);
@@ -255,6 +259,9 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("J8").setValue("Filters");
   sheet.getRange("K8").setValue("Conditions");
   sheet.getRange("L8").setValue("");
+  sheet.getRange("P1:U1").unmerge();
+  sheet.getRange("P1:U1").merge(false);
+  sheet.getRange("U3").setValue("Output Sheet Choices");
   sheet.getRange("H:H").setColumnHidden(true);
   sheet.getRange("L:L").setColumnHidden(true);
 }
@@ -262,6 +269,7 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
 function refreshCloudSetup(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
   populateSheetChoices(workbook, setup);
   populateTemplateChoices(setup);
+  populateOutputSheetChoices(setup);
   applySetupValidations(setup);
 
   const dataSheetName = text(setup.getRange("B3").getValue());
@@ -285,11 +293,29 @@ function readHeaderRow(used: ExcelScript.Range): string[] {
 }
 
 function populateSheetChoices(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
+  const configuredOutputs = setup.getRange(`C${FIRST_SETUP_ROW}:C${LAST_SETUP_ROW}`)
+    .getValues()
+    .map(row => text(row[0]))
+    .filter(name => name !== "");
   const names = distinct(workbook.getWorksheets()
     .map(sheet => sheet.getName())
-    .filter(name => name !== SETUP_SHEET && name !== SOURCE_SHEET && !name.startsWith("Pivot_Output")));
+    .filter(name => name !== SETUP_SHEET &&
+      name !== SOURCE_SHEET &&
+      !name.startsWith("Pivot_Output") &&
+      !configuredOutputs.some(output => equalsText(output, name))));
   setup.getRange("T4:T500").clear(ExcelScript.ClearApplyTo.contents);
   if (names.length > 0) setup.getRangeByIndexes(3, 19, names.length, 1).setValues(names.map(name => [name]));
+}
+
+function populateOutputSheetChoices(setup: ExcelScript.Worksheet) {
+  const values = setup.getRange(`C${FIRST_SETUP_ROW}:C${LAST_SETUP_ROW}`).getValues();
+  const names: string[] = ["Pivot_Output"];
+  values.forEach(row => {
+    const name = text(row[0]);
+    if (name && !names.some(existing => equalsText(existing, name))) names.push(name);
+  });
+  setup.getRange("U4:U500").clear(ExcelScript.ClearApplyTo.contents);
+  setup.getRangeByIndexes(3, 20, names.length, 1).setValues(names.map(name => [name]));
 }
 
 function populateTemplateChoices(setup: ExcelScript.Worksheet) {
@@ -317,6 +343,7 @@ function applySetupValidations(setup: ExcelScript.Worksheet) {
   setListValidation(setup.getRange("B4"), "=$S$4:$S$500");
   setListValidation(setup.getRange("B5"), "Build pivots,Refresh fields,Restore starter template");
   setListValidation(setup.getRange(`A${FIRST_SETUP_ROW}:A${LAST_SETUP_ROW}`), "=$S$5:$S$500", false);
+  setListValidation(setup.getRange(`C${FIRST_SETUP_ROW}:C${LAST_SETUP_ROW}`), "=$U$4:$U$500", false);
   setListValidation(setup.getRange(`D${FIRST_SETUP_ROW}:D${LAST_SETUP_ROW}`), "Save in this workbook");
   setListValidation(setup.getRange(`M${FIRST_SETUP_ROW}:M${LAST_SETUP_ROW}`), "No,Yes");
 
