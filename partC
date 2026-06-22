@@ -1,10 +1,12 @@
 /** Called automatically by Power Automate to refresh central field choices. */
 
-function main(workbook: ExcelScript.Workbook, headersJson: string) {
+function main(workbook: ExcelScript.Workbook, headersJson: string): number {
   const setup = workbook.getWorksheet("PivotBuilder_Setup");
   if (!setup) throw new Error("PivotBuilder_Setup does not exist. Run the Central Builder once first.");
 
-  const payload = JSON.parse(headersJson) as { dataSheet: string; headers: string[] };
+  let parsedPayload: unknown = JSON.parse(headersJson);
+  if (typeof parsedPayload === "string") parsedPayload = JSON.parse(parsedPayload);
+  const payload = parsedPayload as { dataSheet: string; headers: string[] };
   if (!payload || !Array.isArray(payload.headers)) throw new Error("Header JSON is invalid.");
   const headers = payload.headers
     .map((header: string) => String(header || "").trim())
@@ -27,5 +29,8 @@ function main(workbook: ExcelScript.Workbook, headersJson: string) {
       message: "Choose a field or type a comma/semicolon expression."
     });
   });
-  setup.getRange("B6").setValue(`Loaded ${headers.length} field choices from ${payload.dataSheet || "the input workbook"}.`);
+  setup.getRange("B6").setValue(
+    `Loaded ${headers.length} field choices from ${payload.dataSheet || "the input workbook"} at ${new Date().toISOString()}.`
+  );
+  return headers.length;
 }
