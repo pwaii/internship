@@ -58,13 +58,18 @@ function main(workbook: ExcelScript.Workbook): string {
   refreshCentralTemplateChoices(setup);
   applyCentralValidations(setup);
 
-  const inputWorkbookPath = builderText(setup.getRange("B3").getValue());
+  const rawInputWorkbookPath = builderText(setup.getRange("B3").getValue());
+  const inputWorkbookPath = normalizeSharePointFilePath(rawInputWorkbookPath);
+  if (inputWorkbookPath !== rawInputWorkbookPath) setup.getRange("B3").setValue(inputWorkbookPath);
   const dataSheet = builderText(setup.getRange("B4").getValue());
   const selectedTemplate = builderText(setup.getRange("B5").getValue()) || "All";
   const action = builderText(setup.getRange("B2").getValue()) || "Refresh fields only";
   if (!inputWorkbookPath) throwBuilder(setup, "Input workbook path is required in B3.");
   if (/^[A-Za-z]:[\\/]/.test(inputWorkbookPath)) {
     throwBuilder(setup, "B3 cannot use a local C:\\ path. Upload the input workbook to OneDrive/SharePoint and enter its cloud path.");
+  }
+  if (/^https?:\/\//i.test(inputWorkbookPath) || /^\/:/i.test(inputWorkbookPath)) {
+    throwBuilder(setup, "B3 contains a sharing link that cannot be resolved. Use a SharePoint library path such as /Shared Documents/Inputs/File.xlsx.");
   }
   if (!dataSheet) throwBuilder(setup, "Input data sheet is required in B4.");
 
@@ -287,6 +292,26 @@ function centralEquals(left: string, right: string): boolean {
 
 function centralYes(value: string): boolean {
   return ["yes", "y", "true", "1", "checked"].includes(value.trim().toLowerCase());
+}
+
+function normalizeSharePointFilePath(value: string): string {
+  const clean = value.trim();
+  if (!/^https?:\/\//i.test(clean)) return clean;
+
+  // Remove query/hash and the SharePoint host. Direct links and ':x:/r' links
+  // retain the real library path; opaque ':x:/s' or ':x:/g' links do not.
+  const withoutQuery = clean.split("?")[0].split("#")[0];
+  let path = withoutQuery.replace(/^https?:\/\/[^/]+/i, "");
+  path = path.replace(/^\/:x:\/r/i, "");
+  path = path.replace(/^\/sites\/[^/]+/i, "");
+  path = path.replace(/^\/teams\/[^/]+/i, "");
+  if (/^\/:/i.test(path)) return clean;
+
+  try {
+    return decodeURIComponent(path);
+  } catch (_error) {
+    return path;
+  }
 }
 
 function setBuilderStatus(setup: ExcelScript.Worksheet, message: string) {
