@@ -17,7 +17,7 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
-const SETUP_STYLE_VERSION = "PB_STYLE_3";
+const SETUP_STYLE_VERSION = "PB_STYLE_4";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "Save in this workbook",
@@ -195,7 +195,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("A3:N7").getFormat().getFill().setColor(white);
   sheet.getRange("A3:A7").getFormat().getFont().setBold(true);
   sheet.getRange("A3:N7").getFormat().setWrapText(false);
-  sheet.getRange("A3:N7").getFormat().setShrinkToFit(true);
+  sheet.getRange("A3:N7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
 
   const headers = sheet.getRange("A8:N8");
   headers.getFormat().getFill().setColor(black);
@@ -207,7 +207,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   const body = sheet.getRange(`A9:N${LAST_SETUP_ROW}`);
   body.getFormat().getFill().setColor(white);
   body.getFormat().setWrapText(false);
-  body.getFormat().setShrinkToFit(true);
+  body.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
   body.getFormat().setRowHeight(24);
   applySetupGridBorders(body, border);
 
@@ -219,7 +219,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("P3:T3").getFormat().getFont().setBold(true);
   sheet.getRange("P4:T500").getFormat().getFill().setColor(white);
   sheet.getRange("P4:T500").getFormat().setWrapText(false);
-  sheet.getRange("P4:T500").getFormat().setShrinkToFit(true);
+  sheet.getRange("P4:T500").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
 
   const widths: { [key: string]: number } = {
     A: 110, B: 145, C: 120, D: 135, E: 160, F: 145, G: 250,
@@ -958,17 +958,18 @@ function buildOnePivot(
 
   const titleRow = placement.row;
   const titleCol = placement.col;
-  const pivotStartRow = titleRow + 4 + filters.length;
+  const reportFilterCount = filters.filter(spec => !containsText(valueFields, spec.field)).length;
+  const pivotStartRow = titleRow + 4 + reportFilterCount;
   const title = sheet.getCell(titleRow, titleCol);
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
-  title.getFormat().setShrinkToFit(true);
+  title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
   sheet.getCell(titleRow + 1, titleCol).setValue(summaryText(setup));
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setItalic(true);
   sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setColor("#5A6068");
   sheet.getCell(titleRow + 1, titleCol).getFormat().setWrapText(false);
-  sheet.getCell(titleRow + 1, titleCol).getFormat().setShrinkToFit(true);
+  sheet.getCell(titleRow + 1, titleCol).getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
   // Address strings are more compatible across Excel web tenants than passing
@@ -1013,14 +1014,24 @@ function buildOnePivot(
   });
 
   filters.forEach(spec => {
-    const actual = source.helperByKey.get(filterKey(spec.field)) || requirePivotHeader(source, spec.field);
+    const duplicateFilterField = source.helperByKey.get(filterKey(spec.field));
+    const placeInColumns = containsText(valueFields, spec.field);
+    const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Filter field not found: ${spec.field}`);
-    const added = pivot.addFilterHierarchy(hierarchy);
-    added.setName(spec.field);
+    let filterField: ExcelScript.PivotField;
+    if (placeInColumns) {
+      const added = pivot.addColumnHierarchy(hierarchy);
+      added.setName(spec.field);
+      filterField = added.getFields()[0];
+    } else {
+      const added = pivot.addFilterHierarchy(hierarchy);
+      added.setName(spec.field);
+      filterField = added.getFields()[0];
+    }
     if (spec.values.length > 0) {
       try {
-        added.getFields()[0].applyFilter({ manualFilter: { selectedItems: spec.values } });
+        filterField.applyFilter({ manualFilter: { selectedItems: spec.values } });
       } catch (_ignored) {
         // Keep the filter dropdown when a requested item is absent, but leave
         // it unselected instead of failing the entire PivotTable build.
@@ -1348,7 +1359,7 @@ function yes(value: string): boolean {
 function writeStatus(setup: ExcelScript.Worksheet, message: string) {
   setup.getRange("B7").setValue(message);
   setup.getRange("B7").getFormat().setWrapText(false);
-  setup.getRange("B7").getFormat().setShrinkToFit(true);
+  setup.getRange("B7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.fill);
   setup.getRange("B7").getFormat().getFont().setColor(message.startsWith("ERROR") ? "#8D021F" : "#000000");
 }
 
