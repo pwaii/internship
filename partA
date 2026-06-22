@@ -45,24 +45,16 @@ const CENTRAL_EMBEDDED_ROWS: BuilderCell[][] = [
   ]
 ];
 
-function main(workbook: ExcelScript.Workbook, headersJson: string = ""): string {
+function main(workbook: ExcelScript.Workbook): string {
   let setup = workbook.getWorksheet(BUILDER_SETUP_SHEET);
   if (!setup) {
     setup = createCentralSetup(workbook);
-    if (headersJson.trim() !== "") {
-      loadCentralHeaders(setup, headersJson);
-      return "";
-    }
     setBuilderStatus(setup, "Central builder created. Enter the input workbook path and configure templates.");
     return "";
   }
 
-  if (headersJson.trim() !== "") {
-    loadCentralHeaders(setup, headersJson);
-    return "";
-  }
-
   ensureCentralTemplates(setup);
+  applyCentralStyle(setup);
   refreshCentralTemplateChoices(setup);
   applyCentralValidations(setup);
 
@@ -71,6 +63,9 @@ function main(workbook: ExcelScript.Workbook, headersJson: string = ""): string 
   const selectedTemplate = builderText(setup.getRange("B5").getValue()) || "All";
   const action = builderText(setup.getRange("B2").getValue()) || "Refresh fields only";
   if (!inputWorkbookPath) throwBuilder(setup, "Input workbook path is required in B3.");
+  if (/^[A-Za-z]:[\\/]/.test(inputWorkbookPath)) {
+    throwBuilder(setup, "B3 cannot use a local C:\\ path. Upload the input workbook to OneDrive/SharePoint and enter its cloud path.");
+  }
   if (!dataSheet) throwBuilder(setup, "Input data sheet is required in B4.");
 
   const rows = readCentralRows(setup).filter((row: BuilderPivotRow) =>
@@ -155,11 +150,7 @@ function applyCentralStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange(`A9:N${BUILDER_LAST_ROW}`).getFormat().getFill().setColor(white);
   sheet.getRange(`A9:N${BUILDER_LAST_ROW}`).getFormat().setWrapText(true);
   sheet.getRange(`A9:N${BUILDER_LAST_ROW}`).getFormat().setRowHeight(48);
-  sheet.getRange(`A8:N${BUILDER_LAST_ROW}`).getFormat().getBorders().forEach((item: ExcelScript.RangeBorder) => {
-    item.setColor(border);
-    item.setStyle(ExcelScript.BorderLineStyle.continuous);
-    item.setWeight(ExcelScript.BorderWeight.thin);
-  });
+  applyCleanBorders(sheet.getRange(`A8:N${BUILDER_LAST_ROW}`), border);
 
   sheet.getRange("P1:S1").getFormat().getFill().setColor(burgundy);
   sheet.getRange("P1:S1").getFormat().getFont().setColor(white);
@@ -307,20 +298,22 @@ function throwBuilder(setup: ExcelScript.Worksheet, message: string): never {
   throw new Error(message);
 }
 
-function loadCentralHeaders(setup: ExcelScript.Worksheet, headersJson: string) {
-  const payload = JSON.parse(headersJson) as { dataSheet: string; headers: string[] };
-  if (!payload || !Array.isArray(payload.headers)) throw new Error("Header JSON is invalid.");
-  const headers = payload.headers
-    .map((header: string) => String(header || "").trim())
-    .filter((header: string) => header.length > 0)
-    .slice(0, 497);
-
-  setup.getRange("P4:P500").clear(ExcelScript.ClearApplyTo.contents);
-  if (headers.length > 0) {
-    setup.getRangeByIndexes(3, 15, headers.length, 1).setValues(headers.map((header: string) => [header]));
-  }
-  ["E", "H", "I", "J", "K"].forEach((column: string) => {
-    centralListValidation(setup.getRange(`${column}9:${column}200`), "=$P$4:$P$500", false);
+function applyCleanBorders(range: ExcelScript.Range, color: string) {
+  const format = range.getFormat();
+  [ExcelScript.BorderIndex.diagonalDown, ExcelScript.BorderIndex.diagonalUp].forEach((index: ExcelScript.BorderIndex) => {
+    format.getRangeBorder(index).setStyle(ExcelScript.BorderLineStyle.none);
   });
-  setBuilderStatus(setup, `Loaded ${headers.length} field choices from ${payload.dataSheet || "the input workbook"}.`);
+  [
+    ExcelScript.BorderIndex.edgeTop,
+    ExcelScript.BorderIndex.edgeBottom,
+    ExcelScript.BorderIndex.edgeLeft,
+    ExcelScript.BorderIndex.edgeRight,
+    ExcelScript.BorderIndex.insideHorizontal,
+    ExcelScript.BorderIndex.insideVertical
+  ].forEach((index: ExcelScript.BorderIndex) => {
+    const border = format.getRangeBorder(index);
+    border.setColor(color);
+    border.setStyle(ExcelScript.BorderLineStyle.continuous);
+    border.setWeight(ExcelScript.BorderWeight.thin);
+  });
 }
