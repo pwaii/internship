@@ -82,6 +82,7 @@ function main(workbook: ExcelScript.Workbook, configJson: string = ""): string {
 
   try {
     ensureEmbeddedTemplatesSeeded(setup);
+    applySetupStyle(setup);
     refreshCloudSetup(workbook, setup);
 
     const action = text(setup.getRange("B5").getValue());
@@ -253,11 +254,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   body.getFormat().getFill().setColor(white);
   body.getFormat().setWrapText(true);
   body.getFormat().setRowHeight(48);
-  body.getFormat().getBorders().forEach(item => {
-    item.setColor(border);
-    item.setStyle(ExcelScript.BorderLineStyle.continuous);
-    item.setWeight(ExcelScript.BorderWeight.thin);
-  });
+  applySetupGridBorders(body, border);
 
   sheet.getRange("P1:T1").getFormat().getFill().setColor(burgundy);
   sheet.getRange("P1:T1").getFormat().getFont().setColor(white);
@@ -338,6 +335,26 @@ function setListValidation(range: ExcelScript.Range, source: string, showError =
     showAlert: showError,
     title: "Pivot Builder",
     message: "Choose a suggestion or type the required comma/semicolon expression."
+  });
+}
+
+function applySetupGridBorders(range: ExcelScript.Range, color: string) {
+  const format = range.getFormat();
+  [ExcelScript.BorderIndex.diagonalDown, ExcelScript.BorderIndex.diagonalUp].forEach((index: ExcelScript.BorderIndex) => {
+    format.getRangeBorder(index).setStyle(ExcelScript.BorderLineStyle.none);
+  });
+  [
+    ExcelScript.BorderIndex.edgeTop,
+    ExcelScript.BorderIndex.edgeBottom,
+    ExcelScript.BorderIndex.edgeLeft,
+    ExcelScript.BorderIndex.edgeRight,
+    ExcelScript.BorderIndex.insideHorizontal,
+    ExcelScript.BorderIndex.insideVertical
+  ].forEach((index: ExcelScript.BorderIndex) => {
+    const border = format.getRangeBorder(index);
+    border.setColor(color);
+    border.setStyle(ExcelScript.BorderLineStyle.continuous);
+    border.setWeight(ExcelScript.BorderWeight.thin);
   });
 }
 
