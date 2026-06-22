@@ -498,8 +498,8 @@ function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
     () => Array(columnCount).fill("") as CellValue[]
   );
 
-  for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_COLUMNS_PER_CHUNK) {
-    const chunkColumns = Math.min(MAX_COLUMNS_PER_CHUNK, columnCount - columnOffset);
+  for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_READ_COLUMNS_PER_CHUNK) {
+    const chunkColumns = Math.min(MAX_READ_COLUMNS_PER_CHUNK, columnCount - columnOffset);
     const rowsPerChunk = chunkRowCount(chunkColumns);
     for (let rowOffset = 0; rowOffset < rowCount; rowOffset += rowsPerChunk) {
       const chunkRows = Math.min(rowsPerChunk, rowCount - rowOffset);
@@ -526,26 +526,51 @@ function writeValuesInChunks(
   startRow = 0,
   startColumn = 0
 ) {
-  for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_COLUMNS_PER_CHUNK) {
-    const chunkColumns = Math.min(MAX_COLUMNS_PER_CHUNK, columnCount - columnOffset);
-    const rowsPerChunk = chunkRowCount(chunkColumns);
-    for (let rowOffset = 0; rowOffset < values.length; rowOffset += rowsPerChunk) {
-      const chunkRows = Math.min(rowsPerChunk, values.length - rowOffset);
+  for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_WRITE_COLUMNS_PER_CHUNK) {
+    const chunkColumns = Math.min(MAX_WRITE_COLUMNS_PER_CHUNK, columnCount - columnOffset);
+    const maximumRows = chunkRowCount(chunkColumns);
+    let rowOffset = 0;
+    while (rowOffset < values.length) {
       const chunk: CellValue[][] = [];
-      for (let row = 0; row < chunkRows; row++) {
-        chunk.push(values[rowOffset + row].slice(columnOffset, columnOffset + chunkColumns));
+      let estimatedBytes = 2;
+      while (rowOffset + chunk.length < values.length && chunk.length < maximumRows) {
+        const nextRow = values[rowOffset + chunk.length].slice(
+          columnOffset,
+          columnOffset + chunkColumns
+        );
+        const nextBytes = estimateRowPayloadBytes(nextRow);
+        if (chunk.length > 0 && estimatedBytes + nextBytes > MAX_WRITE_PAYLOAD_BYTES) break;
+        chunk.push(nextRow);
+        estimatedBytes += nextBytes;
       }
       sheet.getRangeByIndexes(
         startRow + rowOffset,
         startColumn + columnOffset,
-        chunkRows,
+        chunk.length,
         chunkColumns
       ).setValues(chunk);
+      rowOffset += chunk.length;
     }
   }
 }
 
-const MAX_COLUMNS_PER_CHUNK = 50;
+function estimateRowPayloadBytes(row: CellValue[]): number {
+  let bytes = 4;
+  row.forEach(value => {
+    if (typeof value === "string") {
+      // Four bytes per character safely covers UTF-8 plus JSON escaping for
+      // ordinary worksheet text. Quotes, slashes, and separators get padding.
+      bytes += value.length * 4 + 16;
+    } else {
+      bytes += 32;
+    }
+  });
+  return bytes;
+}
+
+const MAX_READ_COLUMNS_PER_CHUNK = 50;
+const MAX_WRITE_COLUMNS_PER_CHUNK = 10;
+const MAX_WRITE_PAYLOAD_BYTES = 1000000;
 
 function chunkRowCount(columnCount: number): number {
   // Keep individual Excel API requests comfortably below the documented
