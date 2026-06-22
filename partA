@@ -559,10 +559,20 @@ function readChunkWithRetry(
       );
       return left.map((row, index) => [...row, ...right[index]]);
     }
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Could not read source cell at row ${startRow + 1}, column ${startColumn + 1}: ${detail}`
-    );
+    const cell = sheet.getCell(startRow, startColumn);
+    try {
+      return [[cell.getValue() as CellValue]];
+    } catch (valueError) {
+      try {
+        return [[cell.getText()]];
+      } catch (textError) {
+        throw new Error(
+          `Could not read source cell at row ${startRow + 1}, column ${startColumn + 1}: ` +
+          `${errorDetail(error)}; value fallback: ${errorDetail(valueError)}; ` +
+          `text fallback: ${errorDetail(textError)}`
+        );
+      }
+    }
   }
 }
 
@@ -627,11 +637,35 @@ function writeChunkWithRetry(
       writeChunkWithRetry(sheet, startRow, startColumn + firstCount, right);
       return;
     }
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Could not write source cell at row ${startRow + 1}, column ${startColumn + 1}: ${detail}`
-    );
+    try {
+      sheet.getCell(startRow, startColumn).setValue(values[0][0]);
+      return;
+    } catch (cellError) {
+      throw new Error(
+        `Could not write source cell at row ${startRow + 1}, column ${startColumn + 1}: ` +
+        `${errorDetail(error)}; cell fallback: ${errorDetail(cellError)}`
+      );
+    }
   }
+}
+
+function errorDetail(error: unknown): string {
+  if (error instanceof Error) return error.message || error.name;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const value = error as { message?: unknown; code?: unknown; name?: unknown };
+    const pieces: string[] = [];
+    if (value.code !== undefined) pieces.push(`code=${String(value.code)}`);
+    if (value.name !== undefined) pieces.push(`name=${String(value.name)}`);
+    if (value.message !== undefined) pieces.push(`message=${String(value.message)}`);
+    if (pieces.length > 0) return pieces.join(", ");
+    try {
+      return JSON.stringify(error);
+    } catch (_ignored) {
+      return "Unknown Excel error";
+    }
+  }
+  return String(error);
 }
 
 function estimateRowPayloadBytes(row: CellValue[]): number {
