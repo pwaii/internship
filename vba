@@ -627,15 +627,15 @@ function buildNormalizedSource(
     if (!requiredFields.some(existing => equalsText(existing, canonical))) requiredFields.push(canonical);
   };
   setups.forEach(setup => {
-    splitList(setup.rows).forEach(addRequiredField);
-    splitList(setup.values).forEach(addRequiredField);
+    splitList(setup.rows).forEach(field => addRequiredField(field));
+    splitList(setup.values).forEach(field => addRequiredField(field));
     parseFilterSpecs(setup.filters).forEach(filter => addRequiredField(filter.field));
     parseConditions(setup.conditions).forEach(condition => {
       addRequiredField(condition.field);
       if (condition.measureField) addRequiredField(condition.measureField);
     });
     splitRuleSets(setup.groupRules).forEach(rules => {
-      groupRuleFields(rules).forEach(addRequiredField);
+      groupRuleFields(rules).forEach(field => addRequiredField(field));
     });
   });
   if (requiredFields.length === 0) requiredFields.push(allHeaders[0]);
