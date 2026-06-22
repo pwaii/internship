@@ -119,7 +119,7 @@ function headerPayloadJson(dataSheet: ExcelScript.Worksheet): string {
   if (!used || used.getRowCount() < 1 || used.getColumnCount() < 1) {
     throw new Error(`Input data sheet has no header row: ${dataSheet.getName()}`);
   }
-  const headers = normalizeHeaders(used.getValues()[0]);
+  const headers = readHeaderRow(used);
   return JSON.stringify({ dataSheet: dataSheet.getName(), headers });
 }
 
@@ -221,9 +221,19 @@ function refreshCloudSetup(workbook: ExcelScript.Workbook, setup: ExcelScript.Wo
   if (dataSheet && dataSheet.getName() !== SETUP_SHEET && dataSheet.getName() !== SOURCE_SHEET) {
     const used = dataSheet.getUsedRange(true);
     if (used && used.getRowCount() > 0) {
-      populateFieldSuggestions(setup, normalizeHeaders(used.getValues()[0]));
+      populateFieldSuggestions(setup, readHeaderRow(used));
     }
   }
+}
+
+function readHeaderRow(used: ExcelScript.Range): string[] {
+  const firstRow = used.getWorksheet().getRangeByIndexes(
+    used.getRowIndex(),
+    used.getColumnIndex(),
+    1,
+    used.getColumnCount()
+  );
+  return normalizeHeaders(firstRow.getValues()[0] as CellValue[]);
 }
 
 function populateSheetChoices(workbook: ExcelScript.Workbook, setup: ExcelScript.Worksheet) {
@@ -248,7 +258,10 @@ function populateTemplateChoices(setup: ExcelScript.Worksheet) {
 
 function populateFieldSuggestions(setup: ExcelScript.Worksheet, headers: string[]) {
   setup.getRange("P4:P500").clear(ExcelScript.ClearApplyTo.contents);
-  if (headers.length > 0) setup.getRangeByIndexes(3, 15, headers.length, 1).setValues(headers.map(name => [name]));
+  const visibleHeaders = headers.slice(0, 497);
+  if (visibleHeaders.length > 0) {
+    setup.getRangeByIndexes(3, 15, visibleHeaders.length, 1).setValues(visibleHeaders.map(name => [name]));
+  }
 }
 
 function applySetupValidations(setup: ExcelScript.Worksheet) {
