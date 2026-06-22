@@ -54,7 +54,7 @@ interface Placement {
 
 interface SourceModel {
   sheet: ExcelScript.Worksheet;
-  range: ExcelScript.Range;
+  sourceAddress: string;
   headers: string[];
   baseHeaders: string[];
   helperByKey: Map<string, string>;
@@ -457,8 +457,6 @@ function buildNormalizedSource(
 
   let helper = workbook.getWorksheet(SOURCE_SHEET);
   if (!helper) helper = workbook.addWorksheet(SOURCE_SHEET);
-  const existingTables = helper.getTables();
-  const existingTable = existingTables.length > 0 ? existingTables[0] : undefined;
   const matrix: CellValue[][] = [headers, ...outputRows];
   if (matrix.length > 1048576) {
     throw new Error(`Source has ${matrix.length} rows after adding headers; Excel allows at most 1,048,576.`);
@@ -466,19 +464,27 @@ function buildNormalizedSource(
   if (headers.length > 16384) {
     throw new Error(`Source has ${headers.length} columns after helper fields; Excel allows at most 16,384.`);
   }
-  const range = helper.getRangeByIndexes(0, 0, matrix.length, headers.length);
   writeValuesInChunks(helper, matrix, headers.length);
-  let table: ExcelScript.Table;
-  if (existingTable) {
-    existingTable.resize(range);
-    table = existingTable;
-  } else {
-    table = helper.addTable(range, true);
-    table.setName(uniqueTableName(workbook, "PBSourceTable"));
-  }
+  const sourceAddress = worksheetRangeAddress(helper.getName(), matrix.length, headers.length);
   const numericByHeader = new Map<string, boolean>();
   headers.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(outputRows, col)));
-  return { sheet: helper, range: table.getRange(), headers, baseHeaders, helperByKey, numericByHeader };
+  return { sheet: helper, sourceAddress, headers, baseHeaders, helperByKey, numericByHeader };
+}
+
+function worksheetRangeAddress(sheetName: string, rowCount: number, columnCount: number): string {
+  const escapedSheet = sheetName.replace(/'/g, "''");
+  return `'${escapedSheet}'!$A$1:$${columnLetters(columnCount)}$${rowCount}`;
+}
+
+function columnLetters(columnCount: number): string {
+  let value = columnCount;
+  let result = "";
+  while (value > 0) {
+    value--;
+    result = String.fromCharCode(65 + (value % 26)) + result;
+    value = Math.floor(value / 26);
+  }
+  return result;
 }
 
 function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
@@ -627,7 +633,7 @@ function buildOnePivot(
   // Range objects from a hidden helper sheet directly.
   const pivot = sheet.addPivotTable(
     pivotName,
-    source.range.getAddress(),
+    source.sourceAddress,
     sheet.getCell(pivotStartRow, titleCol).getAddress()
   );
 
