@@ -12,6 +12,7 @@ const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 const MAX_OUTPUT_COLUMN_WIDTH = 170;
+const MAX_PIVOT_LABEL_LENGTH = 34;
 
 type CellValue = string | number | boolean;
 
@@ -563,7 +564,8 @@ function needsNormalizedSource(setups: PivotSetup[]): boolean {
     const filterOverlap = parseFilterSpecs(setup.filters).some(filter =>
       containsText(rows, filter.field) || containsText(values, filter.field)
     );
-    return setup.groupRules.trim() !== "" ||
+    return rows.length > 0 ||
+      setup.groupRules.trim() !== "" ||
       setup.conditions.trim() !== "" ||
       filterOverlap;
   });
@@ -701,6 +703,14 @@ function buildNormalizedSource(
         const caption = rowName || (field ? `${field} Group` : "Condition Group");
         const key = groupKey(field, caption, rules);
         addHelper(key, `PB Group - ${caption}`, dataRows.map(row => applyGroupRules(row, baseIndex, rules)));
+      } else if (field) {
+        const fieldIndex = requireHeader(baseIndex, field, `Rows, setup row ${setup.sourceRow}`);
+        const caption = rowName || field;
+        addHelper(
+          rowDisplayKey(setup.sourceRow, position, field, caption),
+          caption,
+          dataRows.map(row => clippedPivotLabel(row[fieldIndex]))
+        );
       }
     }
 
@@ -715,7 +725,7 @@ function buildNormalizedSource(
       addHelper(
         conditionGroupKey(setup.sourceRow, setup.conditions),
         `PB Condition - ${setup.pivotName}`,
-        dataRows.map(row => conditionCategory(row, baseIndex, parsedConditions))
+        dataRows.map(row => clippedPivotLabel(conditionCategory(row, baseIndex, parsedConditions)))
       );
     }
   });
@@ -1114,6 +1124,9 @@ function buildOnePivot(
     if (rules) {
       caption = rowName || (field ? `${field} Group` : "Condition Group");
       actual = requiredHelper(source, groupKey(field, caption, rules));
+    } else if (field) {
+      caption = rowName || field;
+      actual = source.helperByKey.get(rowDisplayKey(setup.sourceRow, position, field, caption)) || field;
     }
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
@@ -1353,6 +1366,12 @@ function valueMatches(actual: CellValue, expected: string[]): boolean {
   return expected.some(value => equalsText(text(actual), value));
 }
 
+function clippedPivotLabel(value: CellValue): string {
+  const label = text(value);
+  if (label.length <= MAX_PIVOT_LABEL_LENGTH) return label;
+  return `${label.slice(0, MAX_PIVOT_LABEL_LENGTH - 3).trimEnd()}...`;
+}
+
 function conditionCategory(
   row: CellValue[],
   headerIndex: Map<string, number>,
@@ -1513,6 +1532,10 @@ function aliasKey(field: string, alias: string): string {
 
 function groupKey(field: string, caption: string, rules: string): string {
   return `group|${lower(field)}|${lower(caption)}|${lower(rules)}`;
+}
+
+function rowDisplayKey(sourceRow: number, position: number, field: string, caption: string): string {
+  return `row-display|${sourceRow}|${position}|${lower(field)}|${lower(caption)}`;
 }
 
 function valueKey(field: string): string {
