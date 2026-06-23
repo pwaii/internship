@@ -11,8 +11,8 @@ const SOURCE_SHEET = "__PivotSource";
 const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
-const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 115;
-const OUTPUT_VALUE_COLUMN_WIDTH = 165;
+const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 235;
+const OUTPUT_VALUE_COLUMN_WIDTH = 72;
 
 type CellValue = string | number | boolean;
 
