@@ -11,8 +11,7 @@ const SOURCE_SHEET = "__PivotSource";
 const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
-const MAX_OUTPUT_COLUMN_WIDTH = 170;
-const MAX_PIVOT_LABEL_LENGTH = 34;
+const OUTPUT_COLUMN_WIDTH = 115;
 
 type CellValue = string | number | boolean;
 
@@ -564,8 +563,7 @@ function needsNormalizedSource(setups: PivotSetup[]): boolean {
     const filterOverlap = parseFilterSpecs(setup.filters).some(filter =>
       containsText(rows, filter.field) || containsText(values, filter.field)
     );
-    return rows.length > 0 ||
-      setup.groupRules.trim() !== "" ||
+    return setup.groupRules.trim() !== "" ||
       setup.conditions.trim() !== "" ||
       filterOverlap;
   });
@@ -703,14 +701,6 @@ function buildNormalizedSource(
         const caption = rowName || (field ? `${field} Group` : "Condition Group");
         const key = groupKey(field, caption, rules);
         addHelper(key, `PB Group - ${caption}`, dataRows.map(row => applyGroupRules(row, baseIndex, rules)));
-      } else if (field) {
-        const fieldIndex = requireHeader(baseIndex, field, `Rows, setup row ${setup.sourceRow}`);
-        const caption = rowName || field;
-        addHelper(
-          rowDisplayKey(setup.sourceRow, position, field, caption),
-          caption,
-          dataRows.map(row => clippedPivotLabel(row[fieldIndex]))
-        );
       }
     }
 
@@ -725,7 +715,7 @@ function buildNormalizedSource(
       addHelper(
         conditionGroupKey(setup.sourceRow, setup.conditions),
         `PB Condition - ${setup.pivotName}`,
-        dataRows.map(row => clippedPivotLabel(conditionCategory(row, baseIndex, parsedConditions)))
+        dataRows.map(row => conditionCategory(row, baseIndex, parsedConditions))
       );
     }
   });
@@ -1019,29 +1009,22 @@ function buildAllPivots(
   outputSheets.forEach(sheet => {
     const used = sheet.getUsedRange();
     if (used) {
-      // Full-sheet autofit can time out when a PivotTable contains many rows.
-      // A representative preview gives useful widths without scanning the
-      // entire output. Pivot rows retain Excel's normal default height.
-      const previewRows = Math.min(100, used.getRowCount());
       const previewColumns = Math.min(50, used.getColumnCount());
       sheet.getRangeByIndexes(
         used.getRowIndex(),
         used.getColumnIndex(),
-        previewRows,
+        used.getRowCount(),
         previewColumns
-      ).getFormat().autofitColumns();
-      capOutputColumnWidths(sheet, used.getColumnIndex(), previewColumns);
+      ).getFormat().setWrapText(false);
+      setOutputColumnWidths(sheet, used.getColumnIndex(), previewColumns);
     }
   });
 }
 
-function capOutputColumnWidths(sheet: ExcelScript.Worksheet, startColumn: number, columnCount: number) {
+function setOutputColumnWidths(sheet: ExcelScript.Worksheet, startColumn: number, columnCount: number) {
   for (let offset = 0; offset < columnCount; offset++) {
     const column = sheet.getRangeByIndexes(0, startColumn + offset, 1, 1).getEntireColumn();
-    const format = column.getFormat();
-    if (format.getColumnWidth() > MAX_OUTPUT_COLUMN_WIDTH) {
-      format.setColumnWidth(MAX_OUTPUT_COLUMN_WIDTH);
-    }
+    column.getFormat().setColumnWidth(OUTPUT_COLUMN_WIDTH);
   }
 }
 
@@ -1124,9 +1107,6 @@ function buildOnePivot(
     if (rules) {
       caption = rowName || (field ? `${field} Group` : "Condition Group");
       actual = requiredHelper(source, groupKey(field, caption, rules));
-    } else if (field) {
-      caption = rowName || field;
-      actual = source.helperByKey.get(rowDisplayKey(setup.sourceRow, position, field, caption)) || field;
     }
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
@@ -1366,12 +1346,6 @@ function valueMatches(actual: CellValue, expected: string[]): boolean {
   return expected.some(value => equalsText(text(actual), value));
 }
 
-function clippedPivotLabel(value: CellValue): string {
-  const label = text(value);
-  if (label.length <= MAX_PIVOT_LABEL_LENGTH) return label;
-  return `${label.slice(0, MAX_PIVOT_LABEL_LENGTH - 3).trimEnd()}...`;
-}
-
 function conditionCategory(
   row: CellValue[],
   headerIndex: Map<string, number>,
@@ -1532,10 +1506,6 @@ function aliasKey(field: string, alias: string): string {
 
 function groupKey(field: string, caption: string, rules: string): string {
   return `group|${lower(field)}|${lower(caption)}|${lower(rules)}`;
-}
-
-function rowDisplayKey(sourceRow: number, position: number, field: string, caption: string): string {
-  return `row-display|${sourceRow}|${position}|${lower(field)}|${lower(caption)}`;
 }
 
 function valueKey(field: string): string {
