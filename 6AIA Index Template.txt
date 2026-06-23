@@ -1,13 +1,10 @@
-? PBI_Products — ตาราง Flat สำหรับ Power BI (อย่าแก้ไข — อัปเดตจาก sheets ด้านบน)													
 ProductID	Company	ProductName	IndexName	Currency	ParticipationRate	CapRate	FloorRate	TermYears	Status	CohortNo	CohortStartDate	CohortEndDate	IndexBaseValue
-AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	80.0%	12.0%	0.0%	5	Active	1	01/01/2023	01/01/2028	4700.58
-AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	80.0%	12.0%	0.0%	5	Active	2	01/07/2023	01/07/2028	4450.38
-AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	80.0%	12.0%	0.0%	5	Active	3	01/01/2024	01/01/2029	4742.83
-AIA_HANG	AIA Thailand	AIA Hang Seng Linked	Hang Seng	HKD	90.0%	15.0%	0.0%	5	Active	1	01/04/2023	01/04/2028	19783
-AIA_HANG	AIA Thailand	AIA Hang Seng Linked	Hang Seng	HKD	90.0%	15.0%	0.0%	5	Active	2	01/10/2023	01/10/2028	17655
-SCB_NASDAQ	SCB Life	SCB NASDAQ 100 Linked	NASDAQ 100	USD	75.0%	14.0%	0.0%	5	Active	1	01/03/2023	01/03/2028	12960
-SCB_NASDAQ	SCB Life	SCB NASDAQ 100 Linked	NASDAQ 100	USD	75.0%	14.0%	0.0%	5	Active	2	01/09/2023	01/09/2028	15425
-SCB_NIKKEI	SCB Life	SCB Nikkei 225 Linked	Nikkei 225	JPY	85.0%	13.0%	0.0%	5	Active	1	01/06/2023	01/06/2028	31148
-MT_EURO	Muang Thai Life	MT Euro Stoxx 50 Linked	Euro Stoxx 50	EUR	85.0%	11.0%	0.0%	5	Active	1	01/02/2023	01/02/2028	4267
-													
-?? ตารางนี้ดึงมาจาก ? Product Master + ? Cohort Schedule | นำเข้า Power BI โดยตรง													
+AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	0.8	0.12	0	5	Active	1	01/01/2023	01/01/2028	4700.58
+AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	0.8	0.12	0	5	Active	2	01/07/2023	01/07/2028	4450.38
+AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	0.8	0.12	0	5	Active	3	01/01/2024	01/01/2029	4742.83
+AIA_HANG	AIA Thailand	AIA Hang Seng Linked	Hang Seng	HKD	0.9	0.15	0	5	Active	1	01/04/2023	01/04/2028	19783
+AIA_HANG	AIA Thailand	AIA Hang Seng Linked	Hang Seng	HKD	0.9	0.15	0	5	Active	2	01/10/2023	01/10/2028	17655
+SCB_NASDAQ	SCB Life	SCB NASDAQ 100 Linked	NASDAQ 100	USD	0.75	0.14	0	5	Active	1	01/03/2023	01/03/2028	12960
+SCB_NASDAQ	SCB Life	SCB NASDAQ 100 Linked	NASDAQ 100	USD	0.75	0.14	0	5	Active	2	01/09/2023	01/09/2028	15425
+SCB_NIKKEI	SCB Life	SCB Nikkei 225 Linked	Nikkei 225	JPY	0.85	0.13	0	5	Active	1	01/06/2023	01/06/2028	31148
+MT_EURO	Muang Thai Life	MT Euro Stoxx 50 Linked	Euro Stoxx 50	EUR	0.85	0.11	0	5	Active	1	01/02/2023	01/02/2028	4267
