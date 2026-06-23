@@ -12,7 +12,6 @@ const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 const MAX_OUTPUT_COLUMN_WIDTH = 170;
-const MAX_VISIBLE_SUMMARY_LENGTH = 55;
 
 type CellValue = string | number | boolean;
 
@@ -1079,19 +1078,21 @@ function buildOnePivot(
 
   const titleRow = placement.row;
   const titleCol = placement.col;
-  const pivotStartRow = titleRow + 4 + filters.length;
+  const summaryLines = pivotSummaryLines(setup);
+  const pivotStartRow = titleRow + 3 + summaryLines.length + filters.length;
   const title = sheet.getCell(titleRow, titleCol);
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
   title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
-  const summary = summaryText(setup);
-  const summaryCell = sheet.getCell(titleRow + 1, titleCol);
-  summaryCell.setValue(summary.length > MAX_VISIBLE_SUMMARY_LENGTH ? "" : summary);
-  summaryCell.getFormat().getFont().setItalic(true);
-  summaryCell.getFormat().getFont().setColor("#5A6068");
-  summaryCell.getFormat().setWrapText(false);
-  summaryCell.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  summaryLines.forEach((line, index) => {
+    const summaryCell = sheet.getCell(titleRow + 1 + index, titleCol);
+    summaryCell.setValue(line);
+    summaryCell.getFormat().getFont().setItalic(true);
+    summaryCell.getFormat().getFont().setColor("#5A6068");
+    summaryCell.getFormat().setWrapText(false);
+    summaryCell.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  });
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
   // Address strings are more compatible across Excel web tenants than passing
@@ -1367,10 +1368,19 @@ function conditionCategory(
   return "";
 }
 
-function summaryText(setup: PivotSetup): string {
-  const conditions = setup.conditions.trim() || "none";
-  const filters = setup.filters.trim() || "none";
-  return `Conditional values: ${conditions} | Filters: ${filters}`;
+function pivotSummaryLines(setup: PivotSetup): string[] {
+  return [
+    ...topicSummaryLines("Conditions", setup.conditions),
+    ...topicSummaryLines("Filters", setup.filters)
+  ];
+}
+
+function topicSummaryLines(label: string, value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [`${label}: none`];
+  const pieces = splitSemicolon(trimmed);
+  if (pieces.length <= 1) return [`${label}: ${trimmed}`];
+  return [`${label}:`, ...pieces.map(piece => `  ${piece}`)];
 }
 
 function templateSelected(template: string, selected: string): boolean {
