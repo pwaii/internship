@@ -1,0 +1,19 @@
+? PRODUCT MASTER — ข้อมูลหลักของแต่ละ Product										
+Product ID	ชื่อบริษัท	ชื่อ Product	Index ที่ผูก	สกุลเงิน Index	Participation Rate	Cap Rate (%)	Floor Rate (%)	ระยะเวลา (ปี)	สถานะ	หมายเหตุ
+AIA_SP500	AIA Thailand	AIA S&P 500 Linked	S&P 500	USD	80.0%	1200.0%	0.0%	5	Active	
+AIA_HANG	AIA Thailand	AIA Hang Seng Linked	Hang Seng	HKD	90.0%	1500.0%	0.0%	5	Active	
+SCB_NASDAQ	SCB Life	SCB NASDAQ 100 Linked	NASDAQ 100	USD	75.0%	1400.0%	0.0%	5	Active	
+SCB_NIKKEI	SCB Life	SCB Nikkei 225 Linked	Nikkei 225	JPY	85.0%	1300.0%	0.0%	5	Active	
+MT_EURO	Muang Thai Life	MT Euro Stoxx 50 Linked	Euro Stoxx 50	EUR	85.0%	1100.0%	0.0%	5	Active	
+										
+										
+										
+										
+										
+										
+										
+										
+										
+										
+										
+?? เพิ่ม product ใหม่: พิมพ์ต่อจากแถวสุดท้าย | Product ID ต้องไม่ซ้ำ | ตัวอักษรน้ำเงิน = กรอกข้อมูล										
