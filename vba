@@ -11,6 +11,8 @@ const SOURCE_SHEET = "__PivotSource";
 const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
+const MAX_OUTPUT_COLUMN_WIDTH = 170;
+const MAX_VISIBLE_SUMMARY_LENGTH = 55;
 
 type CellValue = string | number | boolean;
 
@@ -1019,8 +1021,19 @@ function buildAllPivots(
         previewRows,
         previewColumns
       ).getFormat().autofitColumns();
+      capOutputColumnWidths(sheet, used.getColumnIndex(), previewColumns);
     }
   });
+}
+
+function capOutputColumnWidths(sheet: ExcelScript.Worksheet, startColumn: number, columnCount: number) {
+  for (let offset = 0; offset < columnCount; offset++) {
+    const column = sheet.getRangeByIndexes(0, startColumn + offset, 1, 1).getEntireColumn();
+    const format = column.getFormat();
+    if (format.getColumnWidth() > MAX_OUTPUT_COLUMN_WIDTH) {
+      format.setColumnWidth(MAX_OUTPUT_COLUMN_WIDTH);
+    }
+  }
 }
 
 function removePreviousGeneratedOutputs(
@@ -1072,11 +1085,13 @@ function buildOnePivot(
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
   title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
-  sheet.getCell(titleRow + 1, titleCol).setValue(summaryText(setup));
-  sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setItalic(true);
-  sheet.getCell(titleRow + 1, titleCol).getFormat().getFont().setColor("#5A6068");
-  sheet.getCell(titleRow + 1, titleCol).getFormat().setWrapText(false);
-  sheet.getCell(titleRow + 1, titleCol).getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  const summary = summaryText(setup);
+  const summaryCell = sheet.getCell(titleRow + 1, titleCol);
+  summaryCell.setValue(summary.length > MAX_VISIBLE_SUMMARY_LENGTH ? "" : summary);
+  summaryCell.getFormat().getFont().setItalic(true);
+  summaryCell.getFormat().getFont().setColor("#5A6068");
+  summaryCell.getFormat().setWrapText(false);
+  summaryCell.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
   // Address strings are more compatible across Excel web tenants than passing
