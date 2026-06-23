@@ -11,7 +11,8 @@ const SOURCE_SHEET = "__PivotSource";
 const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
-const OUTPUT_COLUMN_WIDTH = 115;
+const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 115;
+const OUTPUT_VALUE_COLUMN_WIDTH = 165;
 
 type CellValue = string | number | boolean;
 
@@ -653,23 +654,30 @@ function buildNormalizedSource(
   if (requiredFields.length === 0) requiredFields.push(allHeaders[0]);
 
   const baseHeaders = requiredFields;
+  const requiredColumnPairs = baseHeaders.map((header, compactColumn) => ({
+    originalColumn: requireHeader(allHeaderIndex, header, "selected PivotTable fields"),
+    compactColumn
+  })).sort((left, right) => left.originalColumn - right.originalColumn);
   const dataRowCount = used.getRowCount() - 1;
   const dataRows: CellValue[][] = Array.from(
     { length: dataRowCount },
     () => Array(baseHeaders.length).fill("") as CellValue[]
   );
-  baseHeaders.forEach((header, compactColumn) => {
-    const originalColumn = requireHeader(allHeaderIndex, header, "selected PivotTable fields");
-    const columnValues = readValuesInChunks(dataSheet.getRangeByIndexes(
+
+  buildRequiredReadSpans(requiredColumnPairs).forEach(span => {
+    const values = readValuesInChunks(dataSheet.getRangeByIndexes(
       used.getRowIndex() + 1,
-      used.getColumnIndex() + originalColumn,
+      used.getColumnIndex() + span.startColumn,
       dataRowCount,
-      1
+      span.columnCount
     ));
-    columnValues.forEach((row, rowIndex) => {
-      dataRows[rowIndex][compactColumn] = row[0];
+    values.forEach((row, rowIndex) => {
+      span.fields.forEach(field => {
+        dataRows[rowIndex][field.compactColumn] = row[field.originalColumn - span.startColumn];
+      });
     });
   });
+
   const headers = [...baseHeaders];
   const outputRows = dataRows;
   const helperByKey = new Map<string, string>();
@@ -750,6 +758,29 @@ function worksheetRangeAddress(
   const firstColumn = columnLetters(startColumn + 1);
   const lastColumn = columnLetters(startColumn + columnCount);
   return `'${escapedSheet}'!$${firstColumn}$${startRow + 1}:$${lastColumn}$${startRow + rowCount}`;
+}
+
+function buildRequiredReadSpans(
+  pairs: { originalColumn: number; compactColumn: number }[]
+): { startColumn: number; columnCount: number; fields: { originalColumn: number; compactColumn: number }[] }[] {
+  const spans: { startColumn: number; endColumn: number; fields: { originalColumn: number; compactColumn: number }[] }[] = [];
+  pairs.forEach(pair => {
+    const last = spans[spans.length - 1];
+    const canJoin = last &&
+      pair.originalColumn - last.endColumn <= MAX_READ_SPAN_GAP + 1 &&
+      pair.originalColumn - last.startColumn + 1 <= MAX_READ_COLUMNS_PER_CHUNK;
+    if (!canJoin) {
+      spans.push({ startColumn: pair.originalColumn, endColumn: pair.originalColumn, fields: [pair] });
+      return;
+    }
+    last.endColumn = Math.max(last.endColumn, pair.originalColumn);
+    last.fields.push(pair);
+  });
+  return spans.map(span => ({
+    startColumn: span.startColumn,
+    columnCount: span.endColumn - span.startColumn + 1,
+    fields: span.fields
+  }));
 }
 
 function columnLetters(columnCount: number): string {
@@ -959,6 +990,7 @@ function estimateRowPayloadBytes(row: CellValue[]): number {
 }
 
 const MAX_READ_COLUMNS_PER_CHUNK = 100;
+const MAX_READ_SPAN_GAP = 3;
 const MAX_WRITE_COLUMNS_PER_CHUNK = 20;
 const MAX_WRITE_PAYLOAD_BYTES = 750000;
 
@@ -1008,10 +1040,16 @@ function buildAllPivots(
 
 }
 
-function setOutputColumnWidths(sheet: ExcelScript.Worksheet, startColumn: number, columnCount: number) {
+function setPivotColumnWidths(
+  sheet: ExcelScript.Worksheet,
+  startColumn: number,
+  columnCount: number,
+  rowColumnCount: number
+) {
   for (let offset = 0; offset < columnCount; offset++) {
     const column = sheet.getRangeByIndexes(0, startColumn + offset, 1, 1).getEntireColumn();
-    column.getFormat().setColumnWidth(OUTPUT_COLUMN_WIDTH);
+    const width = offset < rowColumnCount ? OUTPUT_ROW_LABEL_COLUMN_WIDTH : OUTPUT_VALUE_COLUMN_WIDTH;
+    column.getFormat().setColumnWidth(width);
   }
 }
 
@@ -1084,6 +1122,7 @@ function buildOnePivot(
   );
 
   const maxRows = Math.max(rowFields.length, rowNames.length, ruleSets.length);
+  let rowColumnCount = 0;
   for (let position = 0; position < maxRows; position++) {
     const field = rowFields[position] || "";
     const rowName = rowNames[position] || "";
@@ -1098,6 +1137,7 @@ function buildOnePivot(
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
     const added = pivot.addRowHierarchy(hierarchy);
+    rowColumnCount++;
     if (caption) added.setName(caption);
   }
 
@@ -1141,10 +1181,11 @@ function buildOnePivot(
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
   const pivotRange = pivot.getLayout().getRange();
-  setOutputColumnWidths(
+  setPivotColumnWidths(
     sheet,
     Math.min(titleCol, pivotRange.getColumnIndex()),
-    Math.max(1, pivotRange.getColumnCount())
+    Math.max(1, pivotRange.getColumnCount()),
+    rowColumnCount
   );
   const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1) + 5;
   const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1) + 4;
