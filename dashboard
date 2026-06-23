@@ -1,0 +1,680 @@
+POWER BI PASTEABLE VISUAL CODE
+For Deneb custom visual in Power BI
+
+Use this when your Excel data has already been loaded into Power BI.
+This file does not create data tables. It only creates visuals.
+
+Power BI cannot create native visuals from one pasted TXT file.
+To paste visual code directly, install the Deneb custom visual:
+Power BI Desktop > Visualizations > Get more visuals > Search "Deneb"
+
+Then add one Deneb visual per block below and paste the JSON into Deneb.
+
+============================================================
+VISUAL 1 - EXECUTIVE PRODUCT RETURN SCATTER
+============================================================
+
+Add these fields to the Deneb visual dataset:
+- Products[Company]
+- Products[ProductName]
+- Products[IndexName]
+- Products[Currency]
+- Products[CohortNo]
+- Products[ParticipationRate]
+- Products[CapRate]
+- Products[FloorRate]
+- Products[IndexBaseValue]
+- Return From Cohort Base
+- Participated Return
+- Credited Return
+- Risk Score
+
+Paste this JSON into Deneb:
+
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "background": "#F7F8FA",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "data": {
+    "name": "dataset"
+  },
+  "transform": [
+    {
+      "calculate": "datum['ProductName'] + ' | C' + datum['CohortNo']",
+      "as": "CohortLabel"
+    },
+    {
+      "calculate": "datum['Risk Score'] >= 70 ? 'High' : datum['Risk Score'] >= 40 ? 'Medium' : 'Low'",
+      "as": "RiskBand"
+    }
+  ],
+  "vconcat": [
+    {
+      "height": 58,
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "middle",
+        "font": "Segoe UI",
+        "fontSize": 22,
+        "fontWeight": "bold",
+        "color": "#1F2933"
+      },
+      "encoding": {
+        "text": {
+          "value": "Index-Linked Product Return & Risk"
+        },
+        "x": {
+          "value": 0
+        },
+        "y": {
+          "value": 26
+        }
+      }
+    },
+    {
+      "height": 390,
+      "layer": [
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#FFFFFF",
+            "stroke": "#E5E7EB",
+            "cornerRadius": 8
+          },
+          "encoding": {
+            "x": {
+              "value": 0
+            },
+            "x2": {
+              "value": 900
+            },
+            "y": {
+              "value": 0
+            },
+            "y2": {
+              "value": 390
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rule",
+            "stroke": "#9CA3AF",
+            "strokeDash": [4, 4]
+          },
+          "encoding": {
+            "x": {
+              "datum": 0
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "circle",
+            "filled": true,
+            "opacity": 0.88,
+            "stroke": "#111827",
+            "strokeWidth": 0.6
+          },
+          "encoding": {
+            "x": {
+              "field": "Return From Cohort Base",
+              "type": "quantitative",
+              "axis": {
+                "title": "Index Return from Cohort Base",
+                "format": ".0%",
+                "gridColor": "#EEF2F7"
+              }
+            },
+            "y": {
+              "field": "Credited Return",
+              "type": "quantitative",
+              "axis": {
+                "title": "Credited Return after Cap/Floor",
+                "format": ".0%",
+                "gridColor": "#EEF2F7"
+              }
+            },
+            "size": {
+              "field": "Risk Score",
+              "type": "quantitative",
+              "scale": {
+                "range": [140, 1200]
+              },
+              "legend": {
+                "title": "Risk Score"
+              }
+            },
+            "color": {
+              "field": "IndexName",
+              "type": "nominal",
+              "scale": {
+                "range": ["#C8102E", "#1F77B4", "#2E7D32", "#F59E0B", "#7C3AED"]
+              },
+              "legend": {
+                "title": "Index"
+              }
+            },
+            "tooltip": [
+              {
+                "field": "Company",
+                "type": "nominal"
+              },
+              {
+                "field": "ProductName",
+                "type": "nominal"
+              },
+              {
+                "field": "IndexName",
+                "type": "nominal"
+              },
+              {
+                "field": "Currency",
+                "type": "nominal"
+              },
+              {
+                "field": "CohortNo",
+                "type": "ordinal",
+                "title": "Cohort"
+              },
+              {
+                "field": "ParticipationRate",
+                "type": "quantitative",
+                "format": ".1%"
+              },
+              {
+                "field": "CapRate",
+                "type": "quantitative",
+                "format": ".1%"
+              },
+              {
+                "field": "Return From Cohort Base",
+                "type": "quantitative",
+                "format": ".1%"
+              },
+              {
+                "field": "Credited Return",
+                "type": "quantitative",
+                "format": ".1%"
+              },
+              {
+                "field": "RiskBand",
+                "type": "nominal",
+                "title": "Risk Band"
+              }
+            ]
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "dx": 10,
+            "dy": -8,
+            "fontSize": 10,
+            "color": "#374151"
+          },
+          "encoding": {
+            "x": {
+              "field": "Return From Cohort Base",
+              "type": "quantitative"
+            },
+            "y": {
+              "field": "Credited Return",
+              "type": "quantitative"
+            },
+            "text": {
+              "field": "CohortLabel"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "font": "Segoe UI",
+    "view": {
+      "stroke": "transparent"
+    },
+    "axis": {
+      "labelFontSize": 11,
+      "titleFontSize": 12,
+      "labelColor": "#374151",
+      "titleColor": "#111827"
+    },
+    "legend": {
+      "labelFontSize": 11,
+      "titleFontSize": 12
+    }
+  }
+}
+
+============================================================
+VISUAL 2 - CLAUDE-STYLE INDEX TREND CARDS
+============================================================
+
+Add these fields to the Deneb visual dataset:
+- IndexPrices[Date]
+- IndexPrices[IndexName]
+- IndexPrices[Price]
+
+Paste this JSON into Deneb:
+
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "background": "#F7F8FA",
+  "data": {
+    "name": "dataset"
+  },
+  "transform": [
+    {
+      "window": [
+        {
+          "op": "first_value",
+          "field": "Price",
+          "as": "StartPrice"
+        },
+        {
+          "op": "last_value",
+          "field": "Price",
+          "as": "LatestPrice"
+        }
+      ],
+      "sort": [
+        {
+          "field": "Date",
+          "order": "ascending"
+        }
+      ],
+      "groupby": ["IndexName"]
+    },
+    {
+      "calculate": "(datum.LatestPrice - datum.StartPrice) / datum.StartPrice",
+      "as": "IndexReturn"
+    }
+  ],
+  "facet": {
+    "field": "IndexName",
+    "type": "nominal",
+    "columns": 2,
+    "title": null,
+    "header": {
+      "labelFont": "Segoe UI",
+      "labelFontSize": 13,
+      "labelFontWeight": "bold",
+      "labelColor": "#1F2933"
+    }
+  },
+  "spec": {
+    "width": 280,
+    "height": 130,
+    "layer": [
+      {
+        "mark": {
+          "type": "rect",
+          "fill": "#FFFFFF",
+          "stroke": "#E5E7EB",
+          "cornerRadius": 8
+        }
+      },
+      {
+        "mark": {
+          "type": "area",
+          "interpolate": "monotone",
+          "line": {
+            "color": "#C8102E",
+            "strokeWidth": 2
+          },
+          "color": {
+            "x1": 1,
+            "y1": 1,
+            "x2": 1,
+            "y2": 0,
+            "gradient": "linear",
+            "stops": [
+              {
+                "offset": 0,
+                "color": "#FFFFFF"
+              },
+              {
+                "offset": 1,
+                "color": "#F8B4BE"
+              }
+            ]
+          },
+          "opacity": 0.9
+        },
+        "encoding": {
+          "x": {
+            "field": "Date",
+            "type": "temporal",
+            "axis": {
+              "title": null,
+              "labelFontSize": 9,
+              "grid": false
+            }
+          },
+          "y": {
+            "field": "Price",
+            "type": "quantitative",
+            "axis": {
+              "title": null,
+              "labelFontSize": 9,
+              "gridColor": "#EEF2F7"
+            },
+            "scale": {
+              "zero": false
+            }
+          },
+          "tooltip": [
+            {
+              "field": "Date",
+              "type": "temporal"
+            },
+            {
+              "field": "IndexName",
+              "type": "nominal"
+            },
+            {
+              "field": "Price",
+              "type": "quantitative",
+              "format": ",.2f"
+            },
+            {
+              "field": "IndexReturn",
+              "type": "quantitative",
+              "format": ".1%"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "resolve": {
+    "scale": {
+      "y": "independent"
+    }
+  },
+  "config": {
+    "font": "Segoe UI",
+    "view": {
+      "stroke": "transparent"
+    }
+  }
+}
+
+============================================================
+VISUAL 3 - PRODUCT COHORT MATURITY TIMELINE
+============================================================
+
+Add these fields to the Deneb visual dataset:
+- Products[Company]
+- Products[ProductName]
+- Products[IndexName]
+- Products[CohortNo]
+- Products[CohortStartDate]
+- Products[CohortEndDate]
+- Products[ParticipationRate]
+- Products[CapRate]
+- Products[Currency]
+
+Paste this JSON into Deneb:
+
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "background": "#F7F8FA",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "data": {
+    "name": "dataset"
+  },
+  "transform": [
+    {
+      "calculate": "datum['ProductName'] + ' | C' + datum['CohortNo']",
+      "as": "CohortLabel"
+    }
+  ],
+  "vconcat": [
+    {
+      "height": 48,
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "middle",
+        "font": "Segoe UI",
+        "fontSize": 21,
+        "fontWeight": "bold",
+        "color": "#1F2933"
+      },
+      "encoding": {
+        "text": {
+          "value": "Product Cohort Timeline"
+        },
+        "x": {
+          "value": 0
+        },
+        "y": {
+          "value": 22
+        }
+      }
+    },
+    {
+      "height": 390,
+      "mark": {
+        "type": "bar",
+        "cornerRadius": 4,
+        "height": 15
+      },
+      "encoding": {
+        "y": {
+          "field": "CohortLabel",
+          "type": "nominal",
+          "sort": {
+            "field": "CohortStartDate",
+            "order": "ascending"
+          },
+          "axis": {
+            "title": null,
+            "labelFontSize": 10,
+            "labelLimit": 260
+          }
+        },
+        "x": {
+          "field": "CohortStartDate",
+          "type": "temporal",
+          "axis": {
+            "title": null,
+            "gridColor": "#EEF2F7",
+            "labelFontSize": 10
+          }
+        },
+        "x2": {
+          "field": "CohortEndDate"
+        },
+        "color": {
+          "field": "IndexName",
+          "type": "nominal",
+          "scale": {
+            "range": ["#C8102E", "#1F77B4", "#2E7D32", "#F59E0B", "#7C3AED"]
+          },
+          "legend": {
+            "title": "Index"
+          }
+        },
+        "tooltip": [
+          {
+            "field": "Company",
+            "type": "nominal"
+          },
+          {
+            "field": "ProductName",
+            "type": "nominal"
+          },
+          {
+            "field": "IndexName",
+            "type": "nominal"
+          },
+          {
+            "field": "Currency",
+            "type": "nominal"
+          },
+          {
+            "field": "CohortNo",
+            "type": "ordinal"
+          },
+          {
+            "field": "CohortStartDate",
+            "type": "temporal"
+          },
+          {
+            "field": "CohortEndDate",
+            "type": "temporal"
+          },
+          {
+            "field": "ParticipationRate",
+            "type": "quantitative",
+            "format": ".1%"
+          },
+          {
+            "field": "CapRate",
+            "type": "quantitative",
+            "format": ".1%"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "font": "Segoe UI",
+    "view": {
+      "stroke": "transparent"
+    },
+    "axis": {
+      "labelColor": "#374151",
+      "titleColor": "#111827"
+    },
+    "legend": {
+      "labelFontSize": 11,
+      "titleFontSize": 12
+    }
+  }
+}
+
+============================================================
+VISUAL 4 - FX RATE MONITOR
+============================================================
+
+Add these fields to the Deneb visual dataset:
+- FX[MonthStart]
+- FX[FXPair]
+- FX[Rate]
+
+Paste this JSON into Deneb:
+
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "background": "#F7F8FA",
+  "data": {
+    "name": "dataset"
+  },
+  "width": "container",
+  "height": 320,
+  "layer": [
+    {
+      "mark": {
+        "type": "rect",
+        "fill": "#FFFFFF",
+        "stroke": "#E5E7EB",
+        "cornerRadius": 8
+      },
+      "encoding": {
+        "x": {
+          "value": 0
+        },
+        "x2": {
+          "value": 900
+        },
+        "y": {
+          "value": 0
+        },
+        "y2": {
+          "value": 320
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "line",
+        "interpolate": "monotone",
+        "strokeWidth": 2
+      },
+      "encoding": {
+        "x": {
+          "field": "MonthStart",
+          "type": "temporal",
+          "axis": {
+            "title": "Month",
+            "grid": false
+          }
+        },
+        "y": {
+          "field": "Rate",
+          "type": "quantitative",
+          "axis": {
+            "title": "FX Rate to THB",
+            "gridColor": "#EEF2F7"
+          },
+          "scale": {
+            "zero": false
+          }
+        },
+        "color": {
+          "field": "FXPair",
+          "type": "nominal",
+          "scale": {
+            "range": ["#C8102E", "#1F77B4", "#2E7D32", "#F59E0B"]
+          },
+          "legend": {
+            "title": "FX Pair"
+          }
+        },
+        "tooltip": [
+          {
+            "field": "MonthStart",
+            "type": "temporal",
+            "title": "Month"
+          },
+          {
+            "field": "FXPair",
+            "type": "nominal"
+          },
+          {
+            "field": "Rate",
+            "type": "quantitative",
+            "format": ".4f"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "font": "Segoe UI",
+    "view": {
+      "stroke": "transparent"
+    },
+    "axis": {
+      "labelFontSize": 11,
+      "titleFontSize": 12
+    },
+    "legend": {
+      "labelFontSize": 11,
+      "titleFontSize": 12
+    }
+  }
+}
