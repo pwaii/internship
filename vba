@@ -8,6 +8,7 @@
 
 const SETUP_SHEET = "PivotBuilder_Setup";
 const SOURCE_SHEET = "__PivotSource";
+const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 
@@ -20,7 +21,7 @@ const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
 const SETUP_STYLE_VERSION = "PB_STYLE_6";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
-    "Default", "Pivot 1", "Pivot_Output", "Save in this workbook",
+    "Default", "Pivot 1", "Pivot_Output", "Replace previous outputs",
     "", "", "", "", "", "", "",
     "", "No", "Choose fields from the dropdowns, then run Build pivots."
   ]
@@ -30,6 +31,7 @@ interface PivotSetup {
   template: string;
   pivotName: string;
   outputSheet: string;
+  replaceOutput: boolean;
   rows: string;
   rowNames: string;
   groupRules: string;
@@ -110,15 +112,22 @@ function main(workbook: ExcelScript.Workbook): string {
     const used = dataSheet.getUsedRange(true);
     if (!used) throw new Error(`Data sheet '${dataSheet.getName()}' is empty.`);
     validateSetups(builds, readHeaderRow(used));
+    const sourceStarted = Date.now();
     const source = needsNormalizedSource(builds) || headersNeedNormalization(used)
       ? buildNormalizedSource(workbook, dataSheet, builds)
       : buildDirectSource(dataSheet, used);
-    buildAllPivots(workbook, setup, source, builds);
+    const sourceSeconds = (Date.now() - sourceStarted) / 1000;
+    const pivotStarted = Date.now();
+    buildAllPivots(workbook, setup, source, builds, dataSheet.getName());
+    const pivotSeconds = (Date.now() - pivotStarted) / 1000;
     if (source.sheet.getName() === SOURCE_SHEET) {
       source.sheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
     }
 
-    writeStatus(setup, `Finished: ${builds.length} PivotTable(s) built in this workbook.`);
+    writeStatus(
+      setup,
+      `Finished: ${builds.length} PivotTable(s). Source ${sourceSeconds.toFixed(1)}s; Pivot build ${pivotSeconds.toFixed(1)}s.`
+    );
     return headerPayloadJson(dataSheet);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -155,7 +164,7 @@ function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet
   sheet.getRange("B7:N7").merge(false);
 
   sheet.getRange("A8:N8").setValues([[
-    "Template", "Pivot Name", "Output Sheet", "Save Behavior", "Rows", "Row Names",
+    "Template", "Pivot Name", "Output Sheet", "Output Behavior", "Rows", "Row Names",
     "Group Rules", "", "Values To Count/Sum", "Filters", "Conditions",
     "", "Next Pivot Right", "Notes"
   ]]);
@@ -256,6 +265,7 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("B7:N7").merge(false);
   sheet.getRange("H8").setValue("");
   sheet.getRange("I8").setValue("Values To Count/Sum");
+  sheet.getRange("D8").setValue("Output Behavior");
   sheet.getRange("J8").setValue("Filters");
   sheet.getRange("K8").setValue("Conditions");
   sheet.getRange("L8").setValue("");
@@ -344,7 +354,7 @@ function applySetupValidations(setup: ExcelScript.Worksheet) {
   setListValidation(setup.getRange("B5"), "Build pivots,Refresh fields,Restore starter template");
   setListValidation(setup.getRange(`A${FIRST_SETUP_ROW}:A${LAST_SETUP_ROW}`), "=$S$5:$S$500", false);
   setListValidation(setup.getRange(`C${FIRST_SETUP_ROW}:C${LAST_SETUP_ROW}`), "=$U$4:$U$500", false);
-  setListValidation(setup.getRange(`D${FIRST_SETUP_ROW}:D${LAST_SETUP_ROW}`), "Save in this workbook");
+  setListValidation(setup.getRange(`D${FIRST_SETUP_ROW}:D${LAST_SETUP_ROW}`), "Replace previous outputs,Keep previous outputs");
   setListValidation(setup.getRange(`M${FIRST_SETUP_ROW}:M${LAST_SETUP_ROW}`), "No,Yes");
 
   ["E", "I", "J", "K"].forEach(column => {
@@ -437,6 +447,7 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
       template,
       pivotName,
       outputSheet: text(row[2]) || "Pivot_Output",
+      replaceOutput: !equalsText(text(row[3]), "Keep previous outputs"),
       rows: text(row[4]),
       rowNames: text(row[5]),
       groupRules: text(row[6]),
@@ -698,18 +709,14 @@ function buildNormalizedSource(
       addHelper(filterKey(spec.field), `PB Filter - ${spec.field}`, dataRows.map(row => row[fieldIndex]));
     });
 
-    parseConditions(setup.conditions).forEach(condition => {
-      const conditionIndex = requireHeader(baseIndex, condition.field, `Conditions, setup row ${setup.sourceRow}`);
-      const conditionValueFields = condition.measureField ? [condition.measureField] : valueFields;
-      conditionValueFields.forEach(valueField => {
-        const valueIndex = requireHeader(baseIndex, valueField, `Values To Count/Sum, setup row ${setup.sourceRow}`);
-        addHelper(
-          measureKey(condition.field, condition.rawValue, valueField),
-          `PB Measure - ${condition.field} - ${condition.rawValue} - ${valueField}`,
-          dataRows.map(row => valueMatches(row[conditionIndex], condition.values) ? row[valueIndex] : "")
-        );
-      });
-    });
+    const parsedConditions = parseConditions(setup.conditions);
+    if (parsedConditions.length > 0) {
+      addHelper(
+        conditionGroupKey(setup.sourceRow, setup.conditions),
+        `PB Condition - ${setup.pivotName}`,
+        dataRows.map(row => conditionCategory(row, baseIndex, parsedConditions))
+      );
+    }
   });
 
   const finalHeaders = headers;
@@ -965,16 +972,24 @@ function buildAllPivots(
   workbook: ExcelScript.Workbook,
   setupSheet: ExcelScript.Worksheet,
   source: SourceModel,
-  setups: PivotSetup[]
+  setups: PivotSetup[],
+  dataSheetName: string
 ) {
   const outputs = distinct(setups.map(setup => safeSheetName(setup.outputSheet || "Pivot_Output")));
+  const protectedNames = [setupSheet.getName(), source.sheet.getName(), dataSheetName];
+  outputs.forEach(name => {
+    const replace = setups.some(setup =>
+      equalsText(safeSheetName(setup.outputSheet || "Pivot_Output"), name) && setup.replaceOutput
+    );
+    if (replace) removePreviousGeneratedOutputs(workbook, name, protectedNames);
+  });
   const outputSheets = new Map<string, ExcelScript.Worksheet>();
   outputs.forEach(name => {
-    // Never delete or replace an existing worksheet. This also protects the
-    // source data if a template accidentally requests its sheet name.
     const actualName = uniqueWorksheetName(workbook, name);
     const sheet = workbook.addWorksheet(actualName);
     sheet.setShowGridlines(false);
+    sheet.getRange("A3").setValue(OUTPUT_MARKER);
+    sheet.getRange("A3").getFormat().getFont().setColor("#FFFFFF");
     outputSheets.set(lower(name), sheet);
   });
 
@@ -1008,6 +1023,28 @@ function buildAllPivots(
   });
 }
 
+function removePreviousGeneratedOutputs(
+  workbook: ExcelScript.Workbook,
+  baseName: string,
+  protectedNames: string[]
+) {
+  const candidates = workbook.getWorksheets().filter(sheet => {
+    const name = sheet.getName();
+    if (protectedNames.some(protected => equalsText(protected, name))) return false;
+    if (!outputNameMatches(name, baseName)) return false;
+    const marked = equalsText(text(sheet.getRange("A3").getValue()), OUTPUT_MARKER);
+    return marked || sheet.getPivotTables().length > 0;
+  });
+  candidates.forEach(sheet => sheet.delete());
+}
+
+function outputNameMatches(name: string, baseName: string): boolean {
+  if (equalsText(name, baseName)) return true;
+  if (!lower(name).startsWith(`${lower(baseName)}_`)) return false;
+  const suffix = name.slice(baseName.length + 1);
+  return /^\d+$/.test(suffix);
+}
+
 function buildOnePivot(
   workbook: ExcelScript.Workbook,
   sheet: ExcelScript.Worksheet,
@@ -1021,6 +1058,11 @@ function buildOnePivot(
   const valueFields = splitList(setup.values);
   const filters = parseFilterSpecs(setup.filters);
   const conditions = parseConditions(setup.conditions);
+  conditions.forEach(condition => {
+    if (condition.measureField && !containsText(valueFields, condition.measureField)) {
+      valueFields.push(condition.measureField);
+    }
+  });
 
   const titleRow = placement.row;
   const titleCol = placement.col;
@@ -1063,19 +1105,24 @@ function buildOnePivot(
     if (caption) added.setName(caption);
   }
 
+  if (conditions.length > 0) {
+    const actual = requiredHelper(source, conditionGroupKey(setup.sourceRow, setup.conditions));
+    const hierarchy = pivot.getHierarchy(actual);
+    if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Condition column field was not created.`);
+    const added = pivot.addColumnHierarchy(hierarchy);
+    added.setName("Condition");
+    const selectedItems = distinct(conditions.map(condition => condition.caption || condition.rawValue));
+    try {
+      added.getFields()[0].applyFilter({ manualFilter: { selectedItems } });
+    } catch (_ignored) {
+      // The categories still appear even if this Excel tenant refuses the
+      // initial blank-item exclusion filter.
+    }
+  }
+
   valueFields.forEach(field => {
     const actual = requirePivotHeader(source, field);
     addDataHierarchy(pivot, source, actual, field);
-  });
-
-  conditions.forEach(condition => {
-    const conditionValueFields = condition.measureField ? [condition.measureField] : valueFields;
-    conditionValueFields.forEach(valueField => {
-      const actual = requiredHelper(source, measureKey(condition.field, condition.rawValue, valueField));
-      const caption = condition.caption ||
-        (conditionValueFields.length === 1 ? condition.rawValue : `${condition.rawValue} - ${valueField}`);
-      addDataHierarchy(pivot, source, actual, caption);
-    });
   });
 
   filters.forEach(spec => {
@@ -1290,6 +1337,21 @@ function valueMatches(actual: CellValue, expected: string[]): boolean {
   return expected.some(value => equalsText(text(actual), value));
 }
 
+function conditionCategory(
+  row: CellValue[],
+  headerIndex: Map<string, number>,
+  conditions: FieldCondition[]
+): string {
+  for (const condition of conditions) {
+    const index = headerIndex.get(lower(condition.field));
+    if (index === undefined) continue;
+    if (valueMatches(row[index], condition.values)) {
+      return condition.caption || condition.rawValue;
+    }
+  }
+  return "";
+}
+
 function summaryText(setup: PivotSetup): string {
   const conditions = setup.conditions.trim() || "none";
   const filters = setup.filters.trim() || "none";
@@ -1436,6 +1498,6 @@ function filterKey(field: string): string {
   return `filter|${lower(field)}`;
 }
 
-function measureKey(conditionField: string, conditionValue: string, valueField: string): string {
-  return `measure|${lower(conditionField)}|${lower(conditionValue)}|${lower(valueField)}`;
+function conditionGroupKey(sourceRow: number, conditions: string): string {
+  return `condition-group|${sourceRow}|${lower(conditions)}`;
 }
