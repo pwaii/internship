@@ -1006,19 +1006,6 @@ function buildAllPivots(
     buildOnePivot(workbook, sheet, source, setup, placement);
   });
 
-  outputSheets.forEach(sheet => {
-    const used = sheet.getUsedRange();
-    if (used) {
-      const previewColumns = Math.min(50, used.getColumnCount());
-      sheet.getRangeByIndexes(
-        used.getRowIndex(),
-        used.getColumnIndex(),
-        used.getRowCount(),
-        previewColumns
-      ).getFormat().setWrapText(false);
-      setOutputColumnWidths(sheet, used.getColumnIndex(), previewColumns);
-    }
-  });
 }
 
 function setOutputColumnWidths(sheet: ExcelScript.Worksheet, startColumn: number, columnCount: number) {
@@ -1154,6 +1141,11 @@ function buildOnePivot(
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
   const pivotRange = pivot.getLayout().getRange();
+  setOutputColumnWidths(
+    sheet,
+    Math.min(titleCol, pivotRange.getColumnIndex()),
+    Math.max(1, pivotRange.getColumnCount())
+  );
   const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1) + 5;
   const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1) + 4;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
