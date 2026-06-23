@@ -1,4 +1,3 @@
-? PBI_FX — อัตราแลกเปลี่ยน (Long Format สำหรับ Power BI)		
 Month	FXPair	Rate
 01/2023	USD/THB	34.3481
 01/2023	HKD/THB	4.4117
@@ -72,5 +71,3 @@ Month	FXPair	Rate
 06/2024	HKD/THB	4.2948
 06/2024	EUR/THB	38.8820
 06/2024	JPY/THB	0.2404
-		
-?? Long format: 1 แถว = 1 คู่ FX 1 เดือน | อัปเดตจาก ? FX Rates		
