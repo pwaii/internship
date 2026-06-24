@@ -769,6 +769,10 @@ function columnLetters(columnCount: number): string {
   return result;
 }
 
+function a1Address(zeroBasedRow: number, zeroBasedColumn: number): string {
+  return `${columnLetters(zeroBasedColumn + 1)}${zeroBasedRow + 1}`;
+}
+
 function readValuesInChunks(range: ExcelScript.Range): CellValue[][] {
   const sheet = range.getWorksheet();
   const startRow = range.getRowIndex();
@@ -1197,7 +1201,7 @@ function addCalculatedOutputs(
   specs.forEach((spec, specIndex) => {
     matrix[0][specIndex] = spec.label;
     if (spec.terms.some(term => isPivotLookupReference(term.reference))) {
-      matrix[1][specIndex] = evaluatePivotLookupCalculation(workbook, sheet, spec);
+      matrix[1][specIndex] = pivotLookupFormula(workbook, sheet, spec);
       return;
     }
 
@@ -1206,7 +1210,11 @@ function addCalculatedOutputs(
       column: findPivotHeaderColumn(values[headerRowOffset], term.reference)
     }));
     for (let row = headerRowOffset + 1; row < values.length; row++) {
-      matrix[row - headerRowOffset][specIndex] = evaluateRowCalculation(values[row], headerColumns);
+      matrix[row - headerRowOffset][specIndex] = rowCalculationFormula(
+        pivotRange.getRowIndex() + row,
+        pivotRange.getColumnIndex(),
+        headerColumns
+      );
     }
   });
 
@@ -1241,36 +1249,37 @@ function findPivotHeaderColumn(headerRow: CellValue[], header: string): number {
   throw new Error(`Calculated Columns could not find pivot header '${header}'.`);
 }
 
-function evaluateRowCalculation(
-  row: CellValue[],
+function rowCalculationFormula(
+  zeroBasedRow: number,
+  zeroBasedStartColumn: number,
   terms: { operator: string; column: number }[]
-): number {
-  let result = 0;
+): string {
+  let formula = "=";
   terms.forEach(term => {
-    const value = numericValue(row[term.column]);
-    result = term.operator === "-" ? result - value : result + value;
+    const cellAddress = a1Address(zeroBasedRow, zeroBasedStartColumn + term.column);
+    formula += `${formula === "=" ? "" : term.operator}${cellAddress}`;
   });
-  return result;
+  return formula === "=" ? "" : formula;
 }
 
-function evaluatePivotLookupCalculation(
+function pivotLookupFormula(
   workbook: ExcelScript.Workbook,
   currentSheet: ExcelScript.Worksheet,
   spec: CalculationSpec
-): number {
-  let result = 0;
+): string {
+  let formula = "=";
   spec.terms.forEach(term => {
-    const value = lookupPivotValue(workbook, currentSheet, parsePivotLookup(term.reference));
-    result = term.operator === "-" ? result - value : result + value;
+    const address = lookupPivotCellAddress(workbook, currentSheet, parsePivotLookup(term.reference));
+    formula += `${formula === "=" ? "" : term.operator}${address}`;
   });
-  return result;
+  return formula === "=" ? "" : formula;
 }
 
-function lookupPivotValue(
+function lookupPivotCellAddress(
   workbook: ExcelScript.Workbook,
   currentSheet: ExcelScript.Worksheet,
   lookup: PivotLookup
-): number {
+): string {
   const sheet = lookup.sheetName ? workbook.getWorksheet(lookup.sheetName) : currentSheet;
   if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'.`);
   const pivot = sheet.getPivotTables().find(item => equalsText(item.getName(), lookup.pivotName));
@@ -1298,7 +1307,10 @@ function lookupPivotValue(
     if (columnIndex >= 0) break;
   }
   if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${lookup.pivotName}'.`);
-  return numericValue(values[rowIndex][columnIndex]);
+  const range = pivot.getLayout().getRange();
+  const cellAddress = a1Address(range.getRowIndex() + rowIndex, range.getColumnIndex() + columnIndex);
+  if (sheet.getName() === currentSheet.getName()) return cellAddress;
+  return `'${sheet.getName().replace(/'/g, "''")}'!${cellAddress}`;
 }
 
 function pivotHeaderMatches(actual: string, expected: string): boolean {
@@ -1640,12 +1652,6 @@ function distinct(values: string[]): string[] {
 function text(value: unknown): string {
   if (value === null || value === undefined) return "";
   return String(value).trim();
-}
-
-function numericValue(value: CellValue): number {
-  if (typeof value === "number") return value;
-  const parsed = Number(text(value).replace(/,/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function lower(value: string): string {
