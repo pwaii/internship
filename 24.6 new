@@ -1236,7 +1236,7 @@ function findPivotHeaderRow(values: CellValue[][], rowCaptions: string[]): numbe
 
 function findPivotHeaderColumn(headerRow: CellValue[], header: string): number {
   for (let column = 0; column < headerRow.length; column++) {
-    if (equalsText(text(headerRow[column]), header)) return column;
+    if (pivotHeaderMatches(text(headerRow[column]), header)) return column;
   }
   throw new Error(`Calculated Columns could not find pivot header '${header}'.`);
 }
@@ -1290,7 +1290,7 @@ function lookupPivotValue(
 
   for (let row = 0; row < values.length; row++) {
     for (let column = 0; column < values[row].length; column++) {
-      if (equalsText(text(values[row][column]), lookup.columnLabel)) {
+      if (pivotHeaderMatches(text(values[row][column]), lookup.columnLabel)) {
         columnIndex = column;
         break;
       }
@@ -1299,6 +1299,20 @@ function lookupPivotValue(
   }
   if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${lookup.pivotName}'.`);
   return numericValue(values[rowIndex][columnIndex]);
+}
+
+function pivotHeaderMatches(actual: string, expected: string): boolean {
+  const actualNormalized = normalizedPivotHeader(actual);
+  const expectedNormalized = normalizedPivotHeader(expected);
+  if (equalsText(actualNormalized, expectedNormalized)) return true;
+  return equalsText(actualNormalized, `Count of ${expectedNormalized}`) ||
+    equalsText(actualNormalized, `Sum of ${expectedNormalized}`) ||
+    equalsText(expectedNormalized, `Count of ${actualNormalized}`) ||
+    equalsText(expectedNormalized, `Sum of ${actualNormalized}`);
+}
+
+function normalizedPivotHeader(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function addDataHierarchy(
