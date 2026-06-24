@@ -55,7 +55,6 @@ interface FieldCondition {
 interface CalculationSpec {
   label: string;
   terms: CalculationTerm[];
-  cellBased: boolean;
 }
 
 interface CalculationTerm {
@@ -64,6 +63,7 @@ interface CalculationTerm {
 }
 
 interface PivotLookup {
+  sheetName?: string;
   pivotName: string;
   rowLabel: string;
   columnLabel: string;
@@ -1076,6 +1076,7 @@ function buildOnePivot(
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
+  title.getFormat().getFill().setColor("#FFF2CC");
   title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   summaryLines.forEach((line, index) => {
     const summaryCell = sheet.getCell(titleRow + 1 + index, titleCol);
@@ -1152,14 +1153,13 @@ function buildOnePivot(
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
   const pivotRange = pivot.getLayout().getRange();
-  pivotRange.getFormat().getFill().setColor("#FFF2CC");
   setPivotColumnWidths(
     sheet,
     Math.min(titleCol, pivotRange.getColumnIndex()),
     Math.max(1, pivotRange.getColumnCount()),
     rowColumnCount
   );
-  const calculatedExtent = addCalculatedOutputs(sheet, pivotRange, setup, rowCaptions);
+  const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions);
   const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 5;
   const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + 4;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
@@ -1173,6 +1173,7 @@ function buildOnePivot(
 }
 
 function addCalculatedOutputs(
+  workbook: ExcelScript.Workbook,
   sheet: ExcelScript.Worksheet,
   pivotRange: ExcelScript.Range,
   setup: PivotSetup,
@@ -1196,7 +1197,7 @@ function addCalculatedOutputs(
   specs.forEach((spec, specIndex) => {
     matrix[0][specIndex] = spec.label;
     if (spec.terms.some(term => isPivotLookupReference(term.reference))) {
-      matrix[1][specIndex] = evaluatePivotLookupCalculation(sheet, spec);
+      matrix[1][specIndex] = evaluatePivotLookupCalculation(workbook, sheet, spec);
       return;
     }
 
@@ -1252,18 +1253,29 @@ function evaluateRowCalculation(
   return result;
 }
 
-function evaluatePivotLookupCalculation(sheet: ExcelScript.Worksheet, spec: CalculationSpec): number {
+function evaluatePivotLookupCalculation(
+  workbook: ExcelScript.Workbook,
+  currentSheet: ExcelScript.Worksheet,
+  spec: CalculationSpec
+): number {
   let result = 0;
   spec.terms.forEach(term => {
-    const value = lookupPivotValue(sheet, parsePivotLookup(term.reference));
+    const value = lookupPivotValue(workbook, currentSheet, parsePivotLookup(term.reference));
     result = term.operator === "-" ? result - value : result + value;
   });
   return result;
 }
 
-function lookupPivotValue(sheet: ExcelScript.Worksheet, lookup: PivotLookup): number {
+function lookupPivotValue(
+  workbook: ExcelScript.Workbook,
+  currentSheet: ExcelScript.Worksheet,
+  lookup: PivotLookup
+): number {
+  const sheet = lookup.sheetName ? workbook.getWorksheet(lookup.sheetName) : currentSheet;
+  if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'.`);
   const pivot = sheet.getPivotTables().find(item => equalsText(item.getName(), lookup.pivotName));
-  if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${lookup.pivotName}'.`);
+  const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
+  if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'.`);
   const values = pivot.getLayout().getRange().getValues() as CellValue[][];
   let rowIndex = -1;
   let columnIndex = -1;
@@ -1413,7 +1425,7 @@ function parseCalculationSpecs(value: string): CalculationSpec[] {
     if (lookupBased && terms.some(term => !isPivotLookupReference(term.reference))) {
       throw new Error(`Calculated Columns cannot mix pivot lookups and pivot headers: ${piece}`);
     }
-    return { label, terms, cellBased: false };
+    return { label, terms };
   });
 }
 
@@ -1457,7 +1469,10 @@ function parsePivotLookup(value: string): PivotLookup {
 function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
   const match = value.trim().match(/^([^\[\]]+)\[(.+)\]$/);
   if (!match) return undefined;
-  const pivotName = match[1].trim();
+  const target = match[1].trim();
+  const bang = target.indexOf("!");
+  const sheetName = bang >= 0 ? target.slice(0, bang).trim() : "";
+  const pivotName = bang >= 0 ? target.slice(bang + 1).trim() : target;
   let rowLabel = "";
   let columnLabel = "";
   match[2].split(",").forEach(part => {
@@ -1469,9 +1484,9 @@ function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
     if (key === "column" || key === "col") columnLabel = itemValue;
   });
   if (!pivotName || !rowLabel || !columnLabel) {
-    throw new Error(`Calculated Columns pivot lookup must use PivotName[row=Row Label, column=Column Label].`);
+    throw new Error(`Calculated Columns pivot lookup must use PivotName[row=Row Label, column=Column Label] or Sheet!PivotName[row=Row Label, column=Column Label].`);
   }
-  return { pivotName, rowLabel, columnLabel };
+  return { sheetName: sheetName || undefined, pivotName, rowLabel, columnLabel };
 }
 
 function valueMatches(actual: CellValue, expected: string[]): boolean {
