@@ -1388,9 +1388,9 @@ function columnLooksNumeric(rows: CellValue[][], column: number): boolean {
 }
 
 function parseFilterSpecs(value: string): FieldCondition[] {
-  const normalized = value.replace(/\r?\n/g, ";").trim();
+  const normalized = value.trim();
   if (!normalized) return [];
-  const pieces = normalized.includes("=") ? splitSemicolon(normalized) : splitList(normalized);
+  const pieces = normalized.includes("=") ? splitFilterPieces(normalized) : splitList(normalized);
   return pieces.map(piece => {
     const equals = piece.indexOf("=");
     if (equals < 0) {
@@ -1404,6 +1404,27 @@ function parseFilterSpecs(value: string): FieldCondition[] {
     if (!rawValue) throw new Error(`Filter value is blank: ${piece}`);
     return { field, values: splitList(rawValue), rawValue };
   }).filter(item => item.field !== "");
+}
+
+function splitFilterPieces(value: string): string[] {
+  const result: string[] = [];
+  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  normalized.split("\n").forEach(line => {
+    line.split(";").forEach(piece => {
+      const trimmed = piece.trim();
+      if (!trimmed) return;
+      if (!trimmed.includes("=")) {
+        if (result.length === 0) {
+          result.push(trimmed);
+        } else {
+          result[result.length - 1] = `${result[result.length - 1].replace(/,+$/, "")},${trimmed.replace(/^,+/, "")}`;
+        }
+        return;
+      }
+      result.push(trimmed);
+    });
+  });
+  return result;
 }
 
 function parseConditions(value: string): FieldCondition[] {
