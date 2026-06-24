@@ -1114,7 +1114,7 @@ function buildOnePivot(
     if (addedRowFields.some(existing => equalsText(existing, actual))) continue;
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
-    let added: ExcelScript.RowColumnPivotHierarchy;
+    let added;
     try {
       added = pivot.addRowHierarchy(hierarchy);
     } catch (error) {
@@ -1172,7 +1172,7 @@ function buildOnePivot(
     Math.max(1, pivotRange.getColumnCount()),
     rowColumnCount
   );
-  const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions);
+  const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount);
   const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 5;
   const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + 4;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
@@ -1190,7 +1190,8 @@ function addCalculatedOutputs(
   sheet: ExcelScript.Worksheet,
   pivotRange: ExcelScript.Range,
   setup: PivotSetup,
-  rowCaptions: string[]
+  rowCaptions: string[],
+  rowColumnCount: number
 ): { rightColumn: number; bottomRow: number } {
   const specs = parseCalculationSpecs(setup.calculations);
   const pivotRight = pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1;
