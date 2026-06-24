@@ -1114,16 +1114,15 @@ function buildOnePivot(
     if (addedRowFields.some(existing => equalsText(existing, actual))) continue;
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
-    let added;
     try {
-      added = pivot.addRowHierarchy(hierarchy);
+      const added = pivot.addRowHierarchy(hierarchy);
+      if (caption) added.setName(caption);
     } catch (error) {
       throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${actual}' to Rows. Remove duplicate Rows fields or move this field out of Values/Filters. Detail: ${errorDetail(error)}`);
     }
     addedRowFields.push(actual);
     rowColumnCount++;
     rowCaptions.push(caption || field);
-    if (caption) added.setName(caption);
   }
 
   if (conditions.length > 0) {
