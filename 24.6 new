@@ -67,6 +67,7 @@ interface PivotLookup {
   pivotName: string;
   rowLabel: string;
   columnLabel: string;
+  allRows: boolean;
 }
 
 interface Placement {
@@ -1201,7 +1202,22 @@ function addCalculatedOutputs(
   specs.forEach((spec, specIndex) => {
     matrix[0][specIndex] = spec.label;
     if (spec.terms.some(term => isPivotLookupReference(term.reference))) {
-      matrix[1][specIndex] = pivotLookupFormula(workbook, sheet, spec);
+      if (spec.terms.every(term => parsePivotLookup(term.reference).allRows)) {
+        for (let row = headerRowOffset + 1; row < values.length; row++) {
+          const rowLabel = currentPivotRowLabel(values[row], rowColumnCount);
+          if (!rowLabel) {
+            matrix[row - headerRowOffset][specIndex] = "";
+            continue;
+          }
+          try {
+            matrix[row - headerRowOffset][specIndex] = pivotLookupFormula(workbook, sheet, spec, rowLabel);
+          } catch (_ignored) {
+            matrix[row - headerRowOffset][specIndex] = "";
+          }
+        }
+      } else {
+        matrix[1][specIndex] = pivotLookupFormula(workbook, sheet, spec);
+      }
       return;
     }
 
@@ -1249,6 +1265,19 @@ function findPivotHeaderColumn(headerRow: CellValue[], header: string): number {
   throw new Error(`Calculated Columns could not find pivot header '${header}'.`);
 }
 
+function currentPivotRowLabel(row: CellValue[], rowColumnCount: number): string {
+  const limit = Math.max(1, rowColumnCount);
+  for (let column = limit - 1; column >= 0; column--) {
+    const label = text(row[column]);
+    if (label && !isGrandTotalLabel(label)) return label;
+  }
+  return "";
+}
+
+function isGrandTotalLabel(value: string): boolean {
+  return equalsText(value, "Grand Total");
+}
+
 function rowCalculationFormula(
   zeroBasedRow: number,
   zeroBasedStartColumn: number,
@@ -1265,11 +1294,14 @@ function rowCalculationFormula(
 function pivotLookupFormula(
   workbook: ExcelScript.Workbook,
   currentSheet: ExcelScript.Worksheet,
-  spec: CalculationSpec
+  spec: CalculationSpec,
+  rowLabelOverride = ""
 ): string {
   let formula = "=";
   spec.terms.forEach(term => {
-    const address = lookupPivotCellAddress(workbook, currentSheet, parsePivotLookup(term.reference));
+    const lookup = parsePivotLookup(term.reference);
+    if (lookup.allRows) lookup.rowLabel = rowLabelOverride;
+    const address = lookupPivotCellAddress(workbook, currentSheet, lookup);
     formula += `${formula === "=" ? "" : term.operator}${address}`;
   });
   return formula === "=" ? "" : formula;
@@ -1472,6 +1504,13 @@ function parseCalculationSpecs(value: string): CalculationSpec[] {
     if (lookupBased && terms.some(term => !isPivotLookupReference(term.reference))) {
       throw new Error(`Calculated Columns cannot mix pivot lookups and pivot headers: ${piece}`);
     }
+    if (lookupBased) {
+      const lookups = terms.map(term => parsePivotLookup(term.reference));
+      const allRows = lookups.some(lookup => lookup.allRows);
+      if (allRows && lookups.some(lookup => !lookup.allRows)) {
+        throw new Error(`Calculated Columns cannot mix row=* lookup and exact-row lookup: ${piece}`);
+      }
+    }
     return { label, terms };
   });
 }
@@ -1522,18 +1561,27 @@ function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
   const pivotName = bang >= 0 ? target.slice(bang + 1).trim() : target;
   let rowLabel = "";
   let columnLabel = "";
+  let allRows = false;
   match[2].split(",").forEach(part => {
     const equals = part.indexOf("=");
     if (equals < 1) return;
     const key = lower(part.slice(0, equals));
     const itemValue = part.slice(equals + 1).trim();
-    if (key === "row") rowLabel = itemValue;
+    if (key === "row") {
+      allRows = isAllRowsValue(itemValue);
+      rowLabel = allRows ? "*" : itemValue;
+    }
     if (key === "column" || key === "col") columnLabel = itemValue;
   });
   if (!pivotName || !rowLabel || !columnLabel) {
     throw new Error(`Calculated Columns pivot lookup must use PivotName[row=Row Label, column=Column Label] or Sheet!PivotName[row=Row Label, column=Column Label].`);
   }
-  return { sheetName: sheetName || undefined, pivotName, rowLabel, columnLabel };
+  return { sheetName: sheetName || undefined, pivotName, rowLabel, columnLabel, allRows };
+}
+
+function isAllRowsValue(value: string): boolean {
+  const normalized = lower(value).replace(/\s+/g, " ");
+  return normalized === "*" || normalized === "all" || normalized === "all row" || normalized === "all rows";
 }
 
 function valueMatches(actual: CellValue, expected: string[]): boolean {
