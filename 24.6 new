@@ -1104,15 +1104,23 @@ function buildOnePivot(
   const maxRows = rowFields.length;
   let rowColumnCount = 0;
   const rowCaptions: string[] = [];
+  const addedRowFields: string[] = [];
   for (let position = 0; position < maxRows; position++) {
     const field = rowFields[position] || "";
     const rowName = rowNames[position] || "";
     if (!field) continue;
     let actual = field;
     let caption = rowName;
+    if (addedRowFields.some(existing => equalsText(existing, actual))) continue;
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Row field not found: ${actual}`);
-    const added = pivot.addRowHierarchy(hierarchy);
+    let added: ExcelScript.RowColumnPivotHierarchy;
+    try {
+      added = pivot.addRowHierarchy(hierarchy);
+    } catch (error) {
+      throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${actual}' to Rows. Remove duplicate Rows fields or move this field out of Values/Filters. Detail: ${errorDetail(error)}`);
+    }
+    addedRowFields.push(actual);
     rowColumnCount++;
     rowCaptions.push(caption || field);
     if (caption) added.setName(caption);
