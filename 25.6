@@ -150,7 +150,7 @@ function main(workbook: ExcelScript.Workbook): string {
     const headers = normalizeHeaders(rawHeaders);
     validateSetups(builds, headers);
     const sourceStarted = Date.now();
-    const source = needsNormalizedSource(builds) || headersNeedNormalizationFromRaw(rawHeaders)
+    const source = needsNormalizedSource(builds, headers) || headersNeedNormalizationFromRaw(rawHeaders)
       ? buildNormalizedSource(workbook, dataSheet, used, headers, builds)
       : buildDirectSource(dataSheet, used, headers, builds);
     const sourceSeconds = (Date.now() - sourceStarted) / 1000;
@@ -603,7 +603,7 @@ function validateSetups(setups: PivotSetup[], headers: string[]) {
     let filters: FieldCondition[];
     let conditions: FieldCondition[];
     try {
-      filters = parseFilterSpecs(setup.filters);
+      filters = parseFilterSpecs(setup.filters, headers);
     } catch (error) {
       throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
     }
@@ -651,11 +651,11 @@ function flagSetupError(setup: ExcelScript.Worksheet, message: string) {
   range.getFormat().getFont().setColor("#8D021F");
 }
 
-function needsNormalizedSource(setups: PivotSetup[]): boolean {
+function needsNormalizedSource(setups: PivotSetup[], headers: string[]): boolean {
   return setups.some(setup => {
     const rows = splitList(setup.rows);
     const values = splitList(setup.values);
-    const filterNeedsHelper = parseFilterSpecs(setup.filters).some(filter =>
+    const filterNeedsHelper = parseFilterSpecs(setup.filters, headers).some(filter =>
       filter.values.length > 0 || containsText(rows, filter.field) || containsText(values, filter.field)
     );
     return setup.conditions.trim() !== "" ||
@@ -761,7 +761,7 @@ function buildNormalizedSource(
     const valueFields = splitList(setup.values);
     rowFields.forEach(field => addRequiredField(field));
     valueFields.forEach(field => addRequiredField(field));
-    parseFilterSpecs(setup.filters).forEach(filter => addRequiredField(filter.field));
+    parseFilterSpecs(setup.filters, allHeaders).forEach(filter => addRequiredField(filter.field));
     parseConditions(setup.conditions).forEach(condition => {
       addRequiredField(condition.field);
       if (condition.measureField) addRequiredField(condition.measureField);
@@ -800,7 +800,7 @@ function buildNormalizedSource(
   const baseIndex = headerIndexMap(baseHeaders);
   const compactFilterFields: string[] = [];
   setups.forEach(setup => {
-    parseFilterSpecs(setup.filters).forEach(spec => {
+    parseFilterSpecs(setup.filters, baseHeaders).forEach(spec => {
       if (spec.values.length > 0 && !compactFilterFields.some(field => headerNamesMatch(field, spec.field))) {
         compactFilterFields.push(spec.field);
       }
@@ -827,7 +827,7 @@ function buildNormalizedSource(
       requireHeader(baseIndex, field, `Rows, setup row ${setup.sourceRow}`);
     }
 
-    parseFilterSpecs(setup.filters).forEach(spec => {
+    parseFilterSpecs(setup.filters, baseHeaders).forEach(spec => {
       const normalizeValues = compactFilterFields.some(field => headerNamesMatch(field, spec.field));
       if (!normalizeValues && !containsText(rowFields, spec.field) && !containsText(valueFields, spec.field)) return;
       const fieldIndex = requireHeader(baseIndex, spec.field, `Filters, setup row ${setup.sourceRow}`);
@@ -887,7 +887,7 @@ function finalSourceBaseIndexes(
   setups.forEach(setup => {
     splitList(setup.rows).forEach(field => addField(field));
     splitList(setup.values).forEach(field => addField(field));
-    parseFilterSpecs(setup.filters).forEach(filter => {
+    parseFilterSpecs(setup.filters, baseHeaders).forEach(filter => {
       if (!helperByKey.has(filterKey(filter.field))) addField(filter.field);
     });
     parseConditions(setup.conditions).forEach(condition => {
@@ -1253,7 +1253,7 @@ function buildOnePivot(
   const rowFields = splitList(setup.rows);
   const rowNames = splitList(setup.rowNames);
   const valueFields = splitList(setup.values);
-  const filters = parseFilterSpecs(setup.filters);
+  const filters = parseFilterSpecs(setup.filters, source.headers);
   const conditions = parseConditions(setup.conditions);
   conditions.forEach(condition => {
     if (condition.measureField && !containsText(valueFields, condition.measureField)) {
@@ -1416,8 +1416,8 @@ function addCalculatedOutputs(
           }
           try {
             matrix[row - headerRowOffset][specIndex] = pivotLookupFormula(workbook, sheet, spec, builtPivots, rowLabel);
-          } catch (_ignored) {
-            matrix[row - headerRowOffset][specIndex] = "";
+          } catch (error) {
+            throw new Error(`Calculated Columns '${spec.label}' failed for row '${rowLabel}': ${errorDetail(error)}`);
           }
         }
       } else {
@@ -1426,17 +1426,20 @@ function addCalculatedOutputs(
       return;
     }
 
-    const formulaTerms = spec.terms.map(term => ({
-      operator: term.operator,
-      operand: calculatedOrPivotOperand(
-        specs,
-        specIndex,
-        term.reference,
-        values[headerRowOffset],
-        pivotRange.getColumnIndex(),
-        outputStartColumn
-      )
-    }));
+    const formulaTerms: { operator: string; operand: string | number }[] = [];
+    for (const term of spec.terms) {
+      formulaTerms.push({
+        operator: term.operator,
+        operand: calculatedOrPivotOperand(
+          specs,
+          specIndex,
+          term.reference,
+          values[headerRowOffset],
+          pivotRange.getColumnIndex(),
+          outputStartColumn
+        )
+      });
+    }
     for (let row = headerRowOffset + 1; row < values.length; row++) {
       matrix[row - headerRowOffset][specIndex] = rowCalculationFormula(
         pivotRange.getRowIndex() + row,
@@ -1562,6 +1565,7 @@ function lookupPivotCellAddress(
       break;
     }
   }
+  if (rowIndex < 0 && lookup.allRows) rowIndex = findGrandTotalRow(values);
   if (rowIndex < 0) throw new Error(`Calculated Columns could not find row '${lookup.rowLabel}' in PivotTable '${lookup.pivotName}'.`);
 
   for (let row = 0; row < values.length; row++) {
@@ -1577,6 +1581,13 @@ function lookupPivotCellAddress(
   const cellAddress = a1Address(located.rangeRow + rowIndex, located.rangeColumn + columnIndex);
   if (sheet.getName() === currentSheet.getName()) return cellAddress;
   return `'${sheet.getName().replace(/'/g, "''")}'!${cellAddress}`;
+}
+
+function findGrandTotalRow(values: CellValue[][]): number {
+  for (let row = values.length - 1; row >= 0; row--) {
+    if (values[row].some(value => isGrandTotalLabel(text(value)))) return row;
+  }
+  return -1;
 }
 
 function findPivotRangeForLookup(
@@ -1747,10 +1758,10 @@ function columnLooksNumeric(rows: CellValue[][], column: number): boolean {
   return checked > 0;
 }
 
-function parseFilterSpecs(value: string): FieldCondition[] {
+function parseFilterSpecs(value: string, headers: string[] = []): FieldCondition[] {
   const normalized = value.trim();
   if (!normalized) return [];
-  const pieces = normalized.includes("=") ? splitFilterPieces(normalized) : splitList(normalized);
+  const pieces = normalized.includes("=") ? splitFilterPieces(normalized, headers) : splitList(normalized);
   return pieces.map(piece => {
     const equals = piece.indexOf("=");
     if (equals < 0) {
@@ -1766,14 +1777,14 @@ function parseFilterSpecs(value: string): FieldCondition[] {
   }).filter(item => item.field !== "");
 }
 
-function splitFilterPieces(value: string): string[] {
+function splitFilterPieces(value: string, headers: string[] = []): string[] {
   const result: string[] = [];
   const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   normalized.split("\n").forEach(line => {
     line.split(";").forEach(piece => {
       const trimmed = piece.trim();
       if (!trimmed) return;
-      if (!trimmed.includes("=")) {
+      if (!filterPieceStartsNewField(trimmed, headers)) {
         if (result.length === 0) {
           result.push(trimmed);
         } else {
@@ -1785,6 +1796,14 @@ function splitFilterPieces(value: string): string[] {
     });
   });
   return result;
+}
+
+function filterPieceStartsNewField(piece: string, headers: string[]): boolean {
+  const equals = piece.indexOf("=");
+  if (equals < 1) return false;
+  if (headers.length === 0) return true;
+  const candidate = piece.slice(0, equals).trim();
+  return headers.some(header => headerNamesMatch(header, candidate));
 }
 
 function parseConditions(value: string): FieldCondition[] {
