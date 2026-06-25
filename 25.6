@@ -838,7 +838,7 @@ function buildNormalizedSource(
       addHelper(
         filterKey(spec.field),
         `PB Filter - ${spec.field}`,
-        dataRows.map(row => normalizeValues ? compactCompareText(text(row[fieldIndex])) : row[fieldIndex])
+        dataRows.map(row => normalizeValues ? normalizedCategoryValue(text(row[fieldIndex])) : row[fieldIndex])
       );
     });
 
@@ -1346,7 +1346,7 @@ function buildOnePivot(
     added.setName(spec.field);
     const filterField = added.getFields()[0];
     if (spec.values.length > 0) {
-      const selectedItems = duplicateFilterField ? distinct(spec.values.map(value => compactCompareText(value))) : spec.values;
+      const selectedItems = duplicateFilterField ? distinct(spec.values.map(value => normalizedCategoryValue(value))) : spec.values.map(value => normalizedCategoryValue(value));
       try {
         filterField.applyFilter({ manualFilter: { selectedItems } });
       } catch (_ignored) {
@@ -1597,7 +1597,6 @@ function findPivotRangeForLookup(
     const candidate = builtPivots[index];
     if (!pivotNameMatches(candidate.actualName, lookup.pivotName) && !pivotNameMatches(candidate.inputName, lookup.pivotName)) continue;
     if (lookup.sheetName && !sheetNameMatches(candidate.sheetName, candidate.outputAlias, lookup.sheetName)) continue;
-    if (!lookup.sheetName && candidate.sheetName !== currentSheet.getName()) continue;
     return {
       sheetName: candidate.sheetName,
       rangeRow: candidate.rangeRow,
@@ -1607,7 +1606,8 @@ function findPivotRangeForLookup(
     };
   }
 
-  const sheet = lookup.sheetName ? workbook.getWorksheet(lookup.sheetName) : currentSheet;
+  const sheetName = lookup.sheetName ? findWorksheetNameForLookup(workbook, lookup.sheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
+  const sheet = sheetName ? workbook.getWorksheet(sheetName) : undefined;
   if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'.`);
   const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
   const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
@@ -1622,8 +1622,28 @@ function findPivotRangeForLookup(
   };
 }
 
+function findWorksheetNameForLookup(workbook: ExcelScript.Workbook, expected: string): string {
+  const exact = workbook.getWorksheet(expected);
+  if (exact) return exact.getName();
+  const safeExpected = safeSheetName(expected);
+  const found = workbook.getWorksheets().find(sheet => sheetNameMatches(sheet.getName(), safeExpected, expected));
+  return found ? found.getName() : "";
+}
+
+function findWorksheetNameContainingPivot(
+  workbook: ExcelScript.Workbook,
+  currentSheet: ExcelScript.Worksheet,
+  pivotName: string
+): string {
+  if (currentSheet.getPivotTables().some(pivot => pivotNameMatches(pivot.getName(), pivotName))) return currentSheet.getName();
+  const found = workbook.getWorksheets().find(sheet => sheet.getPivotTables().some(pivot => pivotNameMatches(pivot.getName(), pivotName)));
+  return found ? found.getName() : "";
+}
+
 function sheetNameMatches(actualName: string, outputAlias: string, expected: string): boolean {
-  return equalsText(actualName, expected) || equalsText(outputAlias, safeSheetName(expected));
+  return headerNamesMatch(actualName, expected) ||
+    headerNamesMatch(safeSheetName(actualName), safeSheetName(expected)) ||
+    headerNamesMatch(outputAlias, safeSheetName(expected));
 }
 
 function pivotHeaderMatches(actual: string, expected: string): boolean {
@@ -1869,7 +1889,7 @@ function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
   if (!match) return undefined;
   const target = match[1].trim();
   const bang = target.indexOf("!");
-  const sheetName = bang >= 0 ? target.slice(0, bang).trim() : "";
+  let sheetName = bang >= 0 ? target.slice(0, bang).trim() : "";
   const pivotName = bang >= 0 ? target.slice(bang + 1).trim() : target;
   let rowLabel = "";
   let columnLabel = "";
@@ -1879,6 +1899,9 @@ function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
     if (equals < 1) return;
     const key = lower(part.slice(0, equals));
     const itemValue = part.slice(equals + 1).trim();
+    if (key === "sheet" || key === "worksheet" || key === "output sheet") {
+      sheetName = itemValue;
+    }
     if (key === "row") {
       allRows = isAllRowsValue(itemValue);
       rowLabel = allRows ? "*" : itemValue;
@@ -1897,8 +1920,8 @@ function isAllRowsValue(value: string): boolean {
 }
 
 function valueMatches(actual: CellValue, expected: string[]): boolean {
-  const actualCompact = compactCompareText(text(actual));
-  return expected.some(value => actualCompact === compactCompareText(value));
+  const actualKey = categoryCompareKey(text(actual));
+  return expected.some(value => actualKey === categoryCompareKey(value));
 }
 
 function conditionCategory(
@@ -2075,6 +2098,14 @@ function compactCompareText(value: string): string {
 
 function compactHeaderKey(value: string): string {
   return compactCompareText(value);
+}
+
+function normalizedCategoryValue(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function categoryCompareKey(value: string): string {
+  return lower(normalizedCategoryValue(value));
 }
 
 function yes(value: string): boolean {
