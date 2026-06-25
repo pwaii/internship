@@ -1,4 +1,4 @@
-/**
+/////**
  * Excel Pivot Builder - single-workbook Office Script.
  *
  * Run this script inside the raw-data workbook.
@@ -1849,12 +1849,23 @@ function parseCalculationTerms(expression: string): CalculationTerm[] {
   const terms: CalculationTerm[] = [];
   let operator = "+";
   let buffer = "";
+  let bracketDepth = 0;
   for (let index = 0; index < expression.length; index++) {
     const character = expression[index];
     const previous = index > 0 ? expression[index - 1] : "";
     const next = index + 1 < expression.length ? expression[index + 1] : "";
+    if (character === "[") {
+      bracketDepth++;
+      buffer += character;
+      continue;
+    }
+    if (character === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+      buffer += character;
+      continue;
+    }
     const isMinusOperator = character === "-" && previous === " " && next === " ";
-    const isOperator = character === "+" || character === "*" || character === "/" || isMinusOperator;
+    const isOperator = bracketDepth === 0 && (character === "+" || character === "*" || character === "/" || isMinusOperator);
     if (isOperator) {
       const reference = buffer.trim();
       if (reference) terms.push({ operator, reference });
