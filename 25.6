@@ -614,7 +614,7 @@ function requireSetupHeader(
   setupRow: number,
   columnName: string
 ) {
-  if (!index.has(lower(field))) {
+  if (!headerExists(index, field)) {
     throw new Error(`Setup row ${setupRow}: ${columnName} field '${field}' was not found in the data headers.`);
   }
 }
@@ -750,6 +750,14 @@ function buildNormalizedSource(
   const outputRows = dataRows;
   const helperByKey = new Map<string, string>();
   const baseIndex = headerIndexMap(baseHeaders);
+  const compactFilterFields: string[] = [];
+  setups.forEach(setup => {
+    parseFilterSpecs(setup.filters).forEach(spec => {
+      if (spec.values.length > 0 && !compactFilterFields.some(field => headerNamesMatch(field, spec.field))) {
+        compactFilterFields.push(spec.field);
+      }
+    });
+  });
 
   const addHelper = (key: string, preferredName: string, values: CellValue[]) => {
     if (helperByKey.has(key)) return;
@@ -772,7 +780,7 @@ function buildNormalizedSource(
     }
 
     parseFilterSpecs(setup.filters).forEach(spec => {
-      const normalizeValues = spec.values.length > 0;
+      const normalizeValues = compactFilterFields.some(field => headerNamesMatch(field, spec.field));
       if (!normalizeValues && !containsText(rowFields, spec.field) && !containsText(valueFields, spec.field)) return;
       const fieldIndex = requireHeader(baseIndex, spec.field, `Filters, setup row ${setup.sourceRow}`);
       addHelper(
@@ -1512,20 +1520,33 @@ function normalizeHeaders(values: CellValue[]): string[] {
 
 function headerIndexMap(headers: string[]): Map<string, number> {
   const result = new Map<string, number>();
-  headers.forEach((header, index) => result.set(lower(header), index));
+  headers.forEach((header, index) => {
+    const exactKey = lower(header);
+    const compactKey = compactHeaderKey(header);
+    if (!result.has(exactKey)) result.set(exactKey, index);
+    if (!result.has(compactKey)) result.set(compactKey, index);
+  });
   return result;
 }
 
 function requireHeader(index: Map<string, number>, field: string, context: string): number {
-  const found = index.get(lower(field));
+  const found = index.get(lower(field)) ?? index.get(compactHeaderKey(field));
   if (found === undefined) throw new Error(`Field not found in ${context}: ${field}`);
   return found;
 }
 
 function requirePivotHeader(source: SourceModel, field: string): string {
-  const found = source.headers.find(header => equalsText(header, field));
+  const found = source.headers.find(header => headerNamesMatch(header, field));
   if (!found) throw new Error(`Field not found: ${field}`);
   return found;
+}
+
+function headerExists(index: Map<string, number>, field: string): boolean {
+  return index.has(lower(field)) || index.has(compactHeaderKey(field));
+}
+
+function headerNamesMatch(left: string, right: string): boolean {
+  return equalsText(left, right) || compactHeaderKey(left) === compactHeaderKey(right);
 }
 
 function requiredHelper(source: SourceModel, key: string): string {
@@ -1902,6 +1923,10 @@ function equalsText(left: string, right: string): boolean {
 
 function compactCompareText(value: string): string {
   return lower(value).replace(/\s+/g, "");
+}
+
+function compactHeaderKey(value: string): string {
+  return compactCompareText(value);
 }
 
 function yes(value: string): boolean {
