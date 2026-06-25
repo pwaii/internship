@@ -211,7 +211,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   const coolGray = "#F2F4F7";
   const border = "#C8CDD4";
 
-  const used = sheet.getRange("A1:W500");
+  const used = sheet.getRange("A1:U500");
   used.getFormat().getFont().setName("Aptos");
   used.getFormat().getFont().setSize(10);
   used.getFormat().getFill().setColor(coolGray);
@@ -254,22 +254,21 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("P4:U500").getFormat().setWrapText(false);
   sheet.getRange("P4:U500").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   sheet.getRange("P4:U500").getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
-  sheet.getRange("V1:W1").getFormat().getFill().setColor(burgundy);
-  sheet.getRange("V1:W1").getFormat().getFont().setColor(white);
-  sheet.getRange("V1:W1").getFormat().getFont().setBold(true);
-  sheet.getRange("V3:W3").getFormat().getFill().setColor(black);
-  sheet.getRange("V3:W3").getFormat().getFont().setColor(white);
-  sheet.getRange("V3:W3").getFormat().getFont().setBold(true);
-  sheet.getRange("V4:W40").getFormat().getFill().setColor(white);
-  sheet.getRange("V4:W40").getFormat().setWrapText(false);
-  sheet.getRange("V4:W40").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
-  sheet.getRange("V4:W40").getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
+  sheet.getRange("D2:E2").getFormat().getFill().setColor(burgundy);
+  sheet.getRange("D2:E2").getFormat().getFont().setColor(white);
+  sheet.getRange("D2:E2").getFormat().getFont().setBold(true);
+  sheet.getRange("D3:E3").getFormat().getFill().setColor(black);
+  sheet.getRange("D3:E3").getFormat().getFont().setColor(white);
+  sheet.getRange("D3:E3").getFormat().getFont().setBold(true);
+  sheet.getRange("D4:E40").getFormat().getFill().setColor(white);
+  sheet.getRange("D4:E40").getFormat().setWrapText(false);
+  sheet.getRange("D4:E40").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  sheet.getRange("D4:E40").getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
 
   const widths: { [key: string]: number } = {
     A: 110, B: 145, C: 120, D: 135, E: 160, F: 145, G: 250,
     H: 125, I: 140, J: 145, K: 185, L: 130, M: 110, N: 220,
-    O: 25, P: 145, Q: 25, R: 25, S: 145, T: 145, U: 145,
-    V: 130, W: 175
+    O: 25, P: 145, Q: 25, R: 25, S: 145, T: 145, U: 145
   };
   Object.keys(widths).forEach(column => sheet.getRange(`${column}:${column}`).getFormat().setColumnWidth(widths[column]));
   sheet.getRange("H:H").setColumnHidden(true);
@@ -285,13 +284,19 @@ function resetSetupErrorStyle(sheet: ExcelScript.Worksheet) {
 }
 
 function seedMonthlyInputs(sheet: ExcelScript.Worksheet) {
-  sheet.getRange("V1:W1").merge(false);
-  sheet.getRange("V1").setValue("Monthly Inputs");
-  sheet.getRange("V3:W3").setValues([["Input Name", "Value"]]);
-  if (!text(sheet.getRange("V4").getValue())) sheet.getRange("V4").setValue("Month");
-  if (!text(sheet.getRange("W4").getValue())) sheet.getRange("W4").setValue("2026-06");
-  if (!text(sheet.getRange("V5").getValue())) sheet.getRange("V5").setValue("THB to USD");
-  if (!text(sheet.getRange("W5").getValue())) sheet.getRange("W5").setValue("0.027");
+  const hasNewInputs = text(sheet.getRange("D4").getValue()) || text(sheet.getRange("E4").getValue());
+  if (!hasNewInputs && equalsText(text(sheet.getRange("V1").getValue()), "Monthly Inputs")) {
+    sheet.getRange("D4:E40").setValues(sheet.getRange("V4:W40").getValues());
+    sheet.getRange("V1:W40").clear(ExcelScript.ClearApplyTo.contents);
+  }
+
+  sheet.getRange("D2:E2").merge(false);
+  sheet.getRange("D2").setValue("Monthly Inputs");
+  sheet.getRange("D3:E3").setValues([["Input Name", "Value"]]);
+  if (!text(sheet.getRange("D4").getValue())) sheet.getRange("D4").setValue("Month");
+  if (!text(sheet.getRange("E4").getValue())) sheet.getRange("E4").setValue("2026-06");
+  if (!text(sheet.getRange("D5").getValue())) sheet.getRange("D5").setValue("THB to USD");
+  if (!text(sheet.getRange("E5").getValue())) sheet.getRange("E5").setValue("0.027");
 }
 
 function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
@@ -511,7 +516,7 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
 
 function readMonthlyInputs(setup: ExcelScript.Worksheet): Map<string, string> {
   const result = new Map<string, string>();
-  const values = setup.getRange("V4:W40").getValues();
+  const values = setup.getRange("D4:E40").getValues();
   values.forEach(row => {
     const key = text(row[0]);
     if (!key) return;
