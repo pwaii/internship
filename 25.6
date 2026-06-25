@@ -1606,10 +1606,10 @@ function findPivotRangeForLookup(
 
   const sheetName = lookup.sheetName ? findWorksheetNameForLookup(workbook, lookup.sheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
   const sheet = sheetName ? workbook.getWorksheet(sheetName) : undefined;
-  if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'.`);
+  if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'. Available sheets: ${workbook.getWorksheets().map(sheet => sheet.getName()).join(", ")}`);
   const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
   const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
-  if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'.`);
+  if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'. Available PivotTables on '${sheet.getName()}': ${pivotTableNames(sheet).join(", ") || "none"}`);
   const range = pivot.getLayout().getRange();
   return {
     sheetName: sheet.getName(),
@@ -1678,7 +1678,16 @@ function pivotHeaderMatches(actual: string, expected: string): boolean {
 
 function pivotNameMatches(actual: string, expected: string): boolean {
   if (equalsText(actual, expected)) return true;
-  return equalsText(actual, safeObjectName(expected).slice(0, 180));
+  const safeExpected = safeObjectName(expected).slice(0, 180);
+  const safeActual = safeObjectName(actual).slice(0, 180);
+  return equalsText(actual, safeExpected) ||
+    equalsText(safeActual, safeExpected) ||
+    headerNamesMatch(actual, expected) ||
+    headerNamesMatch(safeActual, safeExpected);
+}
+
+function pivotTableNames(sheet: ExcelScript.Worksheet): string[] {
+  return sheet.getPivotTables().map(pivot => pivot.getName());
 }
 
 function normalizedPivotHeader(value: string): string {
