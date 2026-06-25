@@ -966,6 +966,7 @@ function writeValuesInChunks(
   startRow = 0,
   startColumn = 0
 ) {
+  if (values.length === 0 || columnCount <= 0) return;
   for (let columnOffset = 0; columnOffset < columnCount; columnOffset += MAX_WRITE_COLUMNS_PER_CHUNK) {
     const chunkColumns = Math.min(MAX_WRITE_COLUMNS_PER_CHUNK, columnCount - columnOffset);
     const maximumRows = chunkRowCount(chunkColumns);
@@ -978,6 +979,7 @@ function writeValuesInChunks(
           columnOffset,
           columnOffset + chunkColumns
         );
+        while (nextRow.length < chunkColumns) nextRow.push("");
         const nextBytes = estimateRowPayloadBytes(nextRow);
         if (chunk.length > 0 && estimatedBytes + nextBytes > MAX_WRITE_PAYLOAD_BYTES) break;
         chunk.push(nextRow);
@@ -1001,27 +1003,34 @@ function writeChunkWithRetry(
   values: CellValue[][]
 ): void {
   const rowCount = values.length;
+  if (rowCount === 0) return;
   const columnCount = values[0].length;
+  if (columnCount === 0) return;
+  const rectangular = values.map(row => {
+    const result = row.slice(0, columnCount);
+    while (result.length < columnCount) result.push("");
+    return result;
+  });
   try {
-    sheet.getRangeByIndexes(startRow, startColumn, rowCount, columnCount).setValues(values);
+    sheet.getRangeByIndexes(startRow, startColumn, rowCount, columnCount).setValues(rectangular);
     return;
   } catch (error) {
     if (rowCount > 1) {
       const firstCount = Math.floor(rowCount / 2);
-      writeChunkWithRetry(sheet, startRow, startColumn, values.slice(0, firstCount));
-      writeChunkWithRetry(sheet, startRow + firstCount, startColumn, values.slice(firstCount));
+      writeChunkWithRetry(sheet, startRow, startColumn, rectangular.slice(0, firstCount));
+      writeChunkWithRetry(sheet, startRow + firstCount, startColumn, rectangular.slice(firstCount));
       return;
     }
     if (columnCount > 1) {
       const firstCount = Math.floor(columnCount / 2);
-      const left = values.map(row => row.slice(0, firstCount));
-      const right = values.map(row => row.slice(firstCount));
+      const left = rectangular.map(row => row.slice(0, firstCount));
+      const right = rectangular.map(row => row.slice(firstCount));
       writeChunkWithRetry(sheet, startRow, startColumn, left);
       writeChunkWithRetry(sheet, startRow, startColumn + firstCount, right);
       return;
     }
     try {
-      sheet.getCell(startRow, startColumn).setValue(values[0][0]);
+      sheet.getCell(startRow, startColumn).setValue(rectangular[0][0]);
       return;
     } catch (cellError) {
       throw new Error(
