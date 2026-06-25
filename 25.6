@@ -633,11 +633,11 @@ function needsNormalizedSource(setups: PivotSetup[]): boolean {
   return setups.some(setup => {
     const rows = splitList(setup.rows);
     const values = splitList(setup.values);
-    const filterOverlap = parseFilterSpecs(setup.filters).some(filter =>
-      containsText(rows, filter.field) || containsText(values, filter.field)
+    const filterNeedsHelper = parseFilterSpecs(setup.filters).some(filter =>
+      filter.values.length > 0 || containsText(rows, filter.field) || containsText(values, filter.field)
     );
     return setup.conditions.trim() !== "" ||
-      filterOverlap;
+      filterNeedsHelper;
   });
 }
 
@@ -772,9 +772,14 @@ function buildNormalizedSource(
     }
 
     parseFilterSpecs(setup.filters).forEach(spec => {
-      if (!containsText(rowFields, spec.field) && !containsText(valueFields, spec.field)) return;
+      const normalizeValues = spec.values.length > 0;
+      if (!normalizeValues && !containsText(rowFields, spec.field) && !containsText(valueFields, spec.field)) return;
       const fieldIndex = requireHeader(baseIndex, spec.field, `Filters, setup row ${setup.sourceRow}`);
-      addHelper(filterKey(spec.field), `PB Filter - ${spec.field}`, dataRows.map(row => row[fieldIndex]));
+      addHelper(
+        filterKey(spec.field),
+        `PB Filter - ${spec.field}`,
+        dataRows.map(row => normalizeValues ? compactCompareText(text(row[fieldIndex])) : row[fieldIndex])
+      );
     });
 
     const parsedConditions = parseConditions(setup.conditions);
@@ -1237,8 +1242,9 @@ function buildOnePivot(
     added.setName(spec.field);
     const filterField = added.getFields()[0];
     if (spec.values.length > 0) {
+      const selectedItems = duplicateFilterField ? distinct(spec.values.map(value => compactCompareText(value))) : spec.values;
       try {
-        filterField.applyFilter({ manualFilter: { selectedItems: spec.values } });
+        filterField.applyFilter({ manualFilter: { selectedItems } });
       } catch (_ignored) {
         // Keep the filter dropdown when a requested item is absent, but leave
         // it unselected instead of failing the entire PivotTable build.
@@ -1719,7 +1725,8 @@ function isAllRowsValue(value: string): boolean {
 }
 
 function valueMatches(actual: CellValue, expected: string[]): boolean {
-  return expected.some(value => equalsText(text(actual), value));
+  const actualCompact = compactCompareText(text(actual));
+  return expected.some(value => actualCompact === compactCompareText(value));
 }
 
 function conditionCategory(
@@ -1891,6 +1898,10 @@ function lower(value: string): string {
 
 function equalsText(left: string, right: string): boolean {
   return lower(left) === lower(right);
+}
+
+function compactCompareText(value: string): string {
+  return lower(value).replace(/\s+/g, "");
 }
 
 function yes(value: string): boolean {
