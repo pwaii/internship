@@ -74,13 +74,19 @@ interface BuiltPivot {
   inputName: string;
   actualName: string;
   outputAlias: string;
-  sheet: ExcelScript.Worksheet;
-  pivot: ExcelScript.PivotTable;
+  sheetName: string;
+  rangeRow: number;
+  rangeColumn: number;
+  rangeRowCount: number;
+  rangeColumnCount: number;
 }
 
-interface LocatedPivot {
-  sheet: ExcelScript.Worksheet;
-  pivot: ExcelScript.PivotTable;
+interface LocatedPivotRange {
+  sheetName: string;
+  rangeRow: number;
+  rangeColumn: number;
+  rangeRowCount: number;
+  rangeColumnCount: number;
 }
 
 interface Placement {
@@ -90,7 +96,7 @@ interface Placement {
 }
 
 interface SourceModel {
-  sheet: ExcelScript.Worksheet;
+  sourceSheetName: string;
   sourceAddress: string;
   headers: string[];
   baseHeaders: string[];
@@ -155,8 +161,9 @@ function main(workbook: ExcelScript.Workbook): string {
     const pivotStarted = Date.now();
     buildAllPivots(workbook, setup, source, builds, dataSheet.getName());
     const pivotSeconds = (Date.now() - pivotStarted) / 1000;
-    if (source.sheet.getName() === SOURCE_SHEET) {
-      source.sheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
+    if (source.sourceSheetName === SOURCE_SHEET) {
+      const sourceSheet = workbook.getWorksheet(SOURCE_SHEET);
+      if (sourceSheet) sourceSheet.setVisibility(ExcelScript.SheetVisibility.veryHidden);
     }
 
     writeStatus(
@@ -719,7 +726,7 @@ function buildDirectSource(
     });
   }
   return {
-    sheet: dataSheet,
+    sourceSheetName: dataSheet.getName(),
     sourceAddress: worksheetRangeAddress(
       dataSheet.getName(),
       used.getRowCount(),
@@ -865,7 +872,7 @@ function buildNormalizedSource(
   const sourceAddress = worksheetRangeAddress(helper.getName(), matrix.length, finalHeaders.length);
   const numericByHeader = new Map<string, boolean>();
   finalHeaders.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(finalRows, col)));
-  return { sheet: helper, sourceAddress, headers: finalHeaders, baseHeaders: outputBaseIndexes.map(index => baseHeaders[index]), helperByKey, numericByHeader };
+  return { sourceSheetName: helper.getName(), sourceAddress, headers: finalHeaders, baseHeaders: outputBaseIndexes.map(index => baseHeaders[index]), helperByKey, numericByHeader };
 }
 
 function finalSourceBaseIndexes(
@@ -1171,7 +1178,7 @@ function buildAllPivots(
   dataSheetName: string
 ) {
   const outputs = distinct(setups.map(setup => safeSheetName(setup.outputSheet || "Pivot_Output")));
-  const protectedNames = [setupSheet.getName(), source.sheet.getName(), dataSheetName];
+  const protectedNames = [setupSheet.getName(), source.sourceSheetName, dataSheetName];
   outputs.forEach(name => {
     const replace = setups.some(setup =>
       equalsText(safeSheetName(setup.outputSheet || "Pivot_Output"), name) && setup.replaceOutput
@@ -1355,8 +1362,11 @@ function buildOnePivot(
     inputName: setup.pivotName,
     actualName: pivotName,
     outputAlias,
-    sheet,
-    pivot
+    sheetName: sheet.getName(),
+    rangeRow: pivotRange.getRowIndex(),
+    rangeColumn: pivotRange.getColumnIndex(),
+    rangeRowCount: pivotRange.getRowCount(),
+    rangeColumnCount: pivotRange.getColumnCount()
   });
   setPivotColumnWidths(
     sheet,
@@ -1541,10 +1551,16 @@ function lookupPivotCellAddress(
   lookup: PivotLookup,
   builtPivots: BuiltPivot[]
 ): string {
-  const located = findPivotForLookup(workbook, currentSheet, lookup, builtPivots);
-  const sheet = located.sheet;
-  const pivot = located.pivot;
-  const values = pivot.getLayout().getRange().getValues() as CellValue[][];
+  const located = findPivotRangeForLookup(workbook, currentSheet, lookup, builtPivots);
+  const sheet = workbook.getWorksheet(located.sheetName);
+  if (!sheet) throw new Error(`Calculated Columns could not find sheet '${located.sheetName}'.`);
+  const range = sheet.getRangeByIndexes(
+    located.rangeRow,
+    located.rangeColumn,
+    located.rangeRowCount,
+    located.rangeColumnCount
+  );
+  const values = range.getValues() as CellValue[][];
   let rowIndex = -1;
   let columnIndex = -1;
 
@@ -1566,24 +1582,29 @@ function lookupPivotCellAddress(
     if (columnIndex >= 0) break;
   }
   if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${lookup.pivotName}'.`);
-  const range = pivot.getLayout().getRange();
-  const cellAddress = a1Address(range.getRowIndex() + rowIndex, range.getColumnIndex() + columnIndex);
+  const cellAddress = a1Address(located.rangeRow + rowIndex, located.rangeColumn + columnIndex);
   if (sheet.getName() === currentSheet.getName()) return cellAddress;
   return `'${sheet.getName().replace(/'/g, "''")}'!${cellAddress}`;
 }
 
-function findPivotForLookup(
+function findPivotRangeForLookup(
   workbook: ExcelScript.Workbook,
   currentSheet: ExcelScript.Worksheet,
   lookup: PivotLookup,
   builtPivots: BuiltPivot[]
-): LocatedPivot {
+): LocatedPivotRange {
   for (let index = builtPivots.length - 1; index >= 0; index--) {
     const candidate = builtPivots[index];
     if (!pivotNameMatches(candidate.actualName, lookup.pivotName) && !pivotNameMatches(candidate.inputName, lookup.pivotName)) continue;
-    if (lookup.sheetName && !sheetNameMatches(candidate.sheet.getName(), candidate.outputAlias, lookup.sheetName)) continue;
-    if (!lookup.sheetName && candidate.sheet.getName() !== currentSheet.getName()) continue;
-    return { sheet: candidate.sheet, pivot: candidate.pivot };
+    if (lookup.sheetName && !sheetNameMatches(candidate.sheetName, candidate.outputAlias, lookup.sheetName)) continue;
+    if (!lookup.sheetName && candidate.sheetName !== currentSheet.getName()) continue;
+    return {
+      sheetName: candidate.sheetName,
+      rangeRow: candidate.rangeRow,
+      rangeColumn: candidate.rangeColumn,
+      rangeRowCount: candidate.rangeRowCount,
+      rangeColumnCount: candidate.rangeColumnCount
+    };
   }
 
   const sheet = lookup.sheetName ? workbook.getWorksheet(lookup.sheetName) : currentSheet;
@@ -1591,7 +1612,14 @@ function findPivotForLookup(
   const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
   const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
   if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'.`);
-  return { sheet, pivot };
+  const range = pivot.getLayout().getRange();
+  return {
+    sheetName: sheet.getName(),
+    rangeRow: range.getRowIndex(),
+    rangeColumn: range.getColumnIndex(),
+    rangeRowCount: range.getRowCount(),
+    rangeColumnCount: range.getColumnCount()
+  };
 }
 
 function sheetNameMatches(actualName: string, outputAlias: string, expected: string): boolean {
