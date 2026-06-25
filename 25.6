@@ -1773,11 +1773,8 @@ function pivotSummaryLines(setup: PivotSetup): string[] {
 }
 
 function topicSummaryLines(label: string, value: string): string[] {
-  const trimmed = value.trim();
-  if (!trimmed) return [`${label}: none`];
-  const pieces = splitSemicolon(trimmed);
-  if (pieces.length <= 1) return [`${label}: ${trimmed}`];
-  return [`${label}:`, ...pieces.map(piece => `  ${piece}`)];
+  const trimmed = singleLineSetupText(value);
+  return [`${label}: ${trimmed || "none"}`];
 }
 
 function templateSelected(template: string, selected: string): boolean {
