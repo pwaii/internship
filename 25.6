@@ -488,6 +488,7 @@ function restoreEmbeddedTemplates(setup: ExcelScript.Worksheet) {
 
 function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
   const values = readValuesInChunks(setup.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`));
+  normalizeSetupFilterConditionCells(setup, values);
   const inputs = readMonthlyInputs(setup);
   const result: PivotSetup[] = [];
   values.forEach((row, index) => {
@@ -510,6 +511,27 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
     });
   });
   return result;
+}
+
+function normalizeSetupFilterConditionCells(setup: ExcelScript.Worksheet, values: CellValue[][]) {
+  let changed = false;
+  values.forEach(row => {
+    [9, 10].forEach(column => {
+      const original = text(row[column]);
+      const normalized = singleLineSetupText(original);
+      if (original !== normalized) {
+        row[column] = normalized;
+        changed = true;
+      }
+    });
+  });
+  if (!changed) return;
+  const cleaned = values.map(row => [row[9], row[10]]);
+  writeValuesInChunks(setup, cleaned, 2, FIRST_SETUP_ROW - 1, 9);
+}
+
+function singleLineSetupText(value: string): string {
+  return value.replace(/\r\n/g, " ").replace(/\r/g, " ").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function readMonthlyInputs(setup: ExcelScript.Worksheet): Map<string, string> {
@@ -1408,7 +1430,7 @@ function lookupPivotCellAddress(
 ): string {
   const sheet = lookup.sheetName ? workbook.getWorksheet(lookup.sheetName) : currentSheet;
   if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'.`);
-  const pivot = sheet.getPivotTables().find(item => equalsText(item.getName(), lookup.pivotName));
+  const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
   const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
   if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'.`);
   const values = pivot.getLayout().getRange().getValues() as CellValue[][];
@@ -1447,6 +1469,11 @@ function pivotHeaderMatches(actual: string, expected: string): boolean {
     equalsText(actualNormalized, `Sum of ${expectedNormalized}`) ||
     equalsText(expectedNormalized, `Count of ${actualNormalized}`) ||
     equalsText(expectedNormalized, `Sum of ${actualNormalized}`);
+}
+
+function pivotNameMatches(actual: string, expected: string): boolean {
+  if (equalsText(actual, expected)) return true;
+  return equalsText(actual, safeObjectName(expected).slice(0, 180));
 }
 
 function normalizedPivotHeader(value: string): string {
