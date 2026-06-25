@@ -310,13 +310,11 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("A7").setValue("Status");
   sheet.getRange("B7:N7").unmerge();
   sheet.getRange("B7:N7").merge(false);
-  sheet.getRange("H8").setValue("");
-  sheet.getRange("G8").setValue("Calculated Columns");
-  sheet.getRange("I8").setValue("Values To Count/Sum");
-  sheet.getRange("D8").setValue("Output Behavior");
-  sheet.getRange("J8").setValue("Filters");
-  sheet.getRange("K8").setValue("Conditions");
-  sheet.getRange("L8").setValue("");
+  sheet.getRange("A8:N8").setValues([[
+    "Template", "Pivot Name", "Output Sheet", "Output Behavior", "Rows", "Row Names",
+    "Calculated Columns", "", "Values To Count/Sum", "Filters", "Conditions",
+    "", "Next Pivot Right", "Notes"
+  ]]);
   sheet.getRange("P1:U1").unmerge();
   sheet.getRange("P1:U1").merge(false);
   sheet.getRange("U3").setValue("Output Sheet Choices");
