@@ -75,10 +75,6 @@ interface BuiltPivot {
   actualName: string;
   outputAlias: string;
   sheetName: string;
-  rangeRow: number;
-  rangeColumn: number;
-  rangeRowCount: number;
-  rangeColumnCount: number;
 }
 
 interface LocatedPivotRange {
@@ -1362,11 +1358,7 @@ function buildOnePivot(
     inputName: setup.pivotName,
     actualName: pivotName,
     outputAlias,
-    sheetName: sheet.getName(),
-    rangeRow: pivotRange.getRowIndex(),
-    rangeColumn: pivotRange.getColumnIndex(),
-    rangeRowCount: pivotRange.getRowCount(),
-    rangeColumnCount: pivotRange.getColumnCount()
+    sheetName: sheet.getName()
   });
   setPivotColumnWidths(
     sheet,
@@ -1597,13 +1589,8 @@ function findPivotRangeForLookup(
     const candidate = builtPivots[index];
     if (!pivotNameMatches(candidate.actualName, lookup.pivotName) && !pivotNameMatches(candidate.inputName, lookup.pivotName)) continue;
     if (lookup.sheetName && !sheetNameMatches(candidate.sheetName, candidate.outputAlias, lookup.sheetName)) continue;
-    return {
-      sheetName: candidate.sheetName,
-      rangeRow: candidate.rangeRow,
-      rangeColumn: candidate.rangeColumn,
-      rangeRowCount: candidate.rangeRowCount,
-      rangeColumnCount: candidate.rangeColumnCount
-    };
+    const builtRange = livePivotRangeForNames(workbook, candidate.sheetName, candidate.actualName, candidate.inputName);
+    if (builtRange) return builtRange;
   }
 
   const sheetName = lookup.sheetName ? findWorksheetNameForLookup(workbook, lookup.sheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
@@ -1612,6 +1599,28 @@ function findPivotRangeForLookup(
   const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
   const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
   if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'.`);
+  const range = pivot.getLayout().getRange();
+  return {
+    sheetName: sheet.getName(),
+    rangeRow: range.getRowIndex(),
+    rangeColumn: range.getColumnIndex(),
+    rangeRowCount: range.getRowCount(),
+    rangeColumnCount: range.getColumnCount()
+  };
+}
+
+function livePivotRangeForNames(
+  workbook: ExcelScript.Workbook,
+  sheetName: string,
+  actualName: string,
+  inputName: string
+): LocatedPivotRange | undefined {
+  const sheet = workbook.getWorksheet(sheetName);
+  if (!sheet) return undefined;
+  const pivot = sheet.getPivotTables().find(item =>
+    pivotNameMatches(item.getName(), actualName) || pivotNameMatches(item.getName(), inputName)
+  );
+  if (!pivot) return undefined;
   const range = pivot.getLayout().getRange();
   return {
     sheetName: sheet.getName(),
