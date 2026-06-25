@@ -1268,7 +1268,8 @@ function addCalculatedOutputs(
   specs.forEach((spec, specIndex) => {
     matrix[0][specIndex] = spec.label;
     if (spec.terms.some(term => isPivotLookupReference(term.reference))) {
-      if (spec.terms.every(term => parsePivotLookup(term.reference).allRows)) {
+      const lookupTerms = spec.terms.filter(term => isPivotLookupReference(term.reference));
+      if (lookupTerms.length > 0 && lookupTerms.every(term => parsePivotLookup(term.reference).allRows)) {
         for (let row = headerRowOffset + 1; row < values.length; row++) {
           const rowLabel = currentPivotRowLabel(values[row], rowColumnCount);
           if (!rowLabel) {
@@ -1289,7 +1290,7 @@ function addCalculatedOutputs(
 
     const formulaTerms = spec.terms.map(term => ({
       operator: term.operator,
-      zeroBasedColumn: calculatedOrPivotColumn(
+      operand: calculatedOrPivotOperand(
         specs,
         specIndex,
         term.reference,
@@ -1337,14 +1338,15 @@ function findPivotHeaderColumn(headerRow: CellValue[], header: string): number {
   throw new Error(`Calculated Columns could not find pivot header '${header}'.`);
 }
 
-function calculatedOrPivotColumn(
+function calculatedOrPivotOperand(
   specs: CalculationSpec[],
   currentSpecIndex: number,
   reference: string,
   headerRow: CellValue[],
   pivotStartColumn: number,
   outputStartColumn: number
-): number {
+): string | number {
+  if (isNumericLiteral(reference)) return normalizedNumberLiteral(reference);
   for (let index = 0; index < currentSpecIndex; index++) {
     if (equalsText(specs[index].label, reference)) return outputStartColumn + index;
   }
@@ -1366,12 +1368,12 @@ function isGrandTotalLabel(value: string): boolean {
 
 function rowCalculationFormula(
   zeroBasedRow: number,
-  terms: { operator: string; zeroBasedColumn: number }[]
+  terms: { operator: string; operand: string | number }[]
 ): string {
   let formula = "=";
   terms.forEach(term => {
-    const cellAddress = a1Address(zeroBasedRow, term.zeroBasedColumn);
-    formula += `${formula === "=" ? "" : term.operator}${cellAddress}`;
+    const operand = typeof term.operand === "number" ? a1Address(zeroBasedRow, term.operand) : term.operand;
+    formula += `${formula === "=" ? "" : term.operator}${operand}`;
   });
   return formula === "=" ? "" : formula;
 }
@@ -1384,6 +1386,10 @@ function pivotLookupFormula(
 ): string {
   let formula = "=";
   spec.terms.forEach(term => {
+    if (isNumericLiteral(term.reference)) {
+      formula += `${formula === "=" ? "" : term.operator}${normalizedNumberLiteral(term.reference)}`;
+      return;
+    }
     const lookup = parsePivotLookup(term.reference);
     if (lookup.allRows) lookup.rowLabel = rowLabelOverride;
     const address = lookupPivotCellAddress(workbook, currentSheet, lookup);
@@ -1576,7 +1582,7 @@ function parseCalculationSpecs(value: string): CalculationSpec[] {
   return splitSemicolon(value).map(piece => {
     const colon = piece.indexOf(":");
     if (colon < 1 || colon === piece.length - 1) {
-      throw new Error(`Calculated Columns must use Name: A+B, for example Total: Contactable+Non target.`);
+      throw new Error(`Calculated Columns must use Name: A+B, for example Rate: Contactable/Grand Total or USD: Amount*{THB to USD}.`);
     }
     const label = piece.slice(0, colon).trim();
     const expression = piece.slice(colon + 1).trim();
@@ -1586,11 +1592,13 @@ function parseCalculationSpecs(value: string): CalculationSpec[] {
       throw new Error(`Calculated Columns no longer accepts cell addresses like E4. Use pivot headers or PivotName[row=..., column=...].`);
     }
     const lookupBased = terms.some(term => isPivotLookupReference(term.reference));
-    if (lookupBased && terms.some(term => !isPivotLookupReference(term.reference))) {
-      throw new Error(`Calculated Columns cannot mix pivot lookups and pivot headers: ${piece}`);
+    if (lookupBased && terms.some(term => !isPivotLookupReference(term.reference) && !isNumericLiteral(term.reference))) {
+      throw new Error(`Calculated Columns can only mix pivot lookups with numeric constants: ${piece}`);
     }
     if (lookupBased) {
-      const lookups = terms.map(term => parsePivotLookup(term.reference));
+      const lookups = terms
+        .filter(term => isPivotLookupReference(term.reference))
+        .map(term => parsePivotLookup(term.reference));
       const allRows = lookups.some(lookup => lookup.allRows);
       if (allRows && lookups.some(lookup => !lookup.allRows)) {
         throw new Error(`Calculated Columns cannot mix row=* lookup and exact-row lookup: ${piece}`);
@@ -1609,7 +1617,8 @@ function parseCalculationTerms(expression: string): CalculationTerm[] {
     const previous = index > 0 ? expression[index - 1] : "";
     const next = index + 1 < expression.length ? expression[index + 1] : "";
     const isMinusOperator = character === "-" && previous === " " && next === " ";
-    if (character === "+" || isMinusOperator) {
+    const isOperator = character === "+" || character === "*" || character === "/" || isMinusOperator;
+    if (isOperator) {
       const reference = buffer.trim();
       if (reference) terms.push({ operator, reference });
       operator = character;
@@ -1625,6 +1634,16 @@ function parseCalculationTerms(expression: string): CalculationTerm[] {
 
 function isCellReference(value: string): boolean {
   return /^[A-Za-z]{1,3}\d{1,7}$/.test(value.trim());
+}
+
+function isNumericLiteral(value: string): boolean {
+  const normalized = value.trim().replace(/,/g, "");
+  if (!normalized) return false;
+  return /^-?\d+(\.\d+)?$/.test(normalized);
+}
+
+function normalizedNumberLiteral(value: string): string {
+  return value.trim().replace(/,/g, "");
 }
 
 function isPivotLookupReference(value: string): boolean {
