@@ -1389,6 +1389,8 @@ function buildOnePivot(
   });
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
+  pivot.getLayout().setShowFieldHeaders(true);
+  pivot.getLayout().setEnableFieldList(true);
   const pivotRange = pivot.getLayout().getRange();
   builtPivots.push({
     inputName: setup.pivotName,
