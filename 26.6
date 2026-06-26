@@ -1357,7 +1357,12 @@ function buildOnePivot(
     const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
     const hierarchy = pivot.getHierarchy(actual);
     if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Filter field not found: ${spec.field}`);
-    const added = pivot.addFilterHierarchy(hierarchy);
+    let added: ExcelScript.FilterPivotHierarchy;
+    try {
+      added = pivot.addFilterHierarchy(hierarchy);
+    } catch (error) {
+      throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${spec.field}' to Filters. Do not repeat the same field in Filters, Rows, and Values unless the filter has selected values. Detail: ${errorDetail(error)}`);
+    }
     added.setName(spec.field);
     const filterField = added.getFields()[0];
     if (spec.values.length > 0) {
@@ -1772,7 +1777,7 @@ function parseFilterSpecs(value: string, headers: string[] = []): FieldCondition
   const normalized = value.trim();
   if (!normalized) return [];
   const pieces = normalized.includes("=") ? splitFilterPieces(normalized, headers) : splitList(normalized);
-  return pieces.map(piece => {
+  const parsed = pieces.map(piece => {
     const equals = piece.indexOf("=");
     if (equals < 0) {
       const field = piece.trim();
@@ -1783,8 +1788,10 @@ function parseFilterSpecs(value: string, headers: string[] = []): FieldCondition
     const field = piece.slice(0, equals).trim();
     const rawValue = piece.slice(equals + 1).trim();
     if (!rawValue) throw new Error(`Filter value is blank: ${piece}`);
-    return { field, values: splitList(rawValue), rawValue };
+    const values = splitList(rawValue);
+    return { field, values, rawValue: values.join(", ") };
   }).filter(item => item.field !== "");
+  return mergeFilterSpecs(parsed);
 }
 
 function splitFilterPieces(value: string, headers: string[] = []): string[] {
@@ -1814,6 +1821,26 @@ function filterPieceStartsNewField(piece: string, headers: string[]): boolean {
   if (headers.length === 0) return true;
   const candidate = piece.slice(0, equals).trim();
   return headers.some(header => headerNamesMatch(header, candidate));
+}
+
+function mergeFilterSpecs(filters: FieldCondition[]): FieldCondition[] {
+  const result: FieldCondition[] = [];
+  filters.forEach(filter => {
+    const existing = result.find(item => headerNamesMatch(item.field, filter.field));
+    if (!existing) {
+      result.push({
+        field: filter.field,
+        values: distinct(filter.values),
+        rawValue: distinct(filter.values).join(", ")
+      });
+      return;
+    }
+    filter.values.forEach(value => {
+      if (!existing.values.some(current => equalsText(current, value))) existing.values.push(value);
+    });
+    existing.rawValue = existing.values.join(", ");
+  });
+  return result;
 }
 
 function parseConditions(value: string): FieldCondition[] {
