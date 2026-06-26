@@ -620,6 +620,11 @@ function validateSetups(setups: PivotSetup[], headers: string[]) {
       throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
     }
     try {
+      validateConditionCategories(conditions);
+    } catch (error) {
+      throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
+    }
+    try {
       parseCalculationSpecs(setup.calculations);
     } catch (error) {
       throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
@@ -849,10 +854,22 @@ function buildNormalizedSource(
 
     const parsedConditions = parseConditions(setup.conditions);
     if (parsedConditions.length > 0) {
+      validateConditionCategories(parsedConditions);
+      const categories = dataRows.map(row => conditionCategory(row, baseIndex, parsedConditions));
+      const selectedCategories = conditionSelectedItems(parsedConditions);
+      const missingCategories = selectedCategories.filter(category =>
+        !categories.some(actual => equalsText(actual, category))
+      );
+      if (missingCategories.length > 0) {
+        throw new Error(
+          `Setup row ${setup.sourceRow}: Conditions did not match any source rows: ${missingCategories.join(", ")}. ` +
+          "Check the field name and value spelling."
+        );
+      }
       addHelper(
         conditionGroupKey(setup.sourceRow, setup.conditions),
         `PB Condition - ${setup.pivotName}`,
-        dataRows.map(row => conditionCategory(row, baseIndex, parsedConditions))
+        categories
       );
     }
   });
@@ -1353,9 +1370,11 @@ function buildOnePivot(
     const selectedItems = distinct(conditionSelectedItems(conditions));
     try {
       added.getFields()[0].applyFilter({ manualFilter: { selectedItems } });
-    } catch (_ignored) {
-      // The categories still appear even if this Excel tenant refuses the
-      // initial blank-item exclusion filter.
+    } catch (error) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: Excel could not preselect the Condition columns. ` +
+        `Check the condition values. Detail: ${errorDetail(error)}`
+      );
     }
   }
 
@@ -1899,6 +1918,19 @@ function parseConditions(value: string): FieldCondition[] {
   return result;
 }
 
+function validateConditionCategories(conditions: FieldCondition[]) {
+  const categories = conditionSelectedItems(conditions);
+  const duplicate = categories.find((category, index) =>
+    categories.slice(0, index).some(previous => equalsText(previous, category))
+  );
+  if (duplicate) {
+    throw new Error(
+      `Conditions create the same column label '${duplicate}' more than once. ` +
+      "Give each condition a unique label, for example Contactable: Result=Success."
+    );
+  }
+}
+
 function conditionSelectedItems(conditions: FieldCondition[]): string[] {
   const result: string[] = [];
   conditions.forEach(condition => {
@@ -2046,8 +2078,7 @@ function conditionCategory(
   conditions: FieldCondition[]
 ): string {
   for (const condition of conditions) {
-    const index = headerIndex.get(lower(condition.field));
-    if (index === undefined) continue;
+    const index = requireHeader(headerIndex, condition.field, "Conditions");
     if (valueMatches(row[index], condition.values)) {
       return condition.caption || condition.rawValue;
     }
