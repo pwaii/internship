@@ -808,8 +808,9 @@ function buildNormalizedSource(
   const baseIndex = headerIndexMap(baseHeaders);
   const compactFilterFields: string[] = [];
   setups.forEach(setup => {
+    const rowFields = splitList(setup.rows);
     parseFilterSpecs(setup.filters, baseHeaders).forEach(spec => {
-      if (spec.values.length > 0 && !compactFilterFields.some(field => headerNamesMatch(field, spec.field))) {
+      if (spec.values.length > 0 && !containsText(rowFields, spec.field) && !compactFilterFields.some(field => headerNamesMatch(field, spec.field))) {
         compactFilterFields.push(spec.field);
       }
     });
@@ -1312,6 +1313,7 @@ function buildOnePivot(
   let rowColumnCount = 0;
   const rowCaptions: string[] = [];
   const addedRowFields: string[] = [];
+  const rowFilters = filters.filter(spec => spec.values.length > 0 && containsText(rowFields, spec.field));
   for (let position = 0; position < maxRows; position++) {
     const field = rowFields[position] || "";
     const rowName = rowNames[position] || "";
@@ -1324,6 +1326,15 @@ function buildOnePivot(
     try {
       const added = pivot.addRowHierarchy(hierarchy);
       if (caption) added.setName(caption);
+      const rowFilter = rowFilters.find(spec => headerNamesMatch(spec.field, actual));
+      if (rowFilter) {
+        try {
+          added.getFields()[0].applyFilter({ manualFilter: { selectedItems: rowFilter.values } });
+        } catch (_ignored) {
+          // Some Excel web tenants reject row label prefilters. Keep the row
+          // dropdown instead of failing the PivotTable build.
+        }
+      }
     } catch (error) {
       throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${actual}' to Rows. Remove duplicate Rows fields or move this field out of Values/Filters. Detail: ${errorDetail(error)}`);
     }
@@ -1339,7 +1350,7 @@ function buildOnePivot(
     if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Condition column field was not created. Tried '${actualHeader}'. Source headers: ${source.headers.join(", ")}`);
     const added = pivot.addColumnHierarchy(hierarchy);
     added.setName("Condition");
-    const selectedItems = distinct(conditions.map(condition => condition.caption || condition.rawValue));
+    const selectedItems = distinct(conditionSelectedItems(conditions));
     try {
       added.getFields()[0].applyFilter({ manualFilter: { selectedItems } });
     } catch (_ignored) {
@@ -1353,7 +1364,7 @@ function buildOnePivot(
     addDataHierarchy(pivot, source, actual, field);
   });
 
-  filters.forEach(spec => {
+  filters.filter(spec => !containsText(rowFields, spec.field)).forEach(spec => {
     const duplicateFilterField = source.helperByKey.get(filterKey(spec.field));
     const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
     const hierarchy = pivot.getHierarchy(actual);
@@ -1845,7 +1856,8 @@ function mergeFilterSpecs(filters: FieldCondition[]): FieldCondition[] {
 }
 
 function parseConditions(value: string): FieldCondition[] {
-  return splitSemicolon(value).map(piece => {
+  const result: FieldCondition[] = [];
+  splitSemicolon(value).forEach(piece => {
     const arrow = piece.indexOf("=>");
     let expression = arrow >= 0 ? piece.slice(0, arrow).trim() : piece.trim();
     const measureField = arrow >= 0 ? piece.slice(arrow + 2).trim() : "";
@@ -1862,14 +1874,39 @@ function parseConditions(value: string): FieldCondition[] {
     const field = expression.slice(0, adjustedEquals).trim();
     const rawValue = expression.slice(adjustedEquals + 1).trim();
     if (!rawValue) throw new Error(`Condition value is blank: ${piece}`);
-    return {
-      field,
-      values: splitList(rawValue),
-      rawValue,
-      measureField: measureField || undefined,
-      caption: caption || undefined
-    };
+    const values = splitList(rawValue);
+    if (caption || values.length <= 1) {
+      result.push({
+        field,
+        values,
+        rawValue,
+        measureField: measureField || undefined,
+        caption: caption || undefined
+      });
+      return;
+    }
+    values.forEach(singleValue => {
+      result.push({
+        field,
+        values: [singleValue],
+        rawValue: singleValue,
+        measureField: measureField || undefined
+      });
+    });
   });
+  return result;
+}
+
+function conditionSelectedItems(conditions: FieldCondition[]): string[] {
+  const result: string[] = [];
+  conditions.forEach(condition => {
+    if (condition.caption) {
+      result.push(condition.caption);
+      return;
+    }
+    condition.values.forEach(value => result.push(value));
+  });
+  return result;
 }
 
 function parseCalculationSpecs(value: string): CalculationSpec[] {
