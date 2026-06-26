@@ -1243,17 +1243,51 @@ function buildAllPivots(
 
 }
 
-function setPivotColumnWidths(
+function expandPivotTableLayout(
   sheet: ExcelScript.Worksheet,
-  startColumn: number,
-  columnCount: number,
+  pivotRange: ExcelScript.Range,
   rowColumnCount: number
 ) {
+  const startColumn = pivotRange.getColumnIndex();
+  const columnCount = pivotRange.getColumnCount();
+  const rowCount = pivotRange.getRowCount();
+  pivotRange.getFormat().setWrapText(false);
+  pivotRange.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  try {
+    pivotRange.getFormat().autofitColumns();
+  } catch (_ignored) {
+    // Some Excel web tenants reject autofit on PivotTable ranges. The manual
+    // width pass below still expands the pivot without failing the run.
+  }
+
+  const values = pivotRange.getValues() as CellValue[][];
   for (let offset = 0; offset < columnCount; offset++) {
     const column = sheet.getRangeByIndexes(0, startColumn + offset, 1, 1).getEntireColumn();
-    const width = offset < rowColumnCount ? OUTPUT_ROW_LABEL_COLUMN_WIDTH : OUTPUT_VALUE_COLUMN_WIDTH;
+    const maxLength = maxDisplayLength(values, offset);
+    const isRowLabelColumn = offset < Math.max(1, rowColumnCount);
+    const width = isRowLabelColumn
+      ? boundedWidth(maxLength, OUTPUT_ROW_LABEL_COLUMN_WIDTH, 360)
+      : boundedWidth(maxLength, OUTPUT_VALUE_COLUMN_WIDTH, 150);
     column.getFormat().setColumnWidth(width);
   }
+
+  if (rowCount > 0) {
+    pivotRange.getFormat().setRowHeight(22);
+  }
+}
+
+function maxDisplayLength(values: CellValue[][], columnOffset: number): number {
+  let result = 0;
+  values.forEach(row => {
+    if (columnOffset >= row.length) return;
+    result = Math.max(result, text(row[columnOffset]).length);
+  });
+  return result;
+}
+
+function boundedWidth(maxLength: number, minimum: number, maximum: number): number {
+  const estimated = Math.max(minimum, maxLength * 7 + 18);
+  return Math.min(maximum, estimated);
 }
 
 function removePreviousGeneratedOutputs(
@@ -1301,7 +1335,7 @@ function buildOnePivot(
   const titleRow = placement.row;
   const titleCol = placement.col;
   const summaryLines = pivotSummaryLines(setup);
-  const pivotStartRow = titleRow + 3 + summaryLines.length + filters.length;
+  const pivotStartRow = titleRow + 3 + summaryLines.length;
   const title = sheet.getCell(titleRow, titleCol);
   title.setValue(setup.pivotName);
   title.getFormat().getFont().setBold(true);
@@ -1420,12 +1454,7 @@ function buildOnePivot(
     rangeColumn: pivotRange.getColumnIndex(),
     values: pivotRange.getValues() as CellValue[][]
   });
-  setPivotColumnWidths(
-    sheet,
-    Math.min(titleCol, pivotRange.getColumnIndex()),
-    Math.max(1, pivotRange.getColumnCount()),
-    rowColumnCount
-  );
+  expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
   const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount, builtPivots);
   const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 5;
   const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + 4;
