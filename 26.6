@@ -13,9 +13,10 @@ const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 235;
 const OUTPUT_VALUE_COLUMN_WIDTH = 72;
-const OUTPUT_SUMMARY_BOX_MIN_COLUMNS = 4;
-const OUTPUT_SUMMARY_BOX_MAX_COLUMNS = 10;
-const OUTPUT_SUMMARY_BOX_COLUMN_WIDTH = 88;
+const OUTPUT_SUMMARY_BOX_MIN_COLUMNS = 6;
+const OUTPUT_SUMMARY_BOX_MAX_COLUMNS = 24;
+const OUTPUT_SUMMARY_BOX_COLUMN_WIDTH = 82;
+const OUTPUT_SUMMARY_OVERFLOW_BLOCKER_COLUMNS = 4;
 const MAX_RUN_SECONDS = 240;
 const CONTROLLED_STOP_PREFIX = "CONTROLLED_STOP:";
 
@@ -1286,6 +1287,36 @@ function expandPivotTableLayout(
   }
 }
 
+function writePivotTitleBox(
+  sheet: ExcelScript.Worksheet,
+  titleRow: number,
+  titleCol: number,
+  titleText: string,
+  columnCount: number
+) {
+  const box = sheet.getRangeByIndexes(titleRow, titleCol, 1, columnCount);
+  let merged = false;
+  try {
+    box.merge(false);
+    merged = true;
+  } catch (_ignored) {
+    // Occupy adjacent cells below so title text cannot visually spill into
+    // the next PivotTable when merge is unavailable.
+  }
+  const title = sheet.getCell(titleRow, titleCol);
+  title.setValue(titleText);
+  if (!merged) fillOverflowBlockers(sheet, titleRow, titleCol + 1, columnCount - 1);
+  fillOverflowBlockers(sheet, titleRow, titleCol + columnCount, OUTPUT_SUMMARY_OVERFLOW_BLOCKER_COLUMNS);
+  const format = box.getFormat();
+  format.getFill().setColor("#FFF2CC");
+  format.setWrapText(false);
+  format.setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  format.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  format.setRowHeight(24);
+  title.getFormat().getFont().setBold(true);
+  title.getFormat().getFont().setSize(14);
+}
+
 function writePivotSummaryBox(
   sheet: ExcelScript.Worksheet,
   titleRow: number,
@@ -1308,9 +1339,9 @@ function writePivotSummaryBox(
     const summaryCell = sheet.getCell(row, titleCol);
     summaryCell.setValue(line);
     if (!merged && columnCount > 1) {
-      const blockers: CellValue[][] = [Array.from({ length: columnCount - 1 }, () => " ")];
-      sheet.getRangeByIndexes(row, titleCol + 1, 1, columnCount - 1).setValues(blockers);
+      fillOverflowBlockers(sheet, row, titleCol + 1, columnCount - 1);
     }
+    fillOverflowBlockers(sheet, row, titleCol + columnCount, OUTPUT_SUMMARY_OVERFLOW_BLOCKER_COLUMNS);
     const format = box.getFormat();
     format.getFill().setColor("#FFFFFF");
     format.setWrapText(false);
@@ -1328,9 +1359,20 @@ function writePivotSummaryBox(
   });
 }
 
+function fillOverflowBlockers(
+  sheet: ExcelScript.Worksheet,
+  row: number,
+  startColumn: number,
+  columnCount: number
+) {
+  if (columnCount <= 0) return;
+  const blockers: CellValue[][] = [Array.from({ length: columnCount }, () => " ")];
+  sheet.getRangeByIndexes(row, startColumn, 1, columnCount).setValues(blockers);
+}
+
 function summaryDisplayColumnCount(summaryLines: string[]): number {
   const maxLength = summaryLines.reduce((max, line) => Math.max(max, line.length), 0);
-  const estimated = Math.ceil(maxLength / 14);
+  const estimated = Math.ceil(maxLength / 10);
   return Math.max(OUTPUT_SUMMARY_BOX_MIN_COLUMNS, Math.min(OUTPUT_SUMMARY_BOX_MAX_COLUMNS, estimated));
 }
 
@@ -1406,12 +1448,7 @@ function buildOnePivot(
   const summaryLines = pivotSummaryLines(setup);
   const summaryBoxColumns = summaryDisplayColumnCount(summaryLines);
   const pivotStartRow = titleRow + 3 + summaryLines.length;
-  const title = sheet.getCell(titleRow, titleCol);
-  title.setValue(setup.pivotName);
-  title.getFormat().getFont().setBold(true);
-  title.getFormat().getFont().setSize(14);
-  title.getFormat().getFill().setColor("#FFF2CC");
-  title.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
+  writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName, summaryBoxColumns);
   writePivotSummaryBox(sheet, titleRow, titleCol, summaryLines, summaryBoxColumns);
 
   const pivotName = uniquePivotName(workbook, setup.pivotName);
@@ -1522,7 +1559,7 @@ function buildOnePivot(
   const reportFilterBottom = filters.length > 0 ? pivotStartRow + filters.length - 1 : pivotStartRow;
   const bottom = Math.max(titleRow + 1, reportFilterBottom, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 6;
   const summaryRight = titleCol + summaryBoxColumns - 1;
-  const rightBuffer = filters.length > 0 ? 8 : 4;
+  const rightBuffer = filters.length > 0 ? OUTPUT_SUMMARY_OVERFLOW_BLOCKER_COLUMNS + 6 : OUTPUT_SUMMARY_OVERFLOW_BLOCKER_COLUMNS + 2;
   const right = Math.max(summaryRight, titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + rightBuffer;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight) {
