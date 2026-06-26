@@ -1287,6 +1287,39 @@ function expandPivotTableLayout(
   }
 }
 
+function addTopFilterHierarchies(
+  pivot: ExcelScript.PivotTable,
+  source: SourceModel,
+  setup: PivotSetup,
+  filters: FieldCondition[]
+) {
+  filters.forEach(spec => {
+    const duplicateFilterField = source.helperByKey.get(filterKey(spec.field));
+    const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
+    const hierarchy = pivot.getHierarchy(actual);
+    if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Filter field not found: ${spec.field}`);
+    let added: ExcelScript.FilterPivotHierarchy;
+    try {
+      added = pivot.addFilterHierarchy(hierarchy);
+    } catch (error) {
+      throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${spec.field}' to Filters. Do not repeat the same field in Filters, Rows, and Values unless the filter has selected values. Detail: ${errorDetail(error)}`);
+    }
+    added.setName(spec.field);
+    const filterField = added.getFields()[0];
+    if (spec.values.length > 0) {
+      const selectedItems = duplicateFilterField
+        ? distinct(spec.values.map(value => normalizedCategoryValue(value)))
+        : spec.values.map(value => normalizedCategoryValue(value));
+      try {
+        filterField.applyFilter({ manualFilter: { selectedItems } });
+      } catch (_ignored) {
+        // Keep the filter dropdown when a requested item is absent, but leave
+        // it unselected instead of failing the entire PivotTable build.
+      }
+    }
+  });
+}
+
 function writePivotTitleBox(
   sheet: ExcelScript.Worksheet,
   titleRow: number,
@@ -1465,6 +1498,8 @@ function buildOnePivot(
   const rowCaptions: string[] = [];
   const addedRowFields: string[] = [];
   const rowFilters = filters.filter(spec => spec.values.length > 0 && containsText(rowFields, spec.field));
+  const topFilters = filters.filter(spec => !containsText(rowFields, spec.field));
+  addTopFilterHierarchies(pivot, source, setup, topFilters);
   for (let position = 0; position < maxRows; position++) {
     const field = rowFields[position] || "";
     const rowName = rowNames[position] || "";
@@ -1515,30 +1550,6 @@ function buildOnePivot(
   valueFields.forEach(field => {
     const actual = requirePivotHeader(source, field);
     addDataHierarchy(pivot, source, actual, field);
-  });
-
-  filters.filter(spec => !containsText(rowFields, spec.field)).forEach(spec => {
-    const duplicateFilterField = source.helperByKey.get(filterKey(spec.field));
-    const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
-    const hierarchy = pivot.getHierarchy(actual);
-    if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Filter field not found: ${spec.field}`);
-    let added: ExcelScript.FilterPivotHierarchy;
-    try {
-      added = pivot.addFilterHierarchy(hierarchy);
-    } catch (error) {
-      throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${spec.field}' to Filters. Do not repeat the same field in Filters, Rows, and Values unless the filter has selected values. Detail: ${errorDetail(error)}`);
-    }
-    added.setName(spec.field);
-    const filterField = added.getFields()[0];
-    if (spec.values.length > 0) {
-      const selectedItems = duplicateFilterField ? distinct(spec.values.map(value => normalizedCategoryValue(value))) : spec.values.map(value => normalizedCategoryValue(value));
-      try {
-        filterField.applyFilter({ manualFilter: { selectedItems } });
-      } catch (_ignored) {
-        // Keep the filter dropdown when a requested item is absent, but leave
-        // it unselected instead of failing the entire PivotTable build.
-      }
-    }
   });
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
