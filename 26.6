@@ -1250,8 +1250,7 @@ function buildAllPivots(
 function expandPivotTableLayout(
   sheet: ExcelScript.Worksheet,
   pivotRange: ExcelScript.Range,
-  rowColumnCount: number,
-  filters: FieldCondition[]
+  rowColumnCount: number
 ) {
   const startColumn = pivotRange.getColumnIndex();
   const columnCount = pivotRange.getColumnCount();
@@ -1268,19 +1267,14 @@ function expandPivotTableLayout(
   const values = pivotRange.getValues() as CellValue[][];
   for (let offset = 0; offset < columnCount; offset++) {
     const column = sheet.getRangeByIndexes(0, startColumn + offset, 1, 1).getEntireColumn();
-    const maxLength = Math.max(
-      maxDisplayLength(values, offset),
-      maxReportFilterDisplayLength(filters, offset)
-    );
+    const maxLength = maxDisplayLength(values, offset);
     const isRowLabelColumn = offset < Math.max(1, rowColumnCount);
-    const hasReportFilterValue = filters.length > 0 && offset === 1;
-    const width = hasReportFilterValue
-      ? boundedWidth(maxLength, 90, 220)
-      : isRowLabelColumn
+    const width = isRowLabelColumn
       ? boundedWidth(maxLength, OUTPUT_ROW_LABEL_COLUMN_WIDTH, 280)
       : boundedWidth(maxLength, OUTPUT_VALUE_COLUMN_WIDTH, 115);
     column.getFormat().setColumnWidth(width);
   }
+  applyCommaNumberFormat(pivotRange, values);
 
   if (rowCount > 0) {
     pivotRange.getFormat().setRowHeight(22);
@@ -1335,11 +1329,6 @@ function preparePivotOutputArea(
   } catch (_ignored) {
     // Existing merged cells can block PivotTable spill. If Excel refuses the
     // broad unmerge, later plain-cell writes still avoid creating new merges.
-  }
-  try {
-    area.clear(ExcelScript.ClearApplyTo.contents);
-  } catch (_ignored) {
-    // Clearing is best-effort; the output sheet is normally new or replaceable.
   }
 }
 
@@ -1409,17 +1398,6 @@ function setDescriptionColumnWidths(sheet: ExcelScript.Worksheet, startColumn: n
   }
 }
 
-function maxReportFilterDisplayLength(filters: FieldCondition[], columnOffset: number): number {
-  if (filters.length === 0) return 0;
-  if (columnOffset === 0) {
-    return filters.reduce((max, filter) => Math.max(max, filter.field.length), 0);
-  }
-  if (columnOffset === 1) {
-    return filters.reduce((max, filter) => Math.max(max, filter.values.join(", ").length), 0);
-  }
-  return 0;
-}
-
 function maxDisplayLength(values: CellValue[][], columnOffset: number): number {
   let result = 0;
   values.forEach(row => {
@@ -1432,6 +1410,16 @@ function maxDisplayLength(values: CellValue[][], columnOffset: number): number {
 function boundedWidth(maxLength: number, minimum: number, maximum: number): number {
   const estimated = Math.max(minimum, maxLength * 5.6 + 14);
   return Math.min(maximum, estimated);
+}
+
+function applyCommaNumberFormat(range: ExcelScript.Range, values: CellValue[][]) {
+  if (values.length === 0 || values[0].length === 0) return;
+  const formats = values.map(row => row.map(value => typeof value === "number" ? "#,##0" : "General"));
+  try {
+    range.setNumberFormat(formats);
+  } catch (_ignored) {
+    // Formatting should never block PivotTable creation.
+  }
 }
 
 function removePreviousGeneratedOutputs(
@@ -1565,7 +1553,7 @@ function buildOnePivot(
     rangeColumn: pivotRange.getColumnIndex(),
     values: pivotRange.getValues() as CellValue[][]
   });
-  expandPivotTableLayout(sheet, pivotRange, rowColumnCount, filters);
+  expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
   const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount, builtPivots);
   const reportFilterBottom = topFilters.length > 0 ? pivotStartRow + topFilters.length - 1 : pivotStartRow;
   const bottom = Math.max(titleRow + 1, reportFilterBottom, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 6;
@@ -1656,6 +1644,12 @@ function addCalculatedOutputs(
   const outputRange = sheet.getRangeByIndexes(outputStartRow, outputStartColumn, outputRowCount, specs.length);
   outputRange.getFormat().getFill().setColor("#D9EAD3");
   outputRange.getFormat().setWrapText(false);
+  const numberFormats = matrix.map(row => row.map((_value, rowIndex) => rowIndex === 0 ? "General" : "#,##0"));
+  try {
+    outputRange.setNumberFormat(numberFormats);
+  } catch (_ignored) {
+    // Keep calculated formulas even if a tenant rejects number formatting.
+  }
   for (let offset = 0; offset < specs.length; offset++) {
     const width = boundedWidth(maxDisplayLength(matrix, offset), OUTPUT_VALUE_COLUMN_WIDTH, 130);
     sheet.getRangeByIndexes(0, outputStartColumn + offset, 1, 1).getEntireColumn().getFormat().setColumnWidth(width);
