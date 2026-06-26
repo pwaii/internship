@@ -11,10 +11,10 @@ const SOURCE_SHEET = "__PivotSource";
 const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
-const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 235;
-const OUTPUT_VALUE_COLUMN_WIDTH = 72;
+const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 105;
+const OUTPUT_VALUE_COLUMN_WIDTH = 54;
 const OUTPUT_DESCRIPTION_COLUMNS = 4;
-const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 78;
+const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 58;
 const OUTPUT_DESCRIPTION_SPACER_ROWS = 2;
 const OUTPUT_NEXT_RIGHT_GAP_COLUMNS = 2;
 const MAX_RUN_SECONDS = 240;
@@ -1275,10 +1275,10 @@ function expandPivotTableLayout(
     const isRowLabelColumn = offset < Math.max(1, rowColumnCount);
     const hasReportFilterValue = filters.length > 0 && offset === 1;
     const width = hasReportFilterValue
-      ? boundedWidth(maxLength, 120, 280)
+      ? boundedWidth(maxLength, 90, 220)
       : isRowLabelColumn
-      ? boundedWidth(maxLength, OUTPUT_ROW_LABEL_COLUMN_WIDTH, 360)
-      : boundedWidth(maxLength, OUTPUT_VALUE_COLUMN_WIDTH, 150);
+      ? boundedWidth(maxLength, OUTPUT_ROW_LABEL_COLUMN_WIDTH, 280)
+      : boundedWidth(maxLength, OUTPUT_VALUE_COLUMN_WIDTH, 115);
     column.getFormat().setColumnWidth(width);
   }
 
@@ -1430,7 +1430,7 @@ function maxDisplayLength(values: CellValue[][], columnOffset: number): number {
 }
 
 function boundedWidth(maxLength: number, minimum: number, maximum: number): number {
-  const estimated = Math.max(minimum, maxLength * 7 + 18);
+  const estimated = Math.max(minimum, maxLength * 5.6 + 14);
   return Math.min(maximum, estimated);
 }
 
@@ -1657,7 +1657,8 @@ function addCalculatedOutputs(
   outputRange.getFormat().getFill().setColor("#D9EAD3");
   outputRange.getFormat().setWrapText(false);
   for (let offset = 0; offset < specs.length; offset++) {
-    sheet.getRangeByIndexes(0, outputStartColumn + offset, 1, 1).getEntireColumn().getFormat().setColumnWidth(115);
+    const width = boundedWidth(maxDisplayLength(matrix, offset), OUTPUT_VALUE_COLUMN_WIDTH, 130);
+    sheet.getRangeByIndexes(0, outputStartColumn + offset, 1, 1).getEntireColumn().getFormat().setColumnWidth(width);
   }
 
   return {
