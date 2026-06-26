@@ -1246,7 +1246,8 @@ function buildAllPivots(
 function expandPivotTableLayout(
   sheet: ExcelScript.Worksheet,
   pivotRange: ExcelScript.Range,
-  rowColumnCount: number
+  rowColumnCount: number,
+  filters: FieldCondition[]
 ) {
   const startColumn = pivotRange.getColumnIndex();
   const columnCount = pivotRange.getColumnCount();
@@ -1263,9 +1264,15 @@ function expandPivotTableLayout(
   const values = pivotRange.getValues() as CellValue[][];
   for (let offset = 0; offset < columnCount; offset++) {
     const column = sheet.getRangeByIndexes(0, startColumn + offset, 1, 1).getEntireColumn();
-    const maxLength = maxDisplayLength(values, offset);
+    const maxLength = Math.max(
+      maxDisplayLength(values, offset),
+      maxReportFilterDisplayLength(filters, offset)
+    );
     const isRowLabelColumn = offset < Math.max(1, rowColumnCount);
-    const width = isRowLabelColumn
+    const hasReportFilterValue = filters.length > 0 && offset === 1;
+    const width = hasReportFilterValue
+      ? boundedWidth(maxLength, 120, 280)
+      : isRowLabelColumn
       ? boundedWidth(maxLength, OUTPUT_ROW_LABEL_COLUMN_WIDTH, 360)
       : boundedWidth(maxLength, OUTPUT_VALUE_COLUMN_WIDTH, 150);
     column.getFormat().setColumnWidth(width);
@@ -1274,6 +1281,17 @@ function expandPivotTableLayout(
   if (rowCount > 0) {
     pivotRange.getFormat().setRowHeight(22);
   }
+}
+
+function maxReportFilterDisplayLength(filters: FieldCondition[], columnOffset: number): number {
+  if (filters.length === 0) return 0;
+  if (columnOffset === 0) {
+    return filters.reduce((max, filter) => Math.max(max, filter.field.length), 0);
+  }
+  if (columnOffset === 1) {
+    return filters.reduce((max, filter) => Math.max(max, filter.values.join(", ").length), 0);
+  }
+  return 0;
 }
 
 function maxDisplayLength(values: CellValue[][], columnOffset: number): number {
@@ -1454,10 +1472,12 @@ function buildOnePivot(
     rangeColumn: pivotRange.getColumnIndex(),
     values: pivotRange.getValues() as CellValue[][]
   });
-  expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
+  expandPivotTableLayout(sheet, pivotRange, rowColumnCount, filters);
   const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount, builtPivots);
-  const bottom = Math.max(titleRow + 1, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 5;
-  const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + 4;
+  const reportFilterBottom = filters.length > 0 ? pivotStartRow + filters.length - 1 : pivotStartRow;
+  const bottom = Math.max(titleRow + 1, reportFilterBottom, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 6;
+  const rightBuffer = filters.length > 0 ? 8 : 4;
+  const right = Math.max(titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + rightBuffer;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight) {
     placement.col = right;
