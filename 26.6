@@ -1334,8 +1334,9 @@ function buildOnePivot(
 
   if (conditions.length > 0) {
     const actual = requiredHelper(source, conditionGroupKey(setup.sourceRow, setup.conditions));
-    const hierarchy = pivot.getHierarchy(actual);
-    if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Condition column field was not created.`);
+    const actualHeader = requirePivotHeader(source, actual);
+    const hierarchy = pivot.getHierarchy(actualHeader);
+    if (!hierarchy) throw new Error(`Setup row ${setup.sourceRow}: Condition column field was not created. Tried '${actualHeader}'. Source headers: ${source.headers.join(", ")}`);
     const added = pivot.addColumnHierarchy(hierarchy);
     added.setName("Condition");
     const selectedItems = distinct(conditions.map(condition => condition.caption || condition.rawValue));
@@ -2208,5 +2209,5 @@ function filterKey(field: string): string {
 }
 
 function conditionGroupKey(sourceRow: number, conditions: string): string {
-  return `condition-group|${lower(conditions)}`;
+  return `condition-group|${sourceRow}|${lower(conditions)}`;
 }
