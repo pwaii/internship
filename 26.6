@@ -101,6 +101,7 @@ interface SourceModel {
   sourceSheetName: string;
   sourceAddress: string;
   headers: string[];
+  parseHeaders: string[];
   baseHeaders: string[];
   helperByKey: Map<string, string>;
   numericByHeader: Map<string, boolean>;
@@ -737,6 +738,7 @@ function buildDirectSource(
       used.getColumnIndex()
     ),
     headers,
+    parseHeaders: headers,
     baseHeaders: headers,
     helperByKey: new Map<string, string>(),
     numericByHeader
@@ -874,7 +876,7 @@ function buildNormalizedSource(
   const sourceAddress = worksheetRangeAddress(helper.getName(), matrix.length, finalHeaders.length);
   const numericByHeader = new Map<string, boolean>();
   finalHeaders.forEach((header, col) => numericByHeader.set(lower(header), columnLooksNumeric(finalRows, col)));
-  return { sourceSheetName: helper.getName(), sourceAddress, headers: finalHeaders, baseHeaders: outputBaseIndexes.map(index => baseHeaders[index]), helperByKey, numericByHeader };
+  return { sourceSheetName: helper.getName(), sourceAddress, headers: finalHeaders, parseHeaders: allHeaders, baseHeaders: outputBaseIndexes.map(index => baseHeaders[index]), helperByKey, numericByHeader };
 }
 
 function finalSourceBaseIndexes(
@@ -1270,7 +1272,7 @@ function buildOnePivot(
   const rowFields = splitList(setup.rows);
   const rowNames = splitList(setup.rowNames);
   const valueFields = splitList(setup.values);
-  const filters = parseFilterSpecs(setup.filters, source.headers);
+  const filters = parseFilterSpecs(setup.filters, source.parseHeaders);
   const conditions = parseConditions(setup.conditions);
   conditions.forEach(condition => {
     if (condition.measureField && !containsText(valueFields, condition.measureField)) {
