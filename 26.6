@@ -16,6 +16,7 @@ const OUTPUT_VALUE_COLUMN_WIDTH = 72;
 const OUTPUT_DESCRIPTION_COLUMNS = 4;
 const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 78;
 const OUTPUT_DESCRIPTION_SPACER_ROWS = 2;
+const OUTPUT_NEXT_RIGHT_GAP_COLUMNS = 2;
 const MAX_RUN_SECONDS = 240;
 const CONTROLLED_STOP_PREFIX = "CONTROLLED_STOP:";
 
@@ -1569,8 +1570,9 @@ function buildOnePivot(
   const reportFilterBottom = topFilters.length > 0 ? pivotStartRow + topFilters.length - 1 : pivotStartRow;
   const bottom = Math.max(titleRow + 1, reportFilterBottom, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 6;
   const summaryRight = titleCol + OUTPUT_DESCRIPTION_COLUMNS - 1;
-  const rightBuffer = topFilters.length > 0 ? topFilters.length + 6 : 4;
-  const right = Math.max(summaryRight, titleCol, pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1, calculatedExtent.rightColumn) + rightBuffer;
+  const pivotRight = pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1;
+  const actualTableRight = Math.max(pivotRight, calculatedExtent.rightColumn);
+  const right = Math.max(summaryRight, actualTableRight) + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight) {
     placement.col = right;
