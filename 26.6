@@ -26,7 +26,7 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
-const SETUP_STYLE_VERSION = "PB_STYLE_6";
+const SETUP_STYLE_VERSION = "PB_STYLE_7";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "Replace previous outputs",
@@ -301,6 +301,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
     O: 25, P: 145, Q: 25, R: 25, S: 145, T: 145, U: 145
   };
   Object.keys(widths).forEach(column => sheet.getRange(`${column}:${column}`).getFormat().setColumnWidth(widths[column]));
+  sheet.getRange("D:E").setColumnHidden(false);
   sheet.getRange("H:H").setColumnHidden(true);
   sheet.getRange("L:L").setColumnHidden(true);
   sheet.getFreezePanes().freezeRows(8);
@@ -350,6 +351,7 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("P1:U1").merge(false);
   sheet.getRange("U3").setValue("Output Sheet Choices");
   seedMonthlyInputs(sheet);
+  sheet.getRange("D:E").setColumnHidden(false);
   sheet.getRange("H:H").setColumnHidden(true);
   sheet.getRange("L:L").setColumnHidden(true);
 }
