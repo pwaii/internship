@@ -258,6 +258,7 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("A3:N7").getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   sheet.getRange("A3:N7").getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
 
+  sheet.getRange(`A8:N${LAST_SETUP_ROW}`).unmerge();
   const headers = sheet.getRange("A8:N8");
   headers.getFormat().getFill().setColor(black);
   headers.getFormat().getFont().setColor(white);
@@ -339,6 +340,7 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("A7").setValue("Status");
   sheet.getRange("B7:N7").unmerge();
   sheet.getRange("B7:N7").merge(false);
+  sheet.getRange(`A8:N${LAST_SETUP_ROW}`).unmerge();
   sheet.getRange("A8:N8").setValues([[
     "Template", "Pivot Name", "Output Sheet", "Output Behavior", "Rows", "Row Names",
     "Calculated Columns", "", "Values To Count/Sum", "Filters", "Conditions",
