@@ -190,7 +190,7 @@ IMPORTANT DENEB SETUP
       "transform": [
         {
           "type": "filter",
-          "expr": "isValid(datum.Date) && isValid(datum.Price) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo == selectedCohort"
+          "expr": "isValid(datum.Date) && isValid(datum.Price)"
         },
         {
           "type": "formula",
@@ -1667,3 +1667,4 @@ IMPORTANT DENEB SETUP
     }
   ]
 }
+
