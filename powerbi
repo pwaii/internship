@@ -1,22 +1,49 @@
-DENEB MINIMAL GRAPH QA
+POWER BI DENEB - SINGLE-CANVAS VEGA DASHBOARD
 
-Add exactly these fields to Deneb Values:
+This version contains no Vega-Lite vconcat and cannot create duplicate
+height signals.
+
+The dashboard displays the Company, Product, and Cohort selected by Power BI's external filter context. The three dark boxes are display-only and contain no internal dropdown signals.
+
+DATA SOURCE
+Import: AIA PowerBI One Sheet Database.xlsx
+Sheet: PowerBI_Data
+
+ADD THESE FIELDS TO DENEB VALUES
 - Company
 - ProductName
+- IndexName
+- Currency
 - CohortNo
-- Date (use Date, not Date hierarchy)
+- ParticipationRate
+- CapRate
+- FloorRate
+- IndexBaseValue
+- Date
 - Price
 
-Set CohortNo and Price to Don't summarize.
-Create new specification > Vega > Empty.
-Paste only the JSON below.
+IMPORTANT DENEB SETUP
+1. Create a new Deneb visual.
+2. Add all 11 fields above.
+3. Choose Create new specification.
+4. Choose Vega, not Vega-Lite.
+5. Choose Empty.
+6. Paste only the JSON below.
+7. Select Apply.
 
+================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "AIA Index Intelligence dashboard using one Vega canvas.",
   "background": "#071120",
-  "width": 900,
-  "height": 460,
-  "padding": 20,
+  "width": 1500,
+  "height": 900,
+  "padding": 0,
+  "autosize": {
+    "type": "fit",
+    "contains": "padding",
+    "resize": true
+  },
   "data": [
     {
       "name": "dataset"
@@ -27,19 +54,117 @@ Paste only the JSON below.
       "transform": [
         {
           "type": "formula",
+          "expr": "toDate(datum.Date)",
+          "as": "ParsedDate"
+        },
+        {
+          "type": "formula",
           "expr": "toNumber(datum.Price)",
           "as": "NumericPrice"
         },
         {
+          "type": "formula",
+          "expr": "toNumber(datum.CohortNo)",
+          "as": "NumericCohort"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.IndexBaseValue)",
+          "as": "NumericBase"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.ParticipationRate)",
+          "as": "NumericParticipation"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.CapRate)",
+          "as": "NumericCap"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.FloorRate)",
+          "as": "NumericFloor"
+        },
+        {
           "type": "filter",
-          "expr": "isFinite(datum.NumericPrice)"
+          "expr": "isValid(datum.ParsedDate) && isFinite(datum.NumericPrice)"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.NumericBase > 0 ? datum.NumericPrice / datum.NumericBase * 100 : 100",
+          "as": "DisplayIndex"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.NumericBase > 0 ? datum.NumericPrice / datum.NumericBase - 1 : 0",
+          "as": "DisplayRawReturn"
+        },
+        {
+          "type": "formula",
+          "expr": "100 * (1 + min(max(datum.DisplayRawReturn * datum.NumericParticipation, datum.NumericFloor), datum.NumericCap))",
+          "as": "DisplayProduct"
         },
         {
           "type": "collect",
           "sort": {
-            "field": "Date",
+            "field": "ParsedDate",
             "order": "ascending"
           }
+        }
+      ]
+    },
+    {
+      "name": "latest",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "collect",
+          "sort": {
+            "field": "ParsedDate",
+            "order": "descending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "rowNumber"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.rowNumber === 1"
+        }
+      ]
+    },
+    {
+      "name": "summary",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "max",
+            "min",
+            "max",
+            "min"
+          ],
+          "fields": [
+            "IndexNormalized",
+            "IndexNormalized",
+            "ProductValue",
+            "ProductValue"
+          ],
+          "as": [
+            "MaxIndex",
+            "MinIndex",
+            "MaxProduct",
+            "MinProduct"
+          ]
         }
       ]
     }
@@ -50,23 +175,23 @@ Paste only the JSON below.
       "type": "point",
       "domain": {
         "data": "chartData",
-        "field": "Date"
+        "field": "ParsedDate"
       },
       "range": [
-        70,
-        880
+        260,
+        1430
       ]
     },
     {
       "name": "y",
       "type": "linear",
-      "domain": {
-        "data": "chartData",
-        "field": "NumericPrice"
-      },
+      "domain": [
+        70,
+        140
+      ],
       "range": [
-        420,
-        100
+        830,
+        570
       ],
       "nice": true,
       "zero": false
@@ -76,36 +201,548 @@ Paste only the JSON below.
     {
       "orient": "bottom",
       "scale": "x",
-      "labels": false,
-      "ticks": false,
-      "domainColor": "#51617B"
+      "position": 830,
+      "labelColor": "#8EACDF",
+      "labelFontSize": 11,
+      "labelPadding": 10,
+      "tickColor": "#51617B",
+      "domainColor": "#51617B",
+      "grid": false
     },
     {
       "orient": "left",
       "scale": "y",
+      "position": 260,
       "labelColor": "#8EACDF",
+      "labelFontSize": 11,
+      "labelPadding": 8,
       "tickColor": "#51617B",
       "domainColor": "#51617B",
       "grid": true,
-      "gridColor": "#263A56"
+      "gridColor": "#2A3A55",
+      "gridOpacity": 0.55,
+      "gridDash": [
+        3,
+        4
+      ]
     }
   ],
   "marks": [
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 70
+          },
+          "fill": {
+            "value": "#08111F"
+          },
+          "stroke": {
+            "value": "#26344B"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 28
+          },
+          "y": {
+            "value": 18
+          },
+          "width": {
+            "value": 36
+          },
+          "height": {
+            "value": 36
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#ED1B2F"
+          }
+        }
+      }
+    },
     {
       "type": "text",
       "encode": {
         "enter": {
           "x": {
-            "value": 20
+            "value": 46
           },
           "y": {
-            "value": 35
+            "value": 37
+          },
+          "text": {
+            "value": "A"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "white"
+          },
+          "fontSize": {
+            "value": 17
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 78
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "Index Intelligence"
+          },
+          "baseline": {
+            "value": "middle"
           },
           "fill": {
             "value": "#FFFFFF"
           },
           "fontSize": {
-            "value": 18
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 225
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "by AIA Product Dev"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 13
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 70
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 126
+          },
+          "fill": {
+            "value": "#091425"
+          },
+          "stroke": {
+            "value": "#26344B"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 48
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Product Viewer"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 210
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Comparator"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 14
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 350
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Index Dashboard"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 14
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 28
+          },
+          "x2": {
+            "value": 166
+          },
+          "y": {
+            "value": 125
+          },
+          "stroke": {
+            "value": "#ED1B2F"
+          },
+          "strokeWidth": {
+            "value": 3
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 180
+          },
+          "y": {
+            "value": 154
+          },
+          "x2": {
+            "value": 620
+          },
+          "y2": {
+            "value": 206
+          },
+          "cornerRadius": {
+            "value": 6
+          },
+          "fill": {
+            "value": "#22324D"
+          },
+          "stroke": {
+            "value": "#3A4D6D"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 635
+          },
+          "y": {
+            "value": 154
+          },
+          "x2": {
+            "value": 1075
+          },
+          "y2": {
+            "value": 206
+          },
+          "cornerRadius": {
+            "value": 6
+          },
+          "fill": {
+            "value": "#22324D"
+          },
+          "stroke": {
+            "value": "#3A4D6D"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1090
+          },
+          "y": {
+            "value": 154
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 206
+          },
+          "cornerRadius": {
+            "value": 6
+          },
+          "fill": {
+            "value": "#22324D"
+          },
+          "stroke": {
+            "value": "#3A4D6D"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 198
+          },
+          "y": {
+            "value": 181
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 15
+          },
+          "baseline": {
+            "value": "middle"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.Company"
+          }
+        }
+      },
+      "from": {
+        "data": "latest"
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 653
+          },
+          "y": {
+            "value": 181
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 15
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "limit": {
+            "value": 400
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.ProductName"
+          }
+        }
+      },
+      "from": {
+        "data": "latest"
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1108
+          },
+          "y": {
+            "value": 181
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 15
+          },
+          "baseline": {
+            "value": "middle"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "'Cohort ' + datum.CohortNo"
+          }
+        }
+      },
+      "from": {
+        "data": "latest"
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 180
+          },
+          "y": {
+            "value": 230
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 300
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#22324D"
+          },
+          "stroke": {
+            "value": "#ED1B2F"
+          },
+          "strokeWidth": {
+            "value": 2
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 205
+          },
+          "y": {
+            "value": 252
+          },
+          "text": {
+            "value": "Index"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        },
+        "update": {
+          "text": {
+            "value": "Index"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 205
+          },
+          "y": {
+            "value": 278
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 16
           },
           "fontWeight": {
             "value": "bold"
@@ -113,7 +750,568 @@ Paste only the JSON below.
         },
         "update": {
           "text": {
-            "signal": "'Power BI rows: ' + length(data('dataset')) + ' | Chart rows: ' + length(data('chartData'))"
+            "signal": "datum.IndexName"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 410
+          },
+          "y": {
+            "value": 252
+          },
+          "text": {
+            "value": "Participation Rate"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 410
+          },
+          "y": {
+            "value": 278
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(datum.ParticipationRate, '.0%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 620
+          },
+          "y": {
+            "value": 252
+          },
+          "text": {
+            "value": "Cap Rate"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 620
+          },
+          "y": {
+            "value": 278
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(datum.CapRate, '.0%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 785
+          },
+          "y": {
+            "value": 252
+          },
+          "text": {
+            "value": "Floor"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 785
+          },
+          "y": {
+            "value": 278
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(datum.FloorRate, '.0%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 180
+          },
+          "y": {
+            "value": 325
+          },
+          "x2": {
+            "value": 475
+          },
+          "y2": {
+            "value": 425
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#22324D"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 490
+          },
+          "y": {
+            "value": 325
+          },
+          "x2": {
+            "value": 785
+          },
+          "y2": {
+            "value": 425
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#22324D"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 800
+          },
+          "y": {
+            "value": 325
+          },
+          "x2": {
+            "value": 1095
+          },
+          "y2": {
+            "value": 425
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#22324D"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1110
+          },
+          "y": {
+            "value": 325
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 425
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#22324D"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 327
+          },
+          "y": {
+            "value": 355
+          },
+          "text": {
+            "value": "Index Return"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        },
+        "update": {
+          "text": {
+            "value": "Index Return"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 327
+          },
+          "y": {
+            "value": 395
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#00D26A"
+          },
+          "fontSize": {
+            "value": 27
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(datum.DisplayIndex / 100 - 1, '+.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 637
+          },
+          "y": {
+            "value": 355
+          },
+          "text": {
+            "value": "Product Return"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 637
+          },
+          "y": {
+            "value": 395
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#00D26A"
+          },
+          "fontSize": {
+            "value": 27
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(datum.DisplayProduct / 100 - 1, '+.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "summary"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 947
+          },
+          "y": {
+            "value": 355
+          },
+          "text": {
+            "value": "Max Upside"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "summary"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 947
+          },
+          "y": {
+            "value": 395
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#00D26A"
+          },
+          "fontSize": {
+            "value": 27
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(datum.MaxProduct / 100 - 1, '+.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "summary"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1270
+          },
+          "y": {
+            "value": 355
+          },
+          "text": {
+            "value": "Max Drawdown"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "summary"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1270
+          },
+          "y": {
+            "value": 395
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#9CB4DB"
+          },
+          "fontSize": {
+            "value": 27
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "format(min(0, datum.MinIndex / 100 - 1), '.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 180
+          },
+          "y": {
+            "value": 452
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 870
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#22324D"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 200
+          },
+          "y": {
+            "value": 485
+          },
+          "text": {
+            "value": "Performance Movement (Normalized to 100)"
+          },
+          "fill": {
+            "value": "#8EACDF"
+          },
+          "fontSize": {
+            "value": 14
           }
         }
       }
@@ -123,24 +1321,137 @@ Paste only the JSON below.
       "from": {
         "data": "chartData"
       },
-      "sort": {
-        "field": "Date"
-      },
       "encode": {
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "ParsedDate"
           },
           "y": {
             "scale": "y",
-            "field": "NumericPrice"
+            "field": "DisplayIndex"
           },
           "stroke": {
             "value": "#4DA3FF"
           },
           "strokeWidth": {
-            "value": 3
+            "value": 2
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "chartData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "scale": "x",
+            "field": "ParsedDate"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayIndex"
+          },
+          "size": {
+            "value": 18
+          },
+          "fill": {
+            "value": "#4DA3FF"
+          }
+        }
+      }
+    },
+    {
+      "type": "line",
+      "from": {
+        "data": "chartData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "scale": "x",
+            "field": "ParsedDate"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProduct"
+          },
+          "stroke": {
+            "value": "#ED1B2F"
+          },
+          "strokeWidth": {
+            "value": 2.5
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "chartData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "scale": "x",
+            "field": "ParsedDate"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProduct"
+          },
+          "size": {
+            "value": 18
+          },
+          "fill": {
+            "value": "#ED1B2F"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 660
+          },
+          "y": {
+            "value": 865
+          },
+          "text": {
+            "value": "Index (Normalized)"
+          },
+          "fill": {
+            "value": "#4DA3FF"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 815
+          },
+          "y": {
+            "value": 865
+          },
+          "text": {
+            "value": "Product Value"
+          },
+          "fill": {
+            "value": "#ED1B2F"
+          },
+          "fontSize": {
+            "value": 12
           }
         }
       }
