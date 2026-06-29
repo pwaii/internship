@@ -236,7 +236,7 @@ IMPORTANT DENEB SETUP
   "scales": [
     {
       "name": "x",
-      "type": "time",
+      "type": "point",
       "domain": {
         "data": "validData",
         "field": "ParsedDate"
@@ -250,18 +250,10 @@ IMPORTANT DENEB SETUP
     {
       "name": "y",
       "type": "linear",
-      "domain": {
-        "fields": [
-          {
-            "data": "validData",
-            "field": "DisplayIndex"
-          },
-          {
-            "data": "validData",
-            "field": "DisplayProduct"
-          }
-        ]
-      },
+      "domain": [
+        70,
+        140
+      ],
       "range": [
         830,
         570
@@ -1448,6 +1440,30 @@ IMPORTANT DENEB SETUP
       }
     },
     {
+      "type": "symbol",
+      "from": {
+        "data": "validData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "scale": "x",
+            "field": "ParsedDate"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayIndex"
+          },
+          "size": {
+            "value": 18
+          },
+          "fill": {
+            "value": "#4DA3FF"
+          }
+        }
+      }
+    },
+    {
       "type": "line",
       "from": {
         "data": "validData"
@@ -1470,6 +1486,30 @@ IMPORTANT DENEB SETUP
           },
           "strokeWidth": {
             "value": 2.5
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "validData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "scale": "x",
+            "field": "ParsedDate"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProduct"
+          },
+          "size": {
+            "value": 18
+          },
+          "fill": {
+            "value": "#ED1B2F"
           }
         }
       }
