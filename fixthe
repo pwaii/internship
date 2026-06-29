@@ -8,7 +8,6 @@
 
 const SETUP_SHEET = "PivotBuilder_Setup";
 const SOURCE_SHEET = "__PivotSource";
-const OUTPUT_MARKER = "__PB_GENERATED_OUTPUT__";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 105;
@@ -17,6 +16,8 @@ const OUTPUT_DESCRIPTION_COLUMNS = 4;
 const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 58;
 const OUTPUT_DESCRIPTION_SPACER_ROWS = 2;
 const OUTPUT_NEXT_RIGHT_GAP_COLUMNS = 2;
+const EXCEL_MAX_ROWS = 1048576;
+const EXCEL_MAX_COLUMNS = 16384;
 const MAX_RUN_SECONDS = 240;
 const CONTROLLED_STOP_PREFIX = "CONTROLLED_STOP:";
 
@@ -26,8 +27,8 @@ type CellValue = string | number | boolean;
 // freely afterward; normal runs never overwrite them. Change this block only when
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
-const SETUP_SCHEMA_VERSION = "PB_SCHEMA_2";
-const SETUP_STYLE_VERSION = "PB_STYLE_10";
+const SETUP_SCHEMA_VERSION = "PB_SCHEMA_3";
+const SETUP_STYLE_VERSION = "PB_STYLE_11";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "Default", "Pivot 1", "Pivot_Output", "", "", "",
@@ -214,7 +215,7 @@ function createSetupSheet(workbook: ExcelScript.Workbook): ExcelScript.Worksheet
   sheet.getRange("B7:N7").merge(false);
 
   sheet.getRange("A8:N8").setValues([[
-    "Template", "Pivot Name", "Output Sheet", "Row Names", "Rows", "Calculated Columns",
+    "Template", "Pivot Name", "Output Sheet", "Rows", "Row Names", "Calculated Columns",
     "Values To Count/Sum", "Filters", "Conditions", "Next Pivot Right", "Notes",
     "Output Behavior", "", ""
   ]]);
@@ -346,7 +347,7 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
   sheet.getRange("B7:N7").merge(false);
   sheet.getRange(`A8:N${LAST_SETUP_ROW}`).unmerge();
   sheet.getRange("A8:N8").setValues([[
-    "Template", "Pivot Name", "Output Sheet", "Row Names", "Rows", "Calculated Columns",
+    "Template", "Pivot Name", "Output Sheet", "Rows", "Row Names", "Calculated Columns",
     "Values To Count/Sum", "Filters", "Conditions", "Next Pivot Right", "Notes",
     "Output Behavior", "", ""
   ]]);
@@ -360,12 +361,18 @@ function ensureCurrentSetupSchema(sheet: ExcelScript.Worksheet) {
 }
 
 function migrateSetupSchema(sheet: ExcelScript.Worksheet) {
-  if (text(sheet.getRange("Z4").getValue()) === SETUP_SCHEMA_VERSION) return;
+  const currentVersion = text(sheet.getRange("Z4").getValue());
+  if (currentVersion === SETUP_SCHEMA_VERSION) return;
   const oldRows = readValuesInChunks(sheet.getRange(`A${FIRST_SETUP_ROW}:N${LAST_SETUP_ROW}`));
-  const migrated = oldRows.map(row => [
-    row[0], row[1], row[2], row[5], row[4], row[6],
-    row[8], row[9], row[10], row[12], row[13], row[3], "", ""
-  ]);
+  const migrated = equalsText(currentVersion, "PB_SCHEMA_2")
+    ? oldRows.map(row => [
+      row[0], row[1], row[2], row[4], row[3], row[5],
+      row[6], row[7], row[8], row[9], row[10], row[11], "", ""
+    ])
+    : oldRows.map(row => [
+      row[0], row[1], row[2], row[4], row[5], row[6],
+      row[8], row[9], row[10], row[12], row[13], row[3], "", ""
+    ]);
   writeValuesInChunks(sheet, migrated, 14, FIRST_SETUP_ROW - 1, 0);
   sheet.getRange("Z4").setValue(SETUP_SCHEMA_VERSION);
 }
@@ -459,7 +466,7 @@ function applySetupValidations(setup: ExcelScript.Worksheet) {
   setListValidation(setup.getRange(`J${FIRST_SETUP_ROW}:J${LAST_SETUP_ROW}`), "No,Yes");
   setListValidation(setup.getRange(`L${FIRST_SETUP_ROW}:L${LAST_SETUP_ROW}`), "Replace previous outputs,Keep previous outputs");
 
-  ["E", "G", "H", "I"].forEach(column => {
+  ["D", "G", "H", "I"].forEach(column => {
     setListValidation(setup.getRange(`${column}${FIRST_SETUP_ROW}:${column}${LAST_SETUP_ROW}`), "=$P$4:$P$500", false);
   });
 }
@@ -552,8 +559,8 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
       pivotName,
       outputSheet: applyMonthlyInputs(text(row[2]), inputs) || "Pivot_Output",
       replaceOutput: !equalsText(text(row[11]), "Keep previous outputs"),
-      rows: applyMonthlyInputs(text(row[4]), inputs),
-      rowNames: applyMonthlyInputs(text(row[3]), inputs),
+      rows: applyMonthlyInputs(text(row[3]), inputs),
+      rowNames: applyMonthlyInputs(text(row[4]), inputs),
       calculations: applyMonthlyInputs(text(row[5]), inputs),
       values: applyMonthlyInputs(text(row[6]), inputs),
       filters: applyMonthlyInputs(text(row[7]), inputs),
@@ -1276,9 +1283,9 @@ function buildAllPivots(
       throw new Error(`Output Sheet '${name}' cannot be the setup, source, or raw-data sheet.`);
     }
     let sheet = workbook.getWorksheet(name);
-    const created = !sheet;
     let initialRow = 0;
     if (sheet) {
+      clearLegacyOutputMarker(sheet);
       const outputSetups = setups.filter(setup =>
         equalsText(safeSheetName(setup.outputSheet || "Pivot_Output"), name)
       );
@@ -1290,10 +1297,6 @@ function buildAllPivots(
       sheet = workbook.addWorksheet(name);
     }
     sheet.setShowGridlines(false);
-    if (created) {
-      sheet.getRange("A3").setValue(OUTPUT_MARKER);
-      sheet.getRange("A3").getFormat().getFont().setColor("#FFFFFF");
-    }
     outputSheets.set(lower(name), sheet);
     initialRows.set(lower(name), initialRow);
   });
@@ -1326,6 +1329,13 @@ function buildAllPivots(
 
 }
 
+function clearLegacyOutputMarker(sheet: ExcelScript.Worksheet) {
+  const markerCell = sheet.getRange("A3");
+  if (equalsText(text(markerCell.getValue()), "__PB_GENERATED_OUTPUT__")) {
+    markerCell.clear(ExcelScript.ClearApplyTo.contents);
+  }
+}
+
 function removeMatchingGeneratedPivots(
   sheet: ExcelScript.Worksheet,
   setups: PivotSetup[]
@@ -1337,9 +1347,23 @@ function removeMatchingGeneratedPivots(
     const pivotRange = pivot.getLayout().getRange();
     const pivotRow = pivotRange.getRowIndex();
     const pivotColumn = pivotRange.getColumnIndex();
+    const pivotRowCount = pivotRange.getRowCount();
+    const pivotColumnCount = pivotRange.getColumnCount();
     const titleRow = findPivotTitleRow(sheet, pivotRow, pivotColumn, expectedNames);
     earliestRow = Math.min(earliestRow, titleRow);
     pivot.delete();
+    const oldPivotArea = sheet.getRangeByIndexes(
+      pivotRow,
+      pivotColumn,
+      pivotRowCount,
+      pivotColumnCount
+    );
+    try {
+      oldPivotArea.unmerge();
+    } catch (_ignored) {
+      // The PivotTable may not have used merged cells.
+    }
+    oldPivotArea.clear(ExcelScript.ClearApplyTo.contents);
     if (pivotRow > titleRow) {
       sheet.getRangeByIndexes(
         titleRow,
@@ -1455,6 +1479,7 @@ function preparePivotOutputArea(
     // Existing merged cells can block PivotTable spill. If Excel refuses the
     // broad unmerge, later plain-cell writes still avoid creating new merges.
   }
+  sheet.getCell(pivotStartRow, titleCol).clear(ExcelScript.ClearApplyTo.contents);
 }
 
 function writePivotTitleBox(
@@ -1547,28 +1572,6 @@ function applyCommaNumberFormat(range: ExcelScript.Range, values: CellValue[][])
   }
 }
 
-function removePreviousGeneratedOutputs(
-  workbook: ExcelScript.Workbook,
-  baseName: string,
-  protectedNames: string[]
-) {
-  const candidates = workbook.getWorksheets().filter(sheet => {
-    const name = sheet.getName();
-    if (protectedNames.some(protected => equalsText(protected, name))) return false;
-    if (!outputNameMatches(name, baseName)) return false;
-    const marked = equalsText(text(sheet.getRange("A3").getValue()), OUTPUT_MARKER);
-    return marked || sheet.getPivotTables().length > 0;
-  });
-  candidates.forEach(sheet => sheet.delete());
-}
-
-function outputNameMatches(name: string, baseName: string): boolean {
-  if (equalsText(name, baseName)) return true;
-  if (!lower(name).startsWith(`${lower(baseName)}_`)) return false;
-  const suffix = name.slice(baseName.length + 1);
-  return /^\d+$/.test(suffix);
-}
-
 function buildOnePivot(
   workbook: ExcelScript.Workbook,
   sheet: ExcelScript.Worksheet,
@@ -1589,24 +1592,54 @@ function buildOnePivot(
     }
   });
 
-  const titleRow = placement.row;
+  let titleRow = placement.row;
   const titleCol = placement.col;
   const summaryLines = pivotSummaryLines(setup);
   const rowFilters = filters.filter(spec => spec.values.length > 0 && containsText(rowFields, spec.field));
   const topFilters = filters.filter(spec => !containsText(rowFields, spec.field));
-  const pivotStartRow = titleRow + 1 + summaryLines.length + OUTPUT_DESCRIPTION_SPACER_ROWS + topFilters.length;
+  let pivotStartRow = titleRow + 1 + summaryLines.length + OUTPUT_DESCRIPTION_SPACER_ROWS + topFilters.length;
+  validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
   preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
   writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
   writePivotSummaryBox(sheet, titleRow, titleCol, summaryLines);
 
-  const pivotName = uniquePivotName(workbook, setup.pivotName);
+  let pivotName = uniquePivotName(workbook, setup.pivotName);
   // Address strings are more compatible across Excel web tenants than passing
   // Range objects from a hidden helper sheet directly.
-  const pivot = sheet.addPivotTable(
-    pivotName,
-    source.sourceAddress,
-    sheet.getCell(pivotStartRow, titleCol).getAddress()
-  );
+  let pivot: ExcelScript.PivotTable;
+  try {
+    pivot = sheet.addPivotTable(
+      pivotName,
+      source.sourceAddress,
+      sheet.getCell(pivotStartRow, titleCol).getAddress()
+    );
+  } catch (firstError) {
+    const partialPivot = sheet.getPivotTables().find(item => equalsText(item.getName(), pivotName));
+    if (partialPivot) partialPivot.delete();
+    pivotName = uniquePivotName(workbook, setup.pivotName);
+    clearFailedPivotHeader(sheet, titleRow, titleCol, pivotStartRow);
+    titleRow = Math.max(nextAvailableOutputRow(sheet), titleRow + 12);
+    pivotStartRow = titleRow + 1 + summaryLines.length + OUTPUT_DESCRIPTION_SPACER_ROWS + topFilters.length;
+    validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
+    preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
+    writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
+    writePivotSummaryBox(sheet, titleRow, titleCol, summaryLines);
+    try {
+      pivot = sheet.addPivotTable(
+        pivotName,
+        source.sourceAddress,
+        sheet.getCell(pivotStartRow, titleCol).getAddress()
+      );
+      placement.row = titleRow;
+      placement.bandBottom = Math.max(placement.bandBottom, titleRow);
+    } catch (secondError) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: Excel could not create PivotTable '${setup.pivotName}' on ` +
+        `'${sheet.getName()}' at row ${pivotStartRow + 1}. ` +
+        `First attempt: ${errorDetail(firstError)}. Retry: ${errorDetail(secondError)}.`
+      );
+    }
+  }
 
   const maxRows = rowFields.length;
   let rowColumnCount = 0;
@@ -1701,7 +1734,7 @@ function buildOnePivot(
   const bottom = Math.max(measuredBottom, occupiedBottom) + 6;
   const right = measuredRight + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
-  if (setup.nextRight) {
+  if (setup.nextRight && right + 12 <= EXCEL_MAX_COLUMNS) {
     placement.col = right;
   } else {
     placement.row = placement.bandBottom + 1;
@@ -1710,18 +1743,55 @@ function buildOnePivot(
   }
 }
 
+function validatePivotDestination(
+  setup: PivotSetup,
+  sheet: ExcelScript.Worksheet,
+  pivotStartRow: number,
+  pivotStartColumn: number
+) {
+  if (pivotStartRow < 0 || pivotStartRow + 12 > EXCEL_MAX_ROWS) {
+    throw new Error(
+      `Setup row ${setup.sourceRow}: Output Sheet '${sheet.getName()}' has no remaining rows for '${setup.pivotName}'.`
+    );
+  }
+  if (pivotStartColumn < 0 || pivotStartColumn + 12 > EXCEL_MAX_COLUMNS) {
+    throw new Error(
+      `Setup row ${setup.sourceRow}: Output Sheet '${sheet.getName()}' has no remaining columns for '${setup.pivotName}'.`
+    );
+  }
+}
+
+function clearFailedPivotHeader(
+  sheet: ExcelScript.Worksheet,
+  titleRow: number,
+  titleColumn: number,
+  pivotStartRow: number
+) {
+  const rowCount = Math.max(1, pivotStartRow - titleRow);
+  sheet.getRangeByIndexes(
+    titleRow,
+    titleColumn,
+    rowCount,
+    OUTPUT_DESCRIPTION_COLUMNS
+  ).clear(ExcelScript.ClearApplyTo.contents);
+}
+
 function occupiedRightInRows(
   sheet: ExcelScript.Worksheet,
   startRow: number,
   endRow: number
 ): number {
-  const used = sheet.getUsedRange(true);
-  if (!used) return -1;
-  const usedRight = used.getColumnIndex() + used.getColumnCount() - 1;
-  const rowCount = Math.max(1, endRow - startRow + 1);
-  const occupied = sheet.getRangeByIndexes(startRow, 0, rowCount, usedRight + 1).getUsedRange(true);
-  if (!occupied) return -1;
-  return occupied.getColumnIndex() + occupied.getColumnCount() - 1;
+  try {
+    const used = sheet.getUsedRange(true);
+    if (!used) return -1;
+    const usedRight = used.getColumnIndex() + used.getColumnCount() - 1;
+    const rowCount = Math.max(1, endRow - startRow + 1);
+    const occupied = sheet.getRangeByIndexes(startRow, 0, rowCount, usedRight + 1).getUsedRange(true);
+    if (!occupied) return -1;
+    return occupied.getColumnIndex() + occupied.getColumnCount() - 1;
+  } catch (_ignored) {
+    return -1;
+  }
 }
 
 function occupiedBottomInColumns(
@@ -1729,13 +1799,17 @@ function occupiedBottomInColumns(
   startColumn: number,
   endColumn: number
 ): number {
-  const used = sheet.getUsedRange(true);
-  if (!used) return -1;
-  const usedBottom = used.getRowIndex() + used.getRowCount() - 1;
-  const columnCount = Math.max(1, endColumn - startColumn + 1);
-  const occupied = sheet.getRangeByIndexes(0, startColumn, usedBottom + 1, columnCount).getUsedRange(true);
-  if (!occupied) return -1;
-  return occupied.getRowIndex() + occupied.getRowCount() - 1;
+  try {
+    const used = sheet.getUsedRange(true);
+    if (!used) return -1;
+    const usedBottom = used.getRowIndex() + used.getRowCount() - 1;
+    const columnCount = Math.max(1, endColumn - startColumn + 1);
+    const occupied = sheet.getRangeByIndexes(0, startColumn, usedBottom + 1, columnCount).getUsedRange(true);
+    if (!occupied) return -1;
+    return occupied.getRowIndex() + occupied.getRowCount() - 1;
+  } catch (_ignored) {
+    return -1;
+  }
 }
 
 function addCalculatedOutputs(
@@ -1757,6 +1831,16 @@ function addCalculatedOutputs(
   const outputStartRow = pivotRange.getRowIndex() + headerRowOffset;
   const outputStartColumn = pivotRight + 2;
   const outputRowCount = Math.max(2, values.length - headerRowOffset);
+  if (outputStartColumn + specs.length > EXCEL_MAX_COLUMNS) {
+    throw new Error(
+      `Setup row ${setup.sourceRow}: Calculated Columns for '${setup.pivotName}' exceed Excel's column limit.`
+    );
+  }
+  if (outputStartRow + outputRowCount > EXCEL_MAX_ROWS) {
+    throw new Error(
+      `Setup row ${setup.sourceRow}: Calculated Columns for '${setup.pivotName}' exceed Excel's row limit.`
+    );
+  }
   const matrix: CellValue[][] = Array.from(
     { length: outputRowCount },
     () => Array(specs.length).fill("") as CellValue[]
@@ -1811,7 +1895,9 @@ function addCalculatedOutputs(
   const outputRange = sheet.getRangeByIndexes(outputStartRow, outputStartColumn, outputRowCount, specs.length);
   outputRange.getFormat().getFill().setColor("#D9EAD3");
   outputRange.getFormat().setWrapText(false);
-  const numberFormats = matrix.map(row => row.map((_value, rowIndex) => rowIndex === 0 ? "General" : "#,##0"));
+  const numberFormats = matrix.map((row, rowIndex) =>
+    row.map(() => rowIndex === 0 ? "General" : "#,##0")
+  );
   try {
     outputRange.setNumberFormat(numberFormats);
   } catch (_ignored) {
@@ -2512,19 +2598,6 @@ function uniqueHeader(preferred: string, headers: string[]): string {
 function safeSheetName(value: string): string {
   const cleaned = value.replace(/[\\/\?\*\[\]:]/g, "_").trim() || "Pivot_Output";
   return cleaned.slice(0, 31);
-}
-
-function uniqueWorksheetName(workbook: ExcelScript.Workbook, preferred: string): string {
-  const base = safeSheetName(preferred);
-  const existing = workbook.getWorksheets().map((sheet: ExcelScript.Worksheet) => lower(sheet.getName()));
-  if (!existing.includes(lower(base))) return base;
-
-  for (let index = 2; index < 10000; index++) {
-    const suffix = `_${index}`;
-    const candidate = `${base.slice(0, 31 - suffix.length)}${suffix}`;
-    if (!existing.includes(lower(candidate))) return candidate;
-  }
-  return `Pivot_${Date.now()}`.slice(0, 31);
 }
 
 function safeObjectName(value: string): string {
