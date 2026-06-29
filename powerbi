@@ -91,9 +91,6 @@ Paste only the JSON below.
     },
     {
       "type": "text",
-      "from": {
-        "data": "firstRow"
-      },
       "encode": {
         "enter": {
           "x": {
@@ -114,7 +111,7 @@ Paste only the JSON below.
         },
         "update": {
           "text": {
-            "signal": "'Fields: ' + join(keys(datum), ', ')"
+            "value": "Expected fields: Company, ProductName, CohortNo, Date, Price, IndexBaseValue, ParticipationRate, CapRate, FloorRate"
           }
         }
       }
