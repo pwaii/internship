@@ -11,7 +11,7 @@ const SOURCE_SHEET = "__PivotSource";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 105;
-const OUTPUT_VALUE_COLUMN_WIDTH = 54;
+const OUTPUT_VALUE_COLUMN_WIDTH = 72;
 const OUTPUT_DESCRIPTION_COLUMNS = 4;
 const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 58;
 const OUTPUT_SPACER_ROWS_WITH_FILTERS = 2;
@@ -1491,8 +1491,8 @@ function preparePivotOutputArea(
   pivotStartRow: number,
   topFilterCount: number
 ) {
-  const rowCount = Math.max(12, pivotStartRow - titleRow + topFilterCount + 8);
-  const columnCount = Math.max(OUTPUT_DESCRIPTION_COLUMNS + 4, 12);
+  const rowCount = Math.max(16, pivotStartRow - titleRow + Math.max(2, topFilterCount) + 10);
+  const columnCount = Math.max(OUTPUT_DESCRIPTION_COLUMNS + 8, 16);
   const area = sheet.getRangeByIndexes(titleRow, titleCol, rowCount, columnCount);
   area.getFormat().setRowHeight(18);
   try {
@@ -1501,7 +1501,11 @@ function preparePivotOutputArea(
     // Existing merged cells can block PivotTable spill. If Excel refuses the
     // broad unmerge, later plain-cell writes still avoid creating new merges.
   }
-  sheet.getCell(pivotStartRow, titleCol).clear(ExcelScript.ClearApplyTo.contents);
+  // Report-filter dropdowns are written by Excel inside the PivotTable range
+  // itself. Clear the future pivot block, not just the anchor cell, so old
+  // values do not force a #SPILL! when a filter appears above the table.
+  sheet.getRangeByIndexes(pivotStartRow, titleCol, rowCount - (pivotStartRow - titleRow), columnCount)
+    .clear(ExcelScript.ClearApplyTo.contents);
 }
 
 function writePivotTitleBox(
