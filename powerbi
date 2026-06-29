@@ -68,18 +68,10 @@ IMPORTANT DENEB SETUP
           "AIA S&P 500 Linked",
           "AIA Hang Seng Linked",
           "SCB NASDAQ 100 Linked",
-          "SCB Nikkei 225 Linked",
-          "MT Euro Stoxx 50 Linked"
-        ]
-      },
-      "on": [
-        {
-          "events": {
-            "signal": "selectedCompany"
-          },
-          "update": "selectedCompany === 'AIA Thailand' ? 'AIA S&P 500 Linked' : selectedCompany === 'SCB Life' ? 'SCB NASDAQ 100 Linked' : 'MT Euro Stoxx 50 Linked'"
-        }
+        "SCB Nikkei 225 Linked",
+        "MT Euro Stoxx 50 Linked"
       ]
+      }
     },
     {
       "name": "selectedCohort",
@@ -94,18 +86,10 @@ IMPORTANT DENEB SETUP
         ],
         "labels": [
           "Cohort 1",
-          "Cohort 2",
-          "Cohort 3"
-        ]
-      },
-      "on": [
-        {
-          "events": {
-            "signal": "selectedProduct"
-          },
-          "update": "1"
-        }
+        "Cohort 2",
+        "Cohort 3"
       ]
+      }
     }
   ],
   "data": [
