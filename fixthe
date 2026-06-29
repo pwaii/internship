@@ -145,7 +145,8 @@ function main(workbook: ExcelScript.Workbook): string {
     }
 
     const dataSheetName = text(setup.getRange("B3").getValue());
-    const selectedTemplates = text(setup.getRange("B4").getValue()) || "All";
+    const selectedTemplateInput = text(setup.getRange("B4").getValue()) || "All";
+    const selectedTemplates = applyMonthlyInputs(selectedTemplateInput, readMonthlyInputs(setup));
     const dataSheet = workbook.getWorksheet(dataSheetName);
     if (!dataSheet) throw new Error(`Data sheet not found: ${dataSheetName}`);
     if (dataSheet.getName() === SETUP_SHEET || dataSheet.getName() === SOURCE_SHEET) {
@@ -2535,7 +2536,8 @@ function templateMatchesSelection(template: string, selected: string): boolean {
   const selectedClean = cleanTemplatePath(selected);
   const templateClean = cleanTemplatePath(template);
   if (!selectedClean || !templateClean) return false;
-  return templateClean.startsWith(`${selectedClean}/`);
+  return equalsText(templateClean, selectedClean) ||
+    lower(templateClean).startsWith(`${lower(selectedClean)}/`);
 }
 
 function templatePathChoices(template: string): string[] {
