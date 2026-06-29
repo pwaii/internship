@@ -3,9 +3,7 @@ POWER BI DENEB - SINGLE-CANVAS VEGA DASHBOARD
 This version contains no Vega-Lite vconcat and cannot create duplicate
 height signals.
 
-The Company, Product, and Cohort boxes are interactive. Click a box to
-move to its next available value. The graph and KPI cards filter inside
-the Deneb visual automatically.
+The dashboard includes dependent themed selectors. Choose Company first; only that company's Products appear. Cohort choices then update for the selected Product.
 
 DATA SOURCE
 Import: AIA PowerBI One Sheet Database.xlsx
@@ -48,58 +46,38 @@ IMPORTANT DENEB SETUP
   },
   "signals": [
     {
-      "name": "companyIndex",
-      "value": 0,
+      "name": "selectedCompany",
+      "value": "AIA Thailand",
       "on": [
         {
-          "events": "@companySelector:click",
-          "update": "length(data('companies')) ? (companyIndex + 1) % length(data('companies')) : 0"
+          "events": "@companyOption:click",
+          "update": "datum.Company"
         }
       ]
     },
     {
-      "name": "selectedCompany",
-      "update": "length(data('companies')) ? data('companies')[companyIndex % length(data('companies'))].Company : ''"
-    },
-    {
-      "name": "productIndex",
-      "value": 0,
+      "name": "productChoice",
+      "value": "AIA S&P 500 Linked",
       "on": [
         {
-          "events": "@companySelector:click",
-          "update": "0"
-        },
-        {
-          "events": "@productSelector:click",
-          "update": "length(data('products')) ? (productIndex + 1) % length(data('products')) : 0"
+          "events": "@productOption:click",
+          "update": "datum.ProductName"
         }
       ]
     },
     {
       "name": "selectedProduct",
-      "update": "length(data('products')) ? data('products')[productIndex % length(data('products'))].ProductName : ''"
-    },
-    {
-      "name": "cohortIndex",
-      "value": 0,
-      "on": [
-        {
-          "events": "@companySelector:click",
-          "update": "0"
-        },
-        {
-          "events": "@productSelector:click",
-          "update": "0"
-        },
-        {
-          "events": "@cohortSelector:click",
-          "update": "length(data('cohorts')) ? (cohortIndex + 1) % length(data('cohorts')) : 0"
-        }
-      ]
+      "update": "length(data('productsForCompany')) ? (indata('productsForCompany', 'ProductName', productChoice) ? productChoice : data('productsForCompany')[0].ProductName) : ''"
     },
     {
       "name": "selectedCohort",
-      "update": "length(data('cohorts')) ? data('cohorts')[cohortIndex % length(data('cohorts'))].CohortNo : 0"
+      "value": 1,
+      "on": [
+        {
+          "events": "@cohortOption:click",
+          "update": "datum.CohortNo"
+        }
+      ]
     }
   ],
   "data": [
@@ -122,11 +100,20 @@ IMPORTANT DENEB SETUP
             "field": "Company",
             "order": "ascending"
           }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "rowNumber"
+          ]
         }
       ]
     },
     {
-      "name": "products",
+      "name": "productsForCompany",
       "source": "dataset",
       "transform": [
         {
@@ -145,16 +132,25 @@ IMPORTANT DENEB SETUP
             "field": "ProductName",
             "order": "ascending"
           }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "rowNumber"
+          ]
         }
       ]
     },
     {
-      "name": "cohorts",
+      "name": "cohortsForProduct",
       "source": "dataset",
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.Company === selectedCompany && datum.ProductName === selectedProduct"
+          "expr": "datum.ProductName === selectedProduct"
         },
         {
           "type": "aggregate",
@@ -168,6 +164,15 @@ IMPORTANT DENEB SETUP
             "field": "CohortNo",
             "order": "ascending"
           }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "rowNumber"
+          ]
         }
       ]
     },
@@ -177,7 +182,7 @@ IMPORTANT DENEB SETUP
       "transform": [
         {
           "type": "filter",
-          "expr": "isValid(datum.Date) && isValid(datum.Price) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo === selectedCohort"
+          "expr": "length(data('cohortsForProduct')) && isValid(datum.Date) && isValid(datum.Price) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo === (indata('cohortsForProduct', 'CohortNo', selectedCohort) ? selectedCohort : data('cohortsForProduct')[0].CohortNo)"
         },
         {
           "type": "formula",
@@ -708,29 +713,183 @@ IMPORTANT DENEB SETUP
       }
     },
     {
-      "type": "text",
-      "interactive": false,
+      "name": "companyOption",
+      "type": "rect",
+      "from": {
+        "data": "companies"
+      },
       "encode": {
         "enter": {
           "x": {
+            "signal": "185 + (datum.rowNumber - 1) * 143"
+          },
+          "y": {
+            "value": 160
+          },
+          "width": {
+            "value": 137
+          },
+          "height": {
+            "value": 38
+          },
+          "cornerRadius": {
+            "value": 5
+          },
+          "cursor": {
+            "value": "pointer"
+          }
+        },
+        "update": {
+          "fill": {
+            "signal": "datum.Company === selectedCompany ? '#ED1B2F' : '#2C3E5C'"
+          },
+          "stroke": {
+            "signal": "datum.Company === selectedCompany ? '#FF6B78' : '#4A607F'"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "interactive": false,
+      "from": {
+        "data": "companies"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "253 + (datum.rowNumber - 1) * 143"
+          },
+          "y": {
+            "value": 179
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 11
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.Company"
+          }
+        }
+      }
+    },
+    {
+      "name": "productOption",
+      "type": "rect",
+      "from": {
+        "data": "productsForCompany"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "640 + (datum.rowNumber - 1) * 216"
+          },
+          "y": {
+            "value": 160
+          },
+          "width": {
+            "value": 210
+          },
+          "height": {
+            "value": 38
+          },
+          "cornerRadius": {
+            "value": 5
+          },
+          "cursor": {
+            "value": "pointer"
+          }
+        },
+        "update": {
+          "fill": {
+            "signal": "datum.ProductName === selectedProduct ? '#ED1B2F' : '#2C3E5C'"
+          },
+          "stroke": {
+            "signal": "datum.ProductName === selectedProduct ? '#FF6B78' : '#4A607F'"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "interactive": false,
+      "from": {
+        "data": "productsForCompany"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "745 + (datum.rowNumber - 1) * 216"
+          },
+          "y": {
+            "value": 179
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "limit": {
             "value": 198
-          },
-          "y": {
-            "value": 181
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 15
-          },
-          "baseline": {
-            "value": "middle"
           }
         },
         "update": {
           "text": {
-            "signal": "selectedCompany"
+            "signal": "datum.ProductName"
+          }
+        }
+      }
+    },
+    {
+      "name": "cohortOption",
+      "type": "rect",
+      "from": {
+        "data": "cohortsForProduct"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "1095 + (datum.rowNumber - 1) * 108"
+          },
+          "y": {
+            "value": 160
+          },
+          "width": {
+            "value": 102
+          },
+          "height": {
+            "value": 38
+          },
+          "cornerRadius": {
+            "value": 5
+          },
+          "cursor": {
+            "value": "pointer"
+          }
+        },
+        "update": {
+          "fill": {
+            "signal": "datum.CohortNo === selectedCohort ? '#ED1B2F' : '#2C3E5C'"
+          },
+          "stroke": {
+            "signal": "datum.CohortNo === selectedCohort ? '#FF6B78' : '#4A607F'"
           }
         }
       }
@@ -738,55 +897,33 @@ IMPORTANT DENEB SETUP
     {
       "type": "text",
       "interactive": false,
+      "from": {
+        "data": "cohortsForProduct"
+      },
       "encode": {
         "enter": {
           "x": {
-            "value": 653
+            "signal": "1146 + (datum.rowNumber - 1) * 108"
           },
           "y": {
-            "value": 181
+            "value": 179
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
           },
           "fill": {
             "value": "#FFFFFF"
           },
           "fontSize": {
-            "value": 15
-          },
-          "baseline": {
-            "value": "middle"
+            "value": 11
           }
         },
         "update": {
           "text": {
-            "signal": "selectedProduct"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "interactive": false,
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1108
-          },
-          "y": {
-            "value": 181
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 15
-          },
-          "baseline": {
-            "value": "middle"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "'Cohort ' + selectedCohort"
+            "signal": "'Cohort ' + datum.CohortNo"
           }
         }
       }
