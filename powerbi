@@ -733,33 +733,6 @@ IMPORTANT DENEB SETUP
       }
     },
     {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1470
-          },
-          "y": {
-            "value": 38
-          },
-          "align": {
-            "value": "right"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 11
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "'Rows: ' + length(data('dataset')) + ' | Selected: ' + length(data('validData'))"
-          }
-        }
-      }
-    },
-    {
       "type": "rect",
       "encode": {
         "enter": {
