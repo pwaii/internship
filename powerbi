@@ -266,7 +266,6 @@ IMPORTANT DENEB SETUP
       "orient": "bottom",
       "scale": "x",
       "position": 830,
-      "format": "%b %Y",
       "labelColor": "#8EACDF",
       "labelFontSize": 11,
       "labelPadding": 10,
