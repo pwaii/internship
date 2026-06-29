@@ -54,62 +54,27 @@ IMPORTANT DENEB SETUP
       "transform": [
         {
           "type": "formula",
-          "expr": "toDate(datum.Date)",
-          "as": "ParsedDate"
-        },
-        {
-          "type": "formula",
           "expr": "toNumber(datum.Price)",
           "as": "NumericPrice"
         },
         {
-          "type": "formula",
-          "expr": "toNumber(datum.CohortNo)",
-          "as": "NumericCohort"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.IndexBaseValue)",
-          "as": "NumericBase"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.ParticipationRate)",
-          "as": "NumericParticipation"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.CapRate)",
-          "as": "NumericCap"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.FloorRate)",
-          "as": "NumericFloor"
-        },
-        {
           "type": "filter",
-          "expr": "isValid(datum.ParsedDate) && isFinite(datum.NumericPrice)"
+          "expr": "isFinite(datum.NumericPrice)"
         },
         {
           "type": "formula",
-          "expr": "datum.NumericBase > 0 ? datum.NumericPrice / datum.NumericBase * 100 : 100",
+          "expr": "toNumber(datum.IndexBaseValue) > 0 ? datum.NumericPrice / toNumber(datum.IndexBaseValue) * 100 : 100",
           "as": "DisplayIndex"
         },
         {
           "type": "formula",
-          "expr": "datum.NumericBase > 0 ? datum.NumericPrice / datum.NumericBase - 1 : 0",
-          "as": "DisplayRawReturn"
-        },
-        {
-          "type": "formula",
-          "expr": "100 * (1 + min(max(datum.DisplayRawReturn * datum.NumericParticipation, datum.NumericFloor), datum.NumericCap))",
+          "expr": "100 * (1 + min(max((datum.DisplayIndex / 100 - 1) * toNumber(datum.ParticipationRate), toNumber(datum.FloorRate)), toNumber(datum.CapRate)))",
           "as": "DisplayProduct"
         },
         {
           "type": "collect",
           "sort": {
-            "field": "ParsedDate",
+            "field": "Date",
             "order": "ascending"
           }
         }
@@ -122,7 +87,7 @@ IMPORTANT DENEB SETUP
         {
           "type": "collect",
           "sort": {
-            "field": "ParsedDate",
+            "field": "Date",
             "order": "descending"
           }
         },
@@ -175,7 +140,7 @@ IMPORTANT DENEB SETUP
       "type": "point",
       "domain": {
         "data": "chartData",
-        "field": "ParsedDate"
+        "field": "Date"
       },
       "range": [
         260,
@@ -1325,7 +1290,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "ParsedDate"
+            "field": "Date"
           },
           "y": {
             "scale": "y",
@@ -1349,7 +1314,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "ParsedDate"
+            "field": "Date"
           },
           "y": {
             "scale": "y",
@@ -1373,7 +1338,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "ParsedDate"
+            "field": "Date"
           },
           "y": {
             "scale": "y",
@@ -1397,7 +1362,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "ParsedDate"
+            "field": "Date"
           },
           "y": {
             "scale": "y",
