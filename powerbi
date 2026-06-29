@@ -69,8 +69,13 @@ Paste only the JSON below.
       "source": "dataset",
       "transform": [
         {
+          "type": "formula",
+          "expr": "toNumber(datum.Price)",
+          "as": "NumericPrice"
+        },
+        {
           "type": "filter",
-          "expr": "datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo == selectedCohort && isValid(datum.Price)"
+          "expr": "isFinite(datum.NumericPrice)"
         },
         {
           "type": "collect",
@@ -100,7 +105,7 @@ Paste only the JSON below.
       "type": "linear",
       "domain": {
         "data": "chartData",
-        "field": "Price"
+        "field": "NumericPrice"
       },
       "range": [
         420,
@@ -172,7 +177,7 @@ Paste only the JSON below.
           },
           "y": {
             "scale": "y",
-            "field": "Price"
+            "field": "NumericPrice"
           },
           "stroke": {
             "value": "#4DA3FF"
