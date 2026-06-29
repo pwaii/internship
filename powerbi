@@ -3,6 +3,10 @@ POWER BI DENEB - SINGLE-CANVAS VEGA DASHBOARD
 This version contains no Vega-Lite vconcat and cannot create duplicate
 height signals.
 
+The Company, Product, and Cohort boxes are interactive. Click a box to
+move to its next available value. The graph and KPI cards filter inside
+the Deneb visual automatically.
+
 DATA SOURCE
 Import: AIA PowerBI One Sheet Database.xlsx
 Sheet: PowerBI_Data
@@ -16,14 +20,13 @@ ADD THESE FIELDS TO DENEB VALUES
 - ParticipationRate
 - CapRate
 - FloorRate
+- IndexBaseValue
 - Date
 - Price
-- IndexNormalized
-- ProductValue
 
 IMPORTANT DENEB SETUP
 1. Create a new Deneb visual.
-2. Add all 12 fields above.
+2. Add all 11 fields above.
 3. Choose Create new specification.
 4. Choose Vega, not Vega-Lite.
 5. Choose Empty.
@@ -43,9 +46,130 @@ IMPORTANT DENEB SETUP
     "contains": "padding",
     "resize": true
   },
+  "signals": [
+    {
+      "name": "companyIndex",
+      "value": 0,
+      "on": [
+        {
+          "events": "@companySelector:click",
+          "update": "length(data('companies')) ? (companyIndex + 1) % length(data('companies')) : 0"
+        }
+      ]
+    },
+    {
+      "name": "selectedCompany",
+      "update": "length(data('companies')) ? data('companies')[companyIndex % length(data('companies'))].Company : ''"
+    },
+    {
+      "name": "productIndex",
+      "value": 0,
+      "on": [
+        {
+          "events": "@companySelector:click",
+          "update": "0"
+        },
+        {
+          "events": "@productSelector:click",
+          "update": "length(data('products')) ? (productIndex + 1) % length(data('products')) : 0"
+        }
+      ]
+    },
+    {
+      "name": "selectedProduct",
+      "update": "length(data('products')) ? data('products')[productIndex % length(data('products'))].ProductName : ''"
+    },
+    {
+      "name": "cohortIndex",
+      "value": 0,
+      "on": [
+        {
+          "events": "@companySelector:click",
+          "update": "0"
+        },
+        {
+          "events": "@productSelector:click",
+          "update": "0"
+        },
+        {
+          "events": "@cohortSelector:click",
+          "update": "length(data('cohorts')) ? (cohortIndex + 1) % length(data('cohorts')) : 0"
+        }
+      ]
+    },
+    {
+      "name": "selectedCohort",
+      "update": "length(data('cohorts')) ? data('cohorts')[cohortIndex % length(data('cohorts'))].CohortNo : 0"
+    }
+  ],
   "data": [
     {
       "name": "dataset"
+    },
+    {
+      "name": "companies",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Company"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "Company",
+            "order": "ascending"
+          }
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.Company === selectedCompany"
+        },
+        {
+          "type": "aggregate",
+          "groupby": [
+            "ProductName"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "ProductName",
+            "order": "ascending"
+          }
+        }
+      ]
+    },
+    {
+      "name": "cohorts",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.Company === selectedCompany && datum.ProductName === selectedProduct"
+        },
+        {
+          "type": "aggregate",
+          "groupby": [
+            "CohortNo"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "CohortNo",
+            "order": "ascending"
+          }
+        }
+      ]
     },
     {
       "name": "validData",
@@ -53,14 +177,54 @@ IMPORTANT DENEB SETUP
       "transform": [
         {
           "type": "filter",
-          "expr": "isValid(datum.Date) && isValid(datum.IndexNormalized) && isValid(datum.ProductValue)"
+          "expr": "isValid(datum.Date) && isValid(datum.Price) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo === selectedCohort"
+        },
+        {
+          "type": "formula",
+          "expr": "toDate(datum.Date)",
+          "as": "ParsedDate"
         },
         {
           "type": "collect",
           "sort": {
-            "field": "Date",
+            "field": "ParsedDate",
             "order": "ascending"
           }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "first_value"
+          ],
+          "fields": [
+            "Price"
+          ],
+          "as": [
+            "FirstPrice"
+          ],
+          "sort": {
+            "field": [
+              "ParsedDate"
+            ],
+            "order": [
+              "ascending"
+            ]
+          }
+        },
+        {
+          "type": "formula",
+          "expr": "datum.FirstPrice > 0 ? datum.Price / datum.FirstPrice * 100 : 100",
+          "as": "ChartIndex"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.IndexBaseValue > 0 ? datum.Price / datum.IndexBaseValue - 1 : datum.Price / datum.FirstPrice - 1",
+          "as": "RawReturn"
+        },
+        {
+          "type": "formula",
+          "expr": "100 * (1 + min(max(datum.RawReturn * datum.ParticipationRate, datum.FloorRate), datum.CapRate))",
+          "as": "ChartProduct"
         }
       ]
     },
@@ -71,7 +235,7 @@ IMPORTANT DENEB SETUP
         {
           "type": "collect",
           "sort": {
-            "field": "Date",
+            "field": "ParsedDate",
             "order": "descending"
           }
         },
@@ -103,10 +267,10 @@ IMPORTANT DENEB SETUP
             "min"
           ],
           "fields": [
-            "IndexNormalized",
-            "IndexNormalized",
-            "ProductValue",
-            "ProductValue"
+            "ChartIndex",
+            "ChartIndex",
+            "ChartProduct",
+            "ChartProduct"
           ],
           "as": [
             "MaxIndex",
@@ -124,7 +288,7 @@ IMPORTANT DENEB SETUP
       "type": "time",
       "domain": {
         "data": "validData",
-        "field": "Date"
+        "field": "ParsedDate"
       },
       "range": [
         260,
@@ -140,11 +304,11 @@ IMPORTANT DENEB SETUP
         "fields": [
           {
             "data": "validData",
-            "field": "IndexNormalized"
+            "field": "ChartIndex"
           },
           {
             "data": "validData",
-            "field": "ProductValue"
+            "field": "ChartProduct"
           }
         ]
       },
@@ -448,6 +612,7 @@ IMPORTANT DENEB SETUP
       }
     },
     {
+      "name": "companySelector",
       "type": "rect",
       "encode": {
         "enter": {
@@ -471,11 +636,15 @@ IMPORTANT DENEB SETUP
           },
           "stroke": {
             "value": "#3A4D6D"
+          },
+          "cursor": {
+            "value": "pointer"
           }
         }
       }
     },
     {
+      "name": "productSelector",
       "type": "rect",
       "encode": {
         "enter": {
@@ -499,11 +668,15 @@ IMPORTANT DENEB SETUP
           },
           "stroke": {
             "value": "#3A4D6D"
+          },
+          "cursor": {
+            "value": "pointer"
           }
         }
       }
     },
     {
+      "name": "cohortSelector",
       "type": "rect",
       "encode": {
         "enter": {
@@ -527,15 +700,16 @@ IMPORTANT DENEB SETUP
           },
           "stroke": {
             "value": "#3A4D6D"
+          },
+          "cursor": {
+            "value": "pointer"
           }
         }
       }
     },
     {
       "type": "text",
-      "from": {
-        "data": "latest"
-      },
+      "interactive": false,
       "encode": {
         "enter": {
           "x": {
@@ -556,16 +730,14 @@ IMPORTANT DENEB SETUP
         },
         "update": {
           "text": {
-            "signal": "datum.Company"
+            "signal": "selectedCompany"
           }
         }
       }
     },
     {
       "type": "text",
-      "from": {
-        "data": "latest"
-      },
+      "interactive": false,
       "encode": {
         "enter": {
           "x": {
@@ -586,16 +758,14 @@ IMPORTANT DENEB SETUP
         },
         "update": {
           "text": {
-            "signal": "datum.ProductName"
+            "signal": "selectedProduct"
           }
         }
       }
     },
     {
       "type": "text",
-      "from": {
-        "data": "latest"
-      },
+      "interactive": false,
       "encode": {
         "enter": {
           "x": {
@@ -616,7 +786,7 @@ IMPORTANT DENEB SETUP
         },
         "update": {
           "text": {
-            "signal": "'Cohort ' + datum.CohortNo"
+            "signal": "'Cohort ' + selectedCohort"
           }
         }
       }
@@ -1038,7 +1208,7 @@ IMPORTANT DENEB SETUP
         },
         "update": {
           "text": {
-            "signal": "format(datum.IndexNormalized / 100 - 1, '+.2%')"
+            "signal": "format(datum.ChartIndex / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1099,7 +1269,7 @@ IMPORTANT DENEB SETUP
         },
         "update": {
           "text": {
-            "signal": "format(datum.ProductValue / 100 - 1, '+.2%')"
+            "signal": "format(datum.ChartProduct / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1279,17 +1449,17 @@ IMPORTANT DENEB SETUP
         "data": "validData"
       },
       "sort": {
-        "field": "Date"
+        "field": "ParsedDate"
       },
       "encode": {
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "ParsedDate"
           },
           "y": {
             "scale": "y",
-            "field": "IndexNormalized"
+            "field": "ChartIndex"
           },
           "stroke": {
             "value": "#4DA3FF"
@@ -1306,17 +1476,17 @@ IMPORTANT DENEB SETUP
         "data": "validData"
       },
       "sort": {
-        "field": "Date"
+        "field": "ParsedDate"
       },
       "encode": {
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "ParsedDate"
           },
           "y": {
             "scale": "y",
-            "field": "ProductValue"
+            "field": "ChartProduct"
           },
           "stroke": {
             "value": "#ED1B2F"
