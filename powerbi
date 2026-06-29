@@ -1,249 +1,28 @@
-POWER BI DENEB - SINGLE-CANVAS VEGA DASHBOARD
+DENEB DATA DIAGNOSTIC
 
-This version contains no Vega-Lite vconcat and cannot create duplicate
-height signals.
+Create a new Deneb specification using Vega > Empty.
+Keep the same fields in Deneb Values.
+Paste only the JSON below.
 
-The dashboard includes dependent themed selectors. Choose Company first; only that company's Products appear. Cohort choices then update for the selected Product.
-
-DATA SOURCE
-Import: AIA PowerBI One Sheet Database.xlsx
-Sheet: PowerBI_Data
-
-ADD THESE FIELDS TO DENEB VALUES
-- Company
-- ProductName
-- IndexName
-- Currency
-- CohortNo
-- ParticipationRate
-- CapRate
-- FloorRate
-- IndexBaseValue
-- Date
-- Price
-
-IMPORTANT DENEB SETUP
-1. Create a new Deneb visual.
-2. Add all 11 fields above.
-3. Choose Create new specification.
-4. Choose Vega, not Vega-Lite.
-5. Choose Empty.
-6. Paste only the JSON below.
-7. Select Apply.
-
-================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "AIA Index Intelligence dashboard using one Vega canvas.",
   "background": "#071120",
-  "width": 1500,
-  "height": 900,
-  "padding": 0,
+  "width": 900,
+  "height": 420,
+  "padding": 25,
   "autosize": {
     "type": "fit",
     "contains": "padding",
     "resize": true
   },
-  "signals": [
-    {
-      "name": "selectedCompany",
-      "value": "AIA Thailand",
-      "on": [
-        {
-          "events": "@companyOption:click",
-          "update": "datum.Company"
-        }
-      ]
-    },
-    {
-      "name": "productChoice",
-      "value": "AIA S&P 500 Linked",
-      "on": [
-        {
-          "events": "@productOption:click",
-          "update": "datum.ProductName"
-        }
-      ]
-    },
-    {
-      "name": "selectedProduct",
-      "update": "length(data('productsForCompany')) ? (indata('productsForCompany', 'ProductName', productChoice) ? productChoice : data('productsForCompany')[0].ProductName) : ''"
-    },
-    {
-      "name": "selectedCohort",
-      "value": 1,
-      "on": [
-        {
-          "events": "@cohortOption:click",
-          "update": "datum.CohortNo"
-        }
-      ]
-    }
-  ],
   "data": [
     {
       "name": "dataset"
     },
     {
-      "name": "companies",
+      "name": "firstRow",
       "source": "dataset",
       "transform": [
-        {
-          "type": "aggregate",
-          "groupby": [
-            "Company"
-          ]
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "Company",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "rowNumber"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "productsForCompany",
-      "source": "dataset",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.Company === selectedCompany"
-        },
-        {
-          "type": "aggregate",
-          "groupby": [
-            "ProductName"
-          ]
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "ProductName",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "rowNumber"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "cohortsForProduct",
-      "source": "dataset",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.ProductName === selectedProduct"
-        },
-        {
-          "type": "aggregate",
-          "groupby": [
-            "CohortNo"
-          ]
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "CohortNo",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "rowNumber"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "validData",
-      "source": "dataset",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "length(data('cohortsForProduct')) && isValid(datum.Date) && isValid(datum.Price) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo === (indata('cohortsForProduct', 'CohortNo', selectedCohort) ? selectedCohort : data('cohortsForProduct')[0].CohortNo)"
-        },
-        {
-          "type": "formula",
-          "expr": "toDate(datum.Date)",
-          "as": "ParsedDate"
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "ParsedDate",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "first_value"
-          ],
-          "fields": [
-            "Price"
-          ],
-          "as": [
-            "FirstPrice"
-          ],
-          "sort": {
-            "field": [
-              "ParsedDate"
-            ],
-            "order": [
-              "ascending"
-            ]
-          }
-        },
-        {
-          "type": "formula",
-          "expr": "datum.FirstPrice > 0 ? datum.Price / datum.FirstPrice * 100 : 100",
-          "as": "ChartIndex"
-        },
-        {
-          "type": "formula",
-          "expr": "datum.IndexBaseValue > 0 ? datum.Price / datum.IndexBaseValue - 1 : datum.Price / datum.FirstPrice - 1",
-          "as": "RawReturn"
-        },
-        {
-          "type": "formula",
-          "expr": "100 * (1 + min(max(datum.RawReturn * datum.ParticipationRate, datum.FloorRate), datum.CapRate))",
-          "as": "ChartProduct"
-        }
-      ]
-    },
-    {
-      "name": "latest",
-      "source": "validData",
-      "transform": [
-        {
-          "type": "collect",
-          "sort": {
-            "field": "ParsedDate",
-            "order": "descending"
-          }
-        },
         {
           "type": "window",
           "ops": [
@@ -258,703 +37,114 @@ IMPORTANT DENEB SETUP
           "expr": "datum.rowNumber === 1"
         }
       ]
-    },
-    {
-      "name": "summary",
-      "source": "validData",
-      "transform": [
-        {
-          "type": "aggregate",
-          "ops": [
-            "max",
-            "min",
-            "max",
-            "min"
-          ],
-          "fields": [
-            "ChartIndex",
-            "ChartIndex",
-            "ChartProduct",
-            "ChartProduct"
-          ],
-          "as": [
-            "MaxIndex",
-            "MinIndex",
-            "MaxProduct",
-            "MinProduct"
-          ]
-        }
-      ]
-    }
-  ],
-  "scales": [
-    {
-      "name": "x",
-      "type": "time",
-      "domain": {
-        "data": "validData",
-        "field": "ParsedDate"
-      },
-      "range": [
-        260,
-        1430
-      ],
-      "nice": true,
-      "zero": false
-    },
-    {
-      "name": "y",
-      "type": "linear",
-      "domain": {
-        "fields": [
-          {
-            "data": "validData",
-            "field": "ChartIndex"
-          },
-          {
-            "data": "validData",
-            "field": "ChartProduct"
-          }
-        ]
-      },
-      "range": [
-        830,
-        570
-      ],
-      "nice": true,
-      "zero": false
-    }
-  ],
-  "axes": [
-    {
-      "orient": "bottom",
-      "scale": "x",
-      "position": 830,
-      "format": "%b %Y",
-      "labelColor": "#8EACDF",
-      "labelFontSize": 11,
-      "labelPadding": 10,
-      "tickColor": "#51617B",
-      "domainColor": "#51617B",
-      "grid": false
-    },
-    {
-      "orient": "left",
-      "scale": "y",
-      "position": 260,
-      "labelColor": "#8EACDF",
-      "labelFontSize": 11,
-      "labelPadding": 8,
-      "tickColor": "#51617B",
-      "domainColor": "#51617B",
-      "grid": true,
-      "gridColor": "#2A3A55",
-      "gridOpacity": 0.55,
-      "gridDash": [
-        3,
-        4
-      ]
     }
   ],
   "marks": [
     {
-      "type": "rect",
+      "type": "text",
       "encode": {
         "enter": {
           "x": {
-            "value": 0
+            "value": 20
           },
           "y": {
-            "value": 0
+            "value": 35
           },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 70
+          "text": {
+            "value": "Deneb dataset diagnostic"
           },
           "fill": {
-            "value": "#08111F"
+            "value": "#FFFFFF"
           },
-          "stroke": {
-            "value": "#26344B"
+          "fontSize": {
+            "value": 22
+          },
+          "fontWeight": {
+            "value": "bold"
           }
         }
       }
     },
     {
-      "type": "rect",
+      "type": "text",
       "encode": {
         "enter": {
           "x": {
-            "value": 28
+            "value": 20
           },
           "y": {
+            "value": 82
+          },
+          "fill": {
+            "value": "#00D26A"
+          },
+          "fontSize": {
             "value": 18
-          },
-          "width": {
-            "value": 36
-          },
-          "height": {
-            "value": 36
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#ED1B2F"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "'Rows received: ' + length(data('dataset'))"
           }
         }
       }
     },
     {
       "type": "text",
+      "from": {
+        "data": "firstRow"
+      },
       "encode": {
         "enter": {
           "x": {
-            "value": 46
+            "value": 20
           },
           "y": {
-            "value": 37
-          },
-          "text": {
-            "value": "A"
-          },
-          "align": {
-            "value": "center"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "white"
-          },
-          "fontSize": {
-            "value": 17
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 78
-          },
-          "y": {
-            "value": 37
-          },
-          "text": {
-            "value": "Index Intelligence"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 225
-          },
-          "y": {
-            "value": 37
-          },
-          "text": {
-            "value": "by AIA Product Dev"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 13
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 70
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 126
-          },
-          "fill": {
-            "value": "#091425"
-          },
-          "stroke": {
-            "value": "#26344B"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 48
-          },
-          "y": {
-            "value": 99
-          },
-          "text": {
-            "value": "Product Viewer"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 14
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 210
-          },
-          "y": {
-            "value": 99
-          },
-          "text": {
-            "value": "Comparator"
-          },
-          "baseline": {
-            "value": "middle"
+            "value": 130
           },
           "fill": {
             "value": "#8EACDF"
           },
           "fontSize": {
             "value": 14
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 350
-          },
-          "y": {
-            "value": 99
-          },
-          "text": {
-            "value": "Index Dashboard"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 14
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 28
-          },
-          "x2": {
-            "value": 166
-          },
-          "y": {
-            "value": 125
-          },
-          "stroke": {
-            "value": "#ED1B2F"
-          },
-          "strokeWidth": {
-            "value": 3
-          }
-        }
-      }
-    },
-    {
-      "name": "companySelector",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 180
-          },
-          "y": {
-            "value": 154
-          },
-          "x2": {
-            "value": 620
-          },
-          "y2": {
-            "value": 206
-          },
-          "cornerRadius": {
-            "value": 6
-          },
-          "fill": {
-            "value": "#22324D"
-          },
-          "stroke": {
-            "value": "#3A4D6D"
-          },
-          "cursor": {
-            "value": "pointer"
-          }
-        }
-      }
-    },
-    {
-      "name": "productSelector",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 635
-          },
-          "y": {
-            "value": 154
-          },
-          "x2": {
-            "value": 1075
-          },
-          "y2": {
-            "value": 206
-          },
-          "cornerRadius": {
-            "value": 6
-          },
-          "fill": {
-            "value": "#22324D"
-          },
-          "stroke": {
-            "value": "#3A4D6D"
-          },
-          "cursor": {
-            "value": "pointer"
-          }
-        }
-      }
-    },
-    {
-      "name": "cohortSelector",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1090
-          },
-          "y": {
-            "value": 154
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y2": {
-            "value": 206
-          },
-          "cornerRadius": {
-            "value": 6
-          },
-          "fill": {
-            "value": "#22324D"
-          },
-          "stroke": {
-            "value": "#3A4D6D"
-          },
-          "cursor": {
-            "value": "pointer"
-          }
-        }
-      }
-    },
-    {
-      "name": "companyOption",
-      "type": "rect",
-      "from": {
-        "data": "companies"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "signal": "185 + (datum.rowNumber - 1) * 143"
-          },
-          "y": {
-            "value": 160
-          },
-          "width": {
-            "value": 137
-          },
-          "height": {
-            "value": 38
-          },
-          "cornerRadius": {
-            "value": 5
-          },
-          "cursor": {
-            "value": "pointer"
-          }
-        },
-        "update": {
-          "fill": {
-            "signal": "datum.Company === selectedCompany ? '#ED1B2F' : '#2C3E5C'"
-          },
-          "stroke": {
-            "signal": "datum.Company === selectedCompany ? '#FF6B78' : '#4A607F'"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "interactive": false,
-      "from": {
-        "data": "companies"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "signal": "253 + (datum.rowNumber - 1) * 143"
-          },
-          "y": {
-            "value": 179
-          },
-          "align": {
-            "value": "center"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 11
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "datum.Company"
-          }
-        }
-      }
-    },
-    {
-      "name": "productOption",
-      "type": "rect",
-      "from": {
-        "data": "productsForCompany"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "signal": "640 + (datum.rowNumber - 1) * 216"
-          },
-          "y": {
-            "value": 160
-          },
-          "width": {
-            "value": 210
-          },
-          "height": {
-            "value": 38
-          },
-          "cornerRadius": {
-            "value": 5
-          },
-          "cursor": {
-            "value": "pointer"
-          }
-        },
-        "update": {
-          "fill": {
-            "signal": "datum.ProductName === selectedProduct ? '#ED1B2F' : '#2C3E5C'"
-          },
-          "stroke": {
-            "signal": "datum.ProductName === selectedProduct ? '#FF6B78' : '#4A607F'"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "interactive": false,
-      "from": {
-        "data": "productsForCompany"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "signal": "745 + (datum.rowNumber - 1) * 216"
-          },
-          "y": {
-            "value": 179
-          },
-          "align": {
-            "value": "center"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 11
           },
           "limit": {
-            "value": 198
+            "value": 850
           }
         },
         "update": {
           "text": {
-            "signal": "datum.ProductName"
-          }
-        }
-      }
-    },
-    {
-      "name": "cohortOption",
-      "type": "rect",
-      "from": {
-        "data": "cohortsForProduct"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "signal": "1095 + (datum.rowNumber - 1) * 108"
-          },
-          "y": {
-            "value": 160
-          },
-          "width": {
-            "value": 102
-          },
-          "height": {
-            "value": 38
-          },
-          "cornerRadius": {
-            "value": 5
-          },
-          "cursor": {
-            "value": "pointer"
-          }
-        },
-        "update": {
-          "fill": {
-            "signal": "datum.CohortNo === selectedCohort ? '#ED1B2F' : '#2C3E5C'"
-          },
-          "stroke": {
-            "signal": "datum.CohortNo === selectedCohort ? '#FF6B78' : '#4A607F'"
+            "signal": "'Fields: ' + join(keys(datum), ', ')"
           }
         }
       }
     },
     {
       "type": "text",
-      "interactive": false,
       "from": {
-        "data": "cohortsForProduct"
+        "data": "firstRow"
       },
       "encode": {
         "enter": {
           "x": {
-            "signal": "1146 + (datum.rowNumber - 1) * 108"
+            "value": 20
           },
           "y": {
-            "value": 179
-          },
-          "align": {
-            "value": "center"
-          },
-          "baseline": {
-            "value": "middle"
+            "value": 185
           },
           "fill": {
             "value": "#FFFFFF"
           },
           "fontSize": {
-            "value": 11
+            "value": 14
+          },
+          "limit": {
+            "value": 850
           }
         },
         "update": {
           "text": {
-            "signal": "'Cohort ' + datum.CohortNo"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 180
-          },
-          "y": {
-            "value": 230
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y2": {
-            "value": 300
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#22324D"
-          },
-          "stroke": {
-            "value": "#ED1B2F"
-          },
-          "strokeWidth": {
-            "value": 2
+            "signal": "'Company: ' + datum.Company + ' | Product: ' + datum.ProductName + ' | Cohort: ' + datum.CohortNo"
           }
         }
       }
@@ -962,718 +152,53 @@ IMPORTANT DENEB SETUP
     {
       "type": "text",
       "from": {
-        "data": "latest"
+        "data": "firstRow"
       },
       "encode": {
         "enter": {
           "x": {
-            "value": 205
+            "value": 20
           },
           "y": {
-            "value": 252
-          },
-          "text": {
-            "value": "Index"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        },
-        "update": {
-          "text": {
-            "value": "Index"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 205
-          },
-          "y": {
-            "value": 278
+            "value": 235
           },
           "fill": {
             "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "datum.IndexName"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 410
-          },
-          "y": {
-            "value": 252
-          },
-          "text": {
-            "value": "Participation Rate"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 410
-          },
-          "y": {
-            "value": 278
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(datum.ParticipationRate, '.0%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 620
-          },
-          "y": {
-            "value": 252
-          },
-          "text": {
-            "value": "Cap Rate"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 620
-          },
-          "y": {
-            "value": 278
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(datum.CapRate, '.0%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 785
-          },
-          "y": {
-            "value": 252
-          },
-          "text": {
-            "value": "Floor"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 785
-          },
-          "y": {
-            "value": 278
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(datum.FloorRate, '.0%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 180
-          },
-          "y": {
-            "value": 325
-          },
-          "x2": {
-            "value": 475
-          },
-          "y2": {
-            "value": 425
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#22324D"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 490
-          },
-          "y": {
-            "value": 325
-          },
-          "x2": {
-            "value": 785
-          },
-          "y2": {
-            "value": 425
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#22324D"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 800
-          },
-          "y": {
-            "value": 325
-          },
-          "x2": {
-            "value": 1095
-          },
-          "y2": {
-            "value": 425
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#22324D"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1110
-          },
-          "y": {
-            "value": 325
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y2": {
-            "value": 425
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#22324D"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 327
-          },
-          "y": {
-            "value": 355
-          },
-          "text": {
-            "value": "Index Return"
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        },
-        "update": {
-          "text": {
-            "value": "Index Return"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 327
-          },
-          "y": {
-            "value": 395
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#00D26A"
-          },
-          "fontSize": {
-            "value": 27
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(datum.ChartIndex / 100 - 1, '+.2%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 637
-          },
-          "y": {
-            "value": 355
-          },
-          "text": {
-            "value": "Product Return"
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latest"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 637
-          },
-          "y": {
-            "value": 395
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#00D26A"
-          },
-          "fontSize": {
-            "value": 27
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(datum.ChartProduct / 100 - 1, '+.2%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "summary"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 947
-          },
-          "y": {
-            "value": 355
-          },
-          "text": {
-            "value": "Max Upside"
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "summary"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 947
-          },
-          "y": {
-            "value": 395
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#00D26A"
-          },
-          "fontSize": {
-            "value": 27
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(datum.MaxProduct / 100 - 1, '+.2%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "summary"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1270
-          },
-          "y": {
-            "value": 355
-          },
-          "text": {
-            "value": "Max Drawdown"
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#8EACDF"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "summary"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1270
-          },
-          "y": {
-            "value": 395
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#9CB4DB"
-          },
-          "fontSize": {
-            "value": 27
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "format(min(0, datum.MinIndex / 100 - 1), '.2%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 180
-          },
-          "y": {
-            "value": 452
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y2": {
-            "value": 870
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#22324D"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 200
-          },
-          "y": {
-            "value": 485
-          },
-          "text": {
-            "value": "Performance Movement (Normalized to 100)"
-          },
-          "fill": {
-            "value": "#8EACDF"
           },
           "fontSize": {
             "value": 14
           }
-        }
-      }
-    },
-    {
-      "type": "line",
-      "from": {
-        "data": "validData"
-      },
-      "sort": {
-        "field": "ParsedDate"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "scale": "x",
-            "field": "ParsedDate"
-          },
-          "y": {
-            "scale": "y",
-            "field": "ChartIndex"
-          },
-          "stroke": {
-            "value": "#4DA3FF"
-          },
-          "strokeWidth": {
-            "value": 2
-          }
-        }
-      }
-    },
-    {
-      "type": "line",
-      "from": {
-        "data": "validData"
-      },
-      "sort": {
-        "field": "ParsedDate"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "scale": "x",
-            "field": "ParsedDate"
-          },
-          "y": {
-            "scale": "y",
-            "field": "ChartProduct"
-          },
-          "stroke": {
-            "value": "#ED1B2F"
-          },
-          "strokeWidth": {
-            "value": 2.5
+        },
+        "update": {
+          "text": {
+            "signal": "'Date: ' + datum.Date + ' | Price: ' + datum.Price"
           }
         }
       }
     },
     {
       "type": "text",
+      "from": {
+        "data": "firstRow"
+      },
       "encode": {
         "enter": {
           "x": {
-            "value": 660
+            "value": 20
           },
           "y": {
-            "value": 865
-          },
-          "text": {
-            "value": "Index (Normalized)"
+            "value": 285
           },
           "fill": {
-            "value": "#4DA3FF"
+            "value": "#FFFFFF"
           },
           "fontSize": {
-            "value": 12
+            "value": 14
           }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 815
-          },
-          "y": {
-            "value": 865
-          },
+        },
+        "update": {
           "text": {
-            "value": "Product Value"
-          },
-          "fill": {
-            "value": "#ED1B2F"
-          },
-          "fontSize": {
-            "value": 12
+            "signal": "'Base: ' + datum.IndexBaseValue + ' | Participation: ' + datum.ParticipationRate + ' | Cap: ' + datum.CapRate + ' | Floor: ' + datum.FloorRate"
           }
         }
       }
