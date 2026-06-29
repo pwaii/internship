@@ -189,6 +189,7 @@ The boxes drawn inside Deneb match the requested dashboard appearance. Use the P
   ],
   "vconcat": [
     {
+      "name": "headerSection",
       "height": 72,
       "width": 1500,
       "layer": [
@@ -316,6 +317,7 @@ The boxes drawn inside Deneb match the requested dashboard appearance. Use the P
       ]
     },
     {
+      "name": "navigationSection",
       "height": 56,
       "width": 1500,
       "layer": [
@@ -423,6 +425,7 @@ The boxes drawn inside Deneb match the requested dashboard appearance. Use the P
       ]
     },
     {
+      "name": "dashboardSection",
       "height": 800,
       "width": 1500,
       "layer": [
