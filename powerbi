@@ -1,3 +1,37 @@
+POWER BI DENEB - SINGLE-CANVAS VEGA DASHBOARD
+
+This version contains no Vega-Lite vconcat and cannot create duplicate
+height signals.
+
+The dashboard includes dependent themed selectors. Choose Company first; only that company's Products appear. Cohort choices then update for the selected Product.
+
+DATA SOURCE
+Import: AIA PowerBI One Sheet Database.xlsx
+Sheet: PowerBI_Data
+
+ADD THESE FIELDS TO DENEB VALUES
+- Company
+- ProductName
+- IndexName
+- Currency
+- CohortNo
+- ParticipationRate
+- CapRate
+- FloorRate
+- IndexBaseValue
+- Date
+- Price
+
+IMPORTANT DENEB SETUP
+1. Create a new Deneb visual.
+2. Add all 11 fields above.
+3. Choose Create new specification.
+4. Choose Vega, not Vega-Lite.
+5. Choose Empty.
+6. Paste only the JSON below.
+7. Select Apply.
+
+================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "description": "AIA Index Intelligence dashboard using one Vega canvas.",
@@ -22,9 +56,13 @@
       ]
     },
     {
-      "name": "productChoice",
+      "name": "selectedProduct",
       "value": "AIA S&P 500 Linked",
       "on": [
+        {
+          "events": "@companyOption:click",
+          "update": "datum.Company === 'AIA Thailand' ? 'AIA S&P 500 Linked' : datum.Company === 'SCB Life' ? 'SCB NASDAQ 100 Linked' : 'MT Euro Stoxx 50 Linked'"
+        },
         {
           "events": "@productOption:click",
           "update": "datum.ProductName"
@@ -32,13 +70,17 @@
       ]
     },
     {
-      "name": "selectedProduct",
-      "update": "length(data('productsForCompany')) ? (indata('productsForCompany', 'ProductName', productChoice) ? productChoice : data('productsForCompany')[0].ProductName) : ''"
-    },
-    {
       "name": "selectedCohort",
       "value": 1,
       "on": [
+        {
+          "events": "@companyOption:click",
+          "update": "1"
+        },
+        {
+          "events": "@productOption:click",
+          "update": "1"
+        },
         {
           "events": "@cohortOption:click",
           "update": "datum.CohortNo"
@@ -148,12 +190,27 @@
       "transform": [
         {
           "type": "filter",
-          "expr": "length(data('cohortsForProduct')) && isValid(datum.Date) && isValid(datum.IndexNormalized) && isValid(datum.ProductValue) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo === (indata('cohortsForProduct', 'CohortNo', selectedCohort) ? selectedCohort : data('cohortsForProduct')[0].CohortNo)"
+          "expr": "isValid(datum.Date) && isValid(datum.Price) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.CohortNo == selectedCohort"
         },
         {
           "type": "formula",
           "expr": "toDate(datum.Date)",
           "as": "ParsedDate"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.IndexBaseValue > 0 ? datum.Price / datum.IndexBaseValue * 100 : 100",
+          "as": "DisplayIndex"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.IndexBaseValue > 0 ? datum.Price / datum.IndexBaseValue - 1 : 0",
+          "as": "DisplayRawReturn"
+        },
+        {
+          "type": "formula",
+          "expr": "100 * (1 + min(max(datum.DisplayRawReturn * datum.ParticipationRate, datum.FloorRate), datum.CapRate))",
+          "as": "DisplayProduct"
         },
         {
           "type": "collect",
@@ -240,11 +297,11 @@
         "fields": [
           {
             "data": "validData",
-            "field": "IndexNormalized"
+            "field": "DisplayIndex"
           },
           {
             "data": "validData",
-            "field": "ProductValue"
+            "field": "DisplayProduct"
           }
         ]
       },
@@ -1276,7 +1333,7 @@
         },
         "update": {
           "text": {
-            "signal": "format(datum.IndexNormalized / 100 - 1, '+.2%')"
+            "signal": "format(datum.DisplayIndex / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1337,7 +1394,7 @@
         },
         "update": {
           "text": {
-            "signal": "format(datum.ProductValue / 100 - 1, '+.2%')"
+            "signal": "format(datum.DisplayProduct / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1527,7 +1584,7 @@
           },
           "y": {
             "scale": "y",
-            "field": "IndexNormalized"
+            "field": "DisplayIndex"
           },
           "stroke": {
             "value": "#4DA3FF"
@@ -1554,7 +1611,7 @@
           },
           "y": {
             "scale": "y",
-            "field": "ProductValue"
+            "field": "DisplayProduct"
           },
           "stroke": {
             "value": "#ED1B2F"
