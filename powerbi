@@ -1,0 +1,1081 @@
+POWER BI DENEB - COMPLETE ONE-SHEET DASHBOARD
+
+DATA SOURCE
+Import: AIA PowerBI One Sheet Database.xlsx
+Select sheet: PowerBI_Data
+
+ADD THESE FIELDS TO THE DENEB DATASET
+- Company
+- ProductName
+- IndexName
+- Currency
+- CohortNo
+- CohortStartDate
+- CohortEndDate
+- IndexBaseValue
+- ParticipationRate
+- CapRate
+- FloorRate
+- Date
+- Price
+
+POWER BI STEPS
+1. Home > Get data > Excel workbook.
+2. Open AIA PowerBI One Sheet Database.xlsx.
+3. Select PowerBI_Data and choose Load.
+4. Add the Deneb custom visual to the report canvas.
+5. Drag the 13 fields listed above from PowerBI_Data into Deneb Values.
+6. In Deneb, choose Create new specification > Vega-Lite > Empty.
+7. Delete the sample JSON and paste the complete JSON below.
+8. Choose Apply.
+
+REAL FILTER BOXES
+Add Power BI slicers outside Deneb using:
+- Company
+- ProductName
+- CohortNo
+- IndexName
+
+The boxes drawn inside Deneb match the requested dashboard appearance. Use the Power BI slicers above for clickable filtering.
+
+================ COMPLETE DENEB JSON ================
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "AIA dark product viewer dashboard for index-linked insurance.",
+  "background": "#071120",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "padding": 0,
+  "data": {
+    "name": "dataset"
+  },
+  "transform": [
+    {
+      "filter": "isValid(datum['Date']) && isValid(datum['Price'])"
+    },
+    {
+      "joinaggregate": [
+        {
+          "op": "min",
+          "field": "Date",
+          "as": "FirstDate"
+        },
+        {
+          "op": "max",
+          "field": "Date",
+          "as": "LastDate"
+        },
+        {
+          "op": "mean",
+          "field": "ParticipationRate",
+          "as": "Participation"
+        },
+        {
+          "op": "mean",
+          "field": "CapRate",
+          "as": "Cap"
+        },
+        {
+          "op": "mean",
+          "field": "FloorRate",
+          "as": "Floor"
+        },
+        {
+          "op": "mean",
+          "field": "IndexBaseValue",
+          "as": "BaseValue"
+        }
+      ],
+      "groupby": [
+        "Company",
+        "ProductName",
+        "IndexName",
+        "Currency",
+        "CohortNo"
+      ]
+    },
+    {
+      "window": [
+        {
+          "op": "first_value",
+          "field": "Price",
+          "as": "FirstPrice"
+        },
+        {
+          "op": "last_value",
+          "field": "Price",
+          "as": "LastPrice"
+        },
+        {
+          "op": "min",
+          "field": "Price",
+          "as": "MinPrice"
+        },
+        {
+          "op": "max",
+          "field": "Price",
+          "as": "MaxPrice"
+        }
+      ],
+      "sort": [
+        {
+          "field": "Date",
+          "order": "ascending"
+        }
+      ],
+      "groupby": [
+        "Company",
+        "ProductName",
+        "IndexName",
+        "Currency",
+        "CohortNo"
+      ]
+    },
+    {
+      "calculate": "datum.Price / datum.FirstPrice * 100",
+      "as": "IndexNormalized"
+    },
+    {
+      "calculate": "(datum.Price / datum.BaseValue - 1)",
+      "as": "RawIndexReturn"
+    },
+    {
+      "calculate": "datum.RawIndexReturn * datum.Participation",
+      "as": "ParticipatedReturn"
+    },
+    {
+      "calculate": "min(max(datum.ParticipatedReturn, datum.Floor), datum.Cap)",
+      "as": "CreditedReturn"
+    },
+    {
+      "calculate": "100 * (1 + datum.CreditedReturn)",
+      "as": "ProductValue"
+    },
+    {
+      "calculate": "(datum.LastPrice / datum.FirstPrice - 1)",
+      "as": "IndexReturnToday"
+    },
+    {
+      "calculate": "min(max((datum.LastPrice / datum.BaseValue - 1) * datum.Participation, datum.Floor), datum.Cap)",
+      "as": "ProductReturnToday"
+    },
+    {
+      "calculate": "(datum.MaxPrice / datum.BaseValue - 1) * datum.Participation",
+      "as": "MaxRawUpside"
+    },
+    {
+      "calculate": "min(max(datum.MaxRawUpside, datum.Floor), datum.Cap)",
+      "as": "MaxUpside"
+    },
+    {
+      "calculate": "min(0, (datum.MinPrice / datum.BaseValue - 1) * datum.Participation)",
+      "as": "MaxDrawdown"
+    },
+    {
+      "calculate": "datum['Company'] || 'AIA Thailand'",
+      "as": "SelectedCompany"
+    },
+    {
+      "calculate": "datum['ProductName'] || 'AIA S&P 500 Linked'",
+      "as": "SelectedProduct"
+    },
+    {
+      "calculate": "'Cohort ' + datum['CohortNo']",
+      "as": "SelectedCohort"
+    }
+  ],
+  "vconcat": [
+    {
+      "height": 72,
+      "width": 1500,
+      "layer": [
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#08111F",
+            "stroke": "#23324A",
+            "strokeWidth": 1
+          },
+          "encoding": {
+            "x": {
+              "value": 0
+            },
+            "x2": {
+              "value": 1500
+            },
+            "y": {
+              "value": 0
+            },
+            "y2": {
+              "value": 72
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#ED1745",
+            "cornerRadius": 7
+          },
+          "encoding": {
+            "x": {
+              "value": 28
+            },
+            "x2": {
+              "value": 58
+            },
+            "y": {
+              "value": 18
+            },
+            "y2": {
+              "value": 54
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "A",
+            "font": "Segoe UI",
+            "fontSize": 17,
+            "fontWeight": "bold",
+            "fill": "#FFFFFF",
+            "align": "center",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 43
+            },
+            "y": {
+              "value": 36
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "Index Intelligence",
+            "font": "Segoe UI",
+            "fontSize": 17,
+            "fontWeight": "bold",
+            "fill": "#FFFFFF",
+            "align": "left",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 70
+            },
+            "y": {
+              "value": 36
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "by AIA Product Dev",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "fill": "#9DB7E8",
+            "align": "left",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 205
+            },
+            "y": {
+              "value": 37
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "เธเนเธญเธกเธนเธฅ: Mock Data (เน€เธเธทเนเธญเธก Bloomberg / Data Provider)",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "fill": "#9DB7E8",
+            "align": "right",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 1450
+            },
+            "y": {
+              "value": 36
+            }
+          }
+        }
+      ]
+    },
+    {
+      "height": 56,
+      "width": 1500,
+      "layer": [
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#091426",
+            "stroke": "#18263B"
+          },
+          "encoding": {
+            "x": {
+              "value": 0
+            },
+            "x2": {
+              "value": 1500
+            },
+            "y": {
+              "value": 0
+            },
+            "y2": {
+              "value": 56
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x": 45,
+                "label": "Product Viewer",
+                "active": 1
+              },
+              {
+                "x": 190,
+                "label": "Comparator",
+                "active": 0
+              },
+              {
+                "x": 315,
+                "label": "Index Dashboard",
+                "active": 0
+              },
+              {
+                "x": 470,
+                "label": "FX & Participation",
+                "active": 0
+              },
+              {
+                "x": 635,
+                "label": "Cohort Reference",
+                "active": 0
+              }
+            ]
+          },
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 13,
+            "fontWeight": {
+              "expr": "datum.active == 1 ? 'bold' : 'normal'"
+            },
+            "align": "left",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "field": "x",
+              "type": "quantitative"
+            },
+            "y": {
+              "value": 28
+            },
+            "text": {
+              "field": "label"
+            },
+            "color": {
+              "condition": {
+                "test": "datum.active == 1",
+                "value": "#FFFFFF"
+              },
+              "value": "#9DB7E8"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#ED1745"
+          },
+          "encoding": {
+            "x": {
+              "value": 30
+            },
+            "x2": {
+              "value": 165
+            },
+            "y": {
+              "value": 54
+            },
+            "y2": {
+              "value": 56
+            }
+          }
+        }
+      ]
+    },
+    {
+      "height": 800,
+      "width": 1500,
+      "layer": [
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#071120"
+          },
+          "encoding": {
+            "x": {
+              "value": 0
+            },
+            "x2": {
+              "value": 1500
+            },
+            "y": {
+              "value": 0
+            },
+            "y2": {
+              "value": 800
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "เธเธฃเธดเธฉเธฑเธ—",
+            "fill": "#9DB7E8",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "align": "left"
+          },
+          "encoding": {
+            "x": {
+              "value": 180
+            },
+            "y": {
+              "value": 40
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "Product",
+            "fill": "#9DB7E8",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "align": "left"
+          },
+          "encoding": {
+            "x": {
+              "value": 565
+            },
+            "y": {
+              "value": 40
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "Cohort (เธฃเธธเนเธเธ—เธตเนเธเธทเนเธญ)",
+            "fill": "#9DB7E8",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "align": "left"
+          },
+          "encoding": {
+            "x": {
+              "value": 950
+            },
+            "y": {
+              "value": 40
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x1": 180,
+                "x2": 555,
+                "label": "Company"
+              },
+              {
+                "x1": 565,
+                "x2": 940,
+                "label": "Product"
+              },
+              {
+                "x1": 950,
+                "x2": 1325,
+                "label": "Cohort"
+              }
+            ]
+          },
+          "mark": {
+            "type": "rect",
+            "fill": "#21314C",
+            "stroke": "#344866",
+            "cornerRadius": 6
+          },
+          "encoding": {
+            "x": {
+              "field": "x1",
+              "type": "quantitative"
+            },
+            "x2": {
+              "field": "x2"
+            },
+            "y": {
+              "value": 52
+            },
+            "y2": {
+              "value": 98
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 14,
+            "fill": "#FFFFFF",
+            "align": "left",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 195
+            },
+            "y": {
+              "value": 75
+            },
+            "text": {
+              "field": "SelectedCompany"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 14,
+            "fill": "#FFFFFF",
+            "align": "left",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 580
+            },
+            "y": {
+              "value": 75
+            },
+            "text": {
+              "field": "SelectedProduct"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 14,
+            "fill": "#FFFFFF",
+            "align": "left",
+            "baseline": "middle"
+          },
+          "encoding": {
+            "x": {
+              "value": 965
+            },
+            "y": {
+              "value": 75
+            },
+            "text": {
+              "field": "SelectedCohort"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#21314C",
+            "stroke": "#ED1745",
+            "strokeWidth": 1.5,
+            "cornerRadius": 9
+          },
+          "encoding": {
+            "x": {
+              "value": 180
+            },
+            "x2": {
+              "value": 1325
+            },
+            "y": {
+              "value": 124
+            },
+            "y2": {
+              "value": 204
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x": 200,
+                "label": "Index",
+                "field": "IndexName"
+              },
+              {
+                "x": 278,
+                "label": "เธชเธเธธเธฅเน€เธเธดเธ",
+                "field": "Currency"
+              },
+              {
+                "x": 370,
+                "label": "Participation Rate",
+                "field": "Participation"
+              },
+              {
+                "x": 470,
+                "label": "Cap Rate",
+                "field": "Cap"
+              },
+              {
+                "x": 545,
+                "label": "Floor",
+                "field": "Floor"
+              }
+            ]
+          },
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 11,
+            "fill": "#9DB7E8",
+            "align": "left"
+          },
+          "encoding": {
+            "x": {
+              "field": "x",
+              "type": "quantitative"
+            },
+            "y": {
+              "value": 154
+            },
+            "text": {
+              "field": "label"
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x": 180,
+                "x2": 455,
+                "title": "Index Return (เธ“ เธงเธฑเธเธเธตเน)",
+                "metric": "index"
+              },
+              {
+                "x": 470,
+                "x2": 745,
+                "title": "Product Return (เธซเธฅเธฑเธ Terms)",
+                "metric": "product"
+              },
+              {
+                "x": 760,
+                "x2": 1035,
+                "title": "Max Upside",
+                "metric": "upside"
+              },
+              {
+                "x": 1050,
+                "x2": 1325,
+                "title": "Max Drawdown",
+                "metric": "drawdown"
+              }
+            ]
+          },
+          "mark": {
+            "type": "rect",
+            "fill": "#21314C",
+            "cornerRadius": 8
+          },
+          "encoding": {
+            "x": {
+              "field": "x",
+              "type": "quantitative"
+            },
+            "x2": {
+              "field": "x2"
+            },
+            "y": {
+              "value": 230
+            },
+            "y2": {
+              "value": 334
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x": 317,
+                "title": "Index Return (เธ“ เธงเธฑเธเธเธตเน)"
+              },
+              {
+                "x": 607,
+                "title": "Product Return (เธซเธฅเธฑเธ Terms)"
+              },
+              {
+                "x": 897,
+                "title": "Max Upside"
+              },
+              {
+                "x": 1187,
+                "title": "Max Drawdown"
+              }
+            ]
+          },
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "fill": "#9DB7E8",
+            "align": "center"
+          },
+          "encoding": {
+            "x": {
+              "field": "x",
+              "type": "quantitative"
+            },
+            "y": {
+              "value": 262
+            },
+            "text": {
+              "field": "title"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 26,
+            "fontWeight": "bold",
+            "fill": "#00E676",
+            "align": "center"
+          },
+          "encoding": {
+            "x": {
+              "value": 317
+            },
+            "y": {
+              "value": 307
+            },
+            "text": {
+              "aggregate": "max",
+              "field": "IndexReturnToday",
+              "type": "quantitative",
+              "format": "+.2%"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 26,
+            "fontWeight": "bold",
+            "fill": "#00E676",
+            "align": "center"
+          },
+          "encoding": {
+            "x": {
+              "value": 607
+            },
+            "y": {
+              "value": 307
+            },
+            "text": {
+              "aggregate": "max",
+              "field": "ProductReturnToday",
+              "type": "quantitative",
+              "format": "+.2%"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 26,
+            "fontWeight": "bold",
+            "fill": "#00E676",
+            "align": "center"
+          },
+          "encoding": {
+            "x": {
+              "value": 897
+            },
+            "y": {
+              "value": 307
+            },
+            "text": {
+              "aggregate": "max",
+              "field": "MaxUpside",
+              "type": "quantitative",
+              "format": "+.2%"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 26,
+            "fontWeight": "bold",
+            "fill": "#9DB7E8",
+            "align": "center"
+          },
+          "encoding": {
+            "x": {
+              "value": 1187
+            },
+            "y": {
+              "value": 307
+            },
+            "text": {
+              "aggregate": "min",
+              "field": "MaxDrawdown",
+              "type": "quantitative",
+              "format": ".2%"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rect",
+            "fill": "#21314C",
+            "cornerRadius": 8
+          },
+          "encoding": {
+            "x": {
+              "value": 180
+            },
+            "x2": {
+              "value": 1325
+            },
+            "y": {
+              "value": 360
+            },
+            "y2": {
+              "value": 775
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "text": "Performance Movement (Normalized to 100)",
+            "font": "Segoe UI",
+            "fontSize": 13,
+            "fill": "#9DB7E8",
+            "align": "left"
+          },
+          "encoding": {
+            "x": {
+              "value": 198
+            },
+            "y": {
+              "value": 392
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "line",
+            "interpolate": "monotone",
+            "strokeWidth": 2,
+            "color": "#55A6FF"
+          },
+          "encoding": {
+            "x": {
+              "field": "Date",
+              "type": "temporal",
+              "scale": {
+                "range": [260, 1305]
+              },
+              "axis": {
+                "title": null,
+                "labelColor": "#9DB7E8",
+                "gridColor": "#263856",
+                "tickColor": "#425878",
+                "format": "%m-%d"
+              }
+            },
+            "y": {
+              "field": "IndexNormalized",
+              "type": "quantitative",
+              "scale": {
+                "range": [720, 420],
+                "zero": false
+              },
+              "axis": {
+                "title": null,
+                "labelColor": "#9DB7E8",
+                "gridColor": "#263856",
+                "tickColor": "#425878"
+              }
+            },
+            "tooltip": [
+              {
+                "field": "Date",
+                "type": "temporal"
+              },
+              {
+                "field": "IndexName",
+                "type": "nominal"
+              },
+              {
+                "field": "IndexNormalized",
+                "type": "quantitative",
+                "title": "Index Normalized",
+                "format": ".2f"
+              },
+              {
+                "field": "ProductValue",
+                "type": "quantitative",
+                "title": "Product Value",
+                "format": ".2f"
+              }
+            ]
+          }
+        },
+        {
+          "mark": {
+            "type": "line",
+            "interpolate": "monotone",
+            "strokeWidth": 2,
+            "color": "#ED1745"
+          },
+          "encoding": {
+            "x": {
+              "field": "Date",
+              "type": "temporal",
+              "scale": {
+                "range": [260, 1305]
+              },
+              "axis": null
+            },
+            "y": {
+              "field": "ProductValue",
+              "type": "quantitative",
+              "scale": {
+                "range": [720, 420],
+                "zero": false
+              },
+              "axis": null
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x": 640,
+                "color": "#55A6FF",
+                "label": "Index (Normalized)"
+              },
+              {
+                "x": 760,
+                "color": "#ED1745",
+                "label": "Product Value"
+              }
+            ]
+          },
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "size": 45
+          },
+          "encoding": {
+            "x": {
+              "field": "x",
+              "type": "quantitative"
+            },
+            "y": {
+              "value": 750
+            },
+            "color": {
+              "field": "color",
+              "type": "nominal",
+              "scale": null
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "x": 650,
+                "label": "Index (Normalized)",
+                "color": "#55A6FF"
+              },
+              {
+                "x": 770,
+                "label": "Product Value",
+                "color": "#ED1745"
+              }
+            ]
+          },
+          "mark": {
+            "type": "text",
+            "font": "Segoe UI",
+            "fontSize": 12,
+            "align": "left"
+          },
+          "encoding": {
+            "x": {
+              "field": "x",
+              "type": "quantitative"
+            },
+            "y": {
+              "value": 754
+            },
+            "text": {
+              "field": "label"
+            },
+            "color": {
+              "field": "color",
+              "type": "nominal",
+              "scale": null
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "font": "Segoe UI",
+    "view": {
+      "stroke": "transparent"
+    },
+    "axis": {
+      "domainColor": "#6B7280",
+      "labelFontSize": 11,
+      "titleFontSize": 12
+    }
+  }
+}
