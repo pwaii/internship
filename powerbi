@@ -244,8 +244,7 @@ IMPORTANT DENEB SETUP
       "range": [
         260,
         1430
-      ],
-      "nice": true
+      ]
     },
     {
       "name": "y",
@@ -1417,9 +1416,6 @@ IMPORTANT DENEB SETUP
       "from": {
         "data": "validData"
       },
-      "sort": {
-        "field": "ParsedDate"
-      },
       "encode": {
         "enter": {
           "x": {
@@ -1467,9 +1463,6 @@ IMPORTANT DENEB SETUP
       "type": "line",
       "from": {
         "data": "validData"
-      },
-      "sort": {
-        "field": "ParsedDate"
       },
       "encode": {
         "enter": {
