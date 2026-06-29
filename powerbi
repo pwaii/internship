@@ -97,7 +97,7 @@ IMPORTANT DENEB SETUP
       "name": "dataset"
     },
     {
-      "name": "validData",
+      "name": "chartData",
       "source": "dataset",
       "transform": [
         {
@@ -137,7 +137,7 @@ IMPORTANT DENEB SETUP
         },
         {
           "type": "filter",
-          "expr": "isValid(datum.ParsedDate) && isFinite(datum.NumericPrice) && datum.Company === selectedCompany && datum.ProductName === selectedProduct && datum.NumericCohort === selectedCohort"
+          "expr": "isValid(datum.ParsedDate) && isFinite(datum.NumericPrice) && (!indata('dataset', 'Company', selectedCompany) || datum.Company === selectedCompany) && (!indata('dataset', 'ProductName', selectedProduct) || datum.ProductName === selectedProduct) && (!indata('dataset', 'CohortNo', selectedCohort) || datum.NumericCohort === selectedCohort)"
         },
         {
           "type": "formula",
@@ -165,7 +165,7 @@ IMPORTANT DENEB SETUP
     },
     {
       "name": "latest",
-      "source": "validData",
+      "source": "chartData",
       "transform": [
         {
           "type": "collect",
@@ -191,7 +191,7 @@ IMPORTANT DENEB SETUP
     },
     {
       "name": "summary",
-      "source": "validData",
+      "source": "chartData",
       "transform": [
         {
           "type": "aggregate",
@@ -222,7 +222,7 @@ IMPORTANT DENEB SETUP
       "name": "x",
       "type": "point",
       "domain": {
-        "data": "validData",
+        "data": "chartData",
         "field": "ParsedDate"
       },
       "range": [
@@ -1370,7 +1370,7 @@ IMPORTANT DENEB SETUP
     {
       "type": "line",
       "from": {
-        "data": "validData"
+        "data": "chartData"
       },
       "encode": {
         "enter": {
@@ -1394,7 +1394,7 @@ IMPORTANT DENEB SETUP
     {
       "type": "symbol",
       "from": {
-        "data": "validData"
+        "data": "chartData"
       },
       "encode": {
         "enter": {
@@ -1418,7 +1418,7 @@ IMPORTANT DENEB SETUP
     {
       "type": "line",
       "from": {
-        "data": "validData"
+        "data": "chartData"
       },
       "encode": {
         "enter": {
@@ -1442,7 +1442,7 @@ IMPORTANT DENEB SETUP
     {
       "type": "symbol",
       "from": {
-        "data": "validData"
+        "data": "chartData"
       },
       "encode": {
         "enter": {
