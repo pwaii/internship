@@ -287,8 +287,7 @@ IMPORTANT DENEB SETUP
         260,
         1430
       ],
-      "nice": true,
-      "zero": false
+      "nice": true
     },
     {
       "name": "y",
