@@ -1668,6 +1668,11 @@ function buildOnePivot(
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
   pivot.getLayout().setShowFieldHeaders(true);
   pivot.getLayout().setEnableFieldList(true);
+  try {
+    pivot.refresh();
+  } catch (_ignored) {
+    // Newly created pivots are already current in some Excel web tenants.
+  }
   const pivotRange = pivot.getLayout().getRange();
   builtPivots.push({
     inputName: setup.pivotName,
@@ -1681,11 +1686,20 @@ function buildOnePivot(
   expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
   const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount, builtPivots);
   const reportFilterBottom = topFilters.length > 0 ? pivotStartRow + topFilters.length - 1 : pivotStartRow;
-  const bottom = Math.max(titleRow + 1, reportFilterBottom, pivotRange.getRowIndex() + pivotRange.getRowCount() - 1, calculatedExtent.bottomRow) + 6;
+  const measuredBottom = Math.max(
+    titleRow + 1,
+    reportFilterBottom,
+    pivotRange.getRowIndex() + pivotRange.getRowCount() - 1,
+    calculatedExtent.bottomRow
+  );
   const summaryRight = titleCol + OUTPUT_DESCRIPTION_COLUMNS - 1;
   const pivotRight = pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1;
   const actualTableRight = Math.max(pivotRight, calculatedExtent.rightColumn);
-  const right = Math.max(summaryRight, actualTableRight) + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
+  const occupiedRight = occupiedRightInRows(sheet, titleRow, measuredBottom);
+  const measuredRight = Math.max(summaryRight, actualTableRight, occupiedRight);
+  const occupiedBottom = occupiedBottomInColumns(sheet, titleCol, measuredRight);
+  const bottom = Math.max(measuredBottom, occupiedBottom) + 6;
+  const right = measuredRight + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight) {
     placement.col = right;
@@ -1694,6 +1708,34 @@ function buildOnePivot(
     placement.col = 0;
     placement.bandBottom = placement.row;
   }
+}
+
+function occupiedRightInRows(
+  sheet: ExcelScript.Worksheet,
+  startRow: number,
+  endRow: number
+): number {
+  const used = sheet.getUsedRange(true);
+  if (!used) return -1;
+  const usedRight = used.getColumnIndex() + used.getColumnCount() - 1;
+  const rowCount = Math.max(1, endRow - startRow + 1);
+  const occupied = sheet.getRangeByIndexes(startRow, 0, rowCount, usedRight + 1).getUsedRange(true);
+  if (!occupied) return -1;
+  return occupied.getColumnIndex() + occupied.getColumnCount() - 1;
+}
+
+function occupiedBottomInColumns(
+  sheet: ExcelScript.Worksheet,
+  startColumn: number,
+  endColumn: number
+): number {
+  const used = sheet.getUsedRange(true);
+  if (!used) return -1;
+  const usedBottom = used.getRowIndex() + used.getRowCount() - 1;
+  const columnCount = Math.max(1, endColumn - startColumn + 1);
+  const occupied = sheet.getRangeByIndexes(0, startColumn, usedBottom + 1, columnCount).getUsedRange(true);
+  if (!occupied) return -1;
+  return occupied.getRowIndex() + occupied.getRowCount() - 1;
 }
 
 function addCalculatedOutputs(
