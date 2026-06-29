@@ -1623,10 +1623,13 @@ function buildOnePivot(
   const summaryLines: string[] = [];
   const rowFilters = filters.filter(spec => spec.values.length > 0 && containsText(rowFields, spec.field));
   const topFilters = filters.filter(spec => !containsText(rowFields, spec.field));
-  const spacerRows = topFilters.length > 0
-    ? OUTPUT_SPACER_ROWS_WITH_FILTERS
+  // Only reserve rows for filter fields that Excel will still place above the
+  // PivotTable. Filters already used as row fields stay inside the table and
+  // should not consume extra blank rows.
+  const topFilterSpacerRows = topFilters.length > 0
+    ? Math.max(OUTPUT_SPACER_ROWS_WITH_FILTERS, topFilters.length + 1)
     : OUTPUT_SPACER_ROWS_WITHOUT_FILTERS;
-  let pivotStartRow = titleRow + 1 + summaryLines.length + spacerRows;
+  let pivotStartRow = titleRow + 1 + summaryLines.length + topFilterSpacerRows;
   validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
   preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
   writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
@@ -1648,7 +1651,7 @@ function buildOnePivot(
     pivotName = uniquePivotName(workbook, setup.pivotName);
     clearFailedPivotHeader(sheet, titleRow, titleCol, pivotStartRow);
     titleRow = Math.max(nextAvailableOutputRow(sheet), titleRow + 12);
-    pivotStartRow = titleRow + 1 + summaryLines.length + spacerRows;
+    pivotStartRow = titleRow + 1 + summaryLines.length + topFilterSpacerRows;
     validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
     preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
     writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
@@ -1743,7 +1746,7 @@ function buildOnePivot(
   });
   expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
   const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount, builtPivots);
-  const reportFilterBottom = topFilters.length > 0 ? pivotStartRow + topFilters.length - 1 : pivotStartRow;
+  const reportFilterBottom = topFilters.length > 0 ? pivotStartRow - 1 : pivotStartRow;
   const measuredBottom = Math.max(
     titleRow + 1,
     reportFilterBottom,
