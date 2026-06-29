@@ -14,8 +14,10 @@ const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 105;
 const OUTPUT_VALUE_COLUMN_WIDTH = 54;
 const OUTPUT_DESCRIPTION_COLUMNS = 4;
 const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 58;
-const OUTPUT_DESCRIPTION_SPACER_ROWS = 2;
+const OUTPUT_SPACER_ROWS_WITH_FILTERS = 2;
+const OUTPUT_SPACER_ROWS_WITHOUT_FILTERS = 1;
 const OUTPUT_NEXT_RIGHT_GAP_COLUMNS = 2;
+const OUTPUT_NEXT_DOWN_GAP_ROWS = 2;
 const EXCEL_MAX_ROWS = 1048576;
 const EXCEL_MAX_COLUMNS = 16384;
 const MAX_RUN_SECONDS = 240;
@@ -1427,7 +1429,7 @@ function expandPivotTableLayout(
   applyCommaNumberFormat(pivotRange, values);
 
   if (rowCount > 0) {
-    pivotRange.getFormat().setRowHeight(22);
+    pivotRange.getFormat().setRowHeight(18);
   }
 }
 
@@ -1474,6 +1476,7 @@ function preparePivotOutputArea(
   const rowCount = Math.max(12, pivotStartRow - titleRow + topFilterCount + 8);
   const columnCount = Math.max(OUTPUT_DESCRIPTION_COLUMNS + 4, 12);
   const area = sheet.getRangeByIndexes(titleRow, titleCol, rowCount, columnCount);
+  area.getFormat().setRowHeight(18);
   try {
     area.unmerge();
   } catch (_ignored) {
@@ -1498,7 +1501,7 @@ function writePivotTitleBox(
   format.setWrapText(false);
   format.setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   format.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
-  format.setRowHeight(24);
+  format.setRowHeight(20);
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
   setDescriptionColumnWidths(sheet, titleCol);
@@ -1522,7 +1525,7 @@ function writePivotSummaryBox(
     format.setWrapText(false);
     format.setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
     format.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
-    format.setRowHeight(20);
+    format.setRowHeight(18);
     summaryCell.getFormat().getFont().setItalic(true);
     summaryCell.getFormat().getFont().setColor("#5A6068");
   });
@@ -1595,10 +1598,13 @@ function buildOnePivot(
 
   let titleRow = placement.row;
   const titleCol = placement.col;
-  const summaryLines = pivotSummaryLines(setup);
+  const summaryLines: string[] = [];
   const rowFilters = filters.filter(spec => spec.values.length > 0 && containsText(rowFields, spec.field));
   const topFilters = filters.filter(spec => !containsText(rowFields, spec.field));
-  let pivotStartRow = titleRow + 1 + summaryLines.length + OUTPUT_DESCRIPTION_SPACER_ROWS + topFilters.length;
+  const spacerRows = topFilters.length > 0
+    ? OUTPUT_SPACER_ROWS_WITH_FILTERS
+    : OUTPUT_SPACER_ROWS_WITHOUT_FILTERS;
+  let pivotStartRow = titleRow + 1 + summaryLines.length + spacerRows;
   validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
   preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
   writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
@@ -1620,7 +1626,7 @@ function buildOnePivot(
     pivotName = uniquePivotName(workbook, setup.pivotName);
     clearFailedPivotHeader(sheet, titleRow, titleCol, pivotStartRow);
     titleRow = Math.max(nextAvailableOutputRow(sheet), titleRow + 12);
-    pivotStartRow = titleRow + 1 + summaryLines.length + OUTPUT_DESCRIPTION_SPACER_ROWS + topFilters.length;
+    pivotStartRow = titleRow + 1 + summaryLines.length + spacerRows;
     validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
     preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
     writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
@@ -1732,7 +1738,7 @@ function buildOnePivot(
   const occupiedRight = occupiedRightInRows(sheet, titleRow, measuredBottom);
   const measuredRight = Math.max(summaryRight, actualTableRight, occupiedRight);
   const occupiedBottom = occupiedBottomInColumns(sheet, titleCol, measuredRight);
-  const bottom = Math.max(measuredBottom, occupiedBottom) + 6;
+  const bottom = Math.max(measuredBottom, occupiedBottom) + OUTPUT_NEXT_DOWN_GAP_ROWS;
   const right = measuredRight + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight && right + 12 <= EXCEL_MAX_COLUMNS) {
@@ -2512,18 +2518,6 @@ function conditionCategory(
     }
   }
   return "";
-}
-
-function pivotSummaryLines(setup: PivotSetup): string[] {
-  return [
-    ...topicSummaryLines("Conditions", setup.conditions),
-    ...topicSummaryLines("Filters", setup.filters)
-  ];
-}
-
-function topicSummaryLines(label: string, value: string): string[] {
-  const trimmed = singleLineSetupText(value);
-  return [`${label}: ${trimmed || "none"}`];
 }
 
 function templateSelected(template: string, selected: string): boolean {
