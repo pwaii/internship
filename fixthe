@@ -140,7 +140,13 @@ function main(workbook: ExcelScript.Workbook): string {
       writeStatus(setup, "Embedded templates restored. Edit the setup rows normally; later builds will preserve your changes.");
       return "";
     }
-    if (equalsText(action, "Refresh fields") || equalsText(action, "Refresh fields only")) {
+    if (
+      equalsText(action, "Refresh fields") ||
+      equalsText(action, "Refresh fields only") ||
+      equalsText(action, "Refresh template") ||
+      equalsText(action, "Refresh setup") ||
+      equalsText(action, "Refresh layout")
+    ) {
       refreshCloudSetup(workbook, setup);
       writeStatus(setup, "Fields, worksheets, and template choices refreshed.");
       return "";
@@ -149,7 +155,8 @@ function main(workbook: ExcelScript.Workbook): string {
     const dataSheetName = text(setup.getRange("B3").getValue());
     const selectedTemplateInput = text(setup.getRange("B4").getValue()) || "All";
     const selectedTemplates = applyMonthlyInputs(selectedTemplateInput, readMonthlyInputs(setup));
-    const dataSheet = workbook.getWorksheet(dataSheetName);
+    if (!dataSheetName) throw new Error("Choose a Data sheet in B3 before building pivots.");
+    const dataSheet = findWorksheetByName(workbook, dataSheetName);
     if (!dataSheet) throw new Error(`Data sheet not found: ${dataSheetName}`);
     if (dataSheet.getName() === SETUP_SHEET || dataSheet.getName() === SOURCE_SHEET) {
       throw new Error("Choose a normal data sheet, not the setup/helper sheet.");
@@ -387,7 +394,7 @@ function refreshCloudSetup(workbook: ExcelScript.Workbook, setup: ExcelScript.Wo
   applySetupValidations(setup);
 
   const dataSheetName = text(setup.getRange("B3").getValue());
-  const dataSheet = workbook.getWorksheet(dataSheetName);
+  const dataSheet = findWorksheetByName(workbook, dataSheetName);
   if (dataSheet && dataSheet.getName() !== SETUP_SHEET && dataSheet.getName() !== SOURCE_SHEET) {
     const used = dataSheet.getUsedRange(true);
     if (used && used.getRowCount() > 0) {
@@ -1720,11 +1727,6 @@ function buildOnePivot(
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
   pivot.getLayout().setShowFieldHeaders(true);
   pivot.getLayout().setEnableFieldList(true);
-  try {
-    pivot.refresh();
-  } catch (_ignored) {
-    // Newly created pivots are already current in some Excel web tenants.
-  }
   const pivotRange = pivot.getLayout().getRange();
   builtPivots.push({
     inputName: setup.pivotName,
@@ -2055,11 +2057,22 @@ function findPivotRangeForLookup(
 }
 
 function findWorksheetNameForLookup(workbook: ExcelScript.Workbook, expected: string): string {
-  const exact = workbook.getWorksheet(expected);
+  const exact = findWorksheetByName(workbook, expected);
   if (exact) return exact.getName();
   const safeExpected = safeSheetName(expected);
   const found = workbook.getWorksheets().find(sheet => sheetNameMatches(sheet.getName(), safeExpected, expected));
   return found ? found.getName() : "";
+}
+
+function findWorksheetByName(workbook: ExcelScript.Workbook, expected: string): ExcelScript.Worksheet | undefined {
+  const clean = text(expected);
+  if (!clean) return undefined;
+  const exact = workbook.getWorksheets().find(sheet => equalsText(sheet.getName(), clean));
+  if (exact) return exact;
+  const safeExpected = safeSheetName(clean);
+  return workbook.getWorksheets().find(sheet =>
+    equalsText(sheet.getName(), safeExpected) || equalsText(safeSheetName(sheet.getName()), safeExpected)
+  );
 }
 
 function findWorksheetNameContainingPivot(
