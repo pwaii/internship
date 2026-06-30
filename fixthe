@@ -8,8 +8,6 @@
  * new
  */
 
-const SETUP_SHEET = "PivotBuilder_Setup";
-const SOURCE_SHEET = "__PivotSource";
 const FIRST_SETUP_ROW = 9;
 const LAST_SETUP_ROW = 200;
 const OUTPUT_ROW_LABEL_COLUMN_WIDTH = 105;
@@ -26,6 +24,9 @@ const MAX_RUN_SECONDS = 240;
 const CONTROLLED_STOP_PREFIX = "CONTROLLED_STOP:";
 const RESUME_KEY_CELL = "Z5";
 const RESUME_ROW_CELL = "Z6";
+
+const SETUP_SHEET = "PivotBuilder_Setup";
+const SOURCE_SHEET = "__PivotSource";
 
 type CellValue = string | number | boolean;
 
