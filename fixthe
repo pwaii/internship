@@ -5,6 +5,7 @@
  * Run this script inside the raw-data workbook.
  * First run creates PivotBuilder_Setup. Later runs refresh fields and build pivots
  * directly in the same workbook. No Power Automate flow is required.
+ * new
  */
 
 const SETUP_SHEET = "PivotBuilder_Setup";
