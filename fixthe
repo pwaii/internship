@@ -22,6 +22,8 @@ const EXCEL_MAX_ROWS = 1048576;
 const EXCEL_MAX_COLUMNS = 16384;
 const MAX_RUN_SECONDS = 240;
 const CONTROLLED_STOP_PREFIX = "CONTROLLED_STOP:";
+const RESUME_KEY_CELL = "Z5";
+const RESUME_ROW_CELL = "Z6";
 
 type CellValue = string | number | boolean;
 
@@ -134,6 +136,7 @@ function main(workbook: ExcelScript.Workbook): string {
 
     const action = text(setup.getRange("B5").getValue());
     if (equalsText(action, "Restore starter template") || equalsText(action, "Restore embedded templates")) {
+      clearResumeState(setup);
       restoreEmbeddedTemplates(setup);
       refreshCloudSetup(workbook, setup);
       setup.getRange("B5").setValue("Build pivots");
@@ -147,6 +150,7 @@ function main(workbook: ExcelScript.Workbook): string {
       equalsText(action, "Refresh setup") ||
       equalsText(action, "Refresh layout")
     ) {
+      clearResumeState(setup);
       refreshCloudSetup(workbook, setup);
       writeStatus(setup, "Fields, worksheets, and template choices refreshed.");
       return "";
@@ -163,7 +167,9 @@ function main(workbook: ExcelScript.Workbook): string {
     }
 
     const allSetups = readSetups(setup);
-    const builds = allSetups.filter(row => templateSelected(row.template, selectedTemplates));
+    const selectedBuilds = allSetups.filter(row => templateSelected(row.template, selectedTemplates));
+    const resumeKey = buildResumeKey(dataSheetName, selectedTemplates);
+    const builds = applyResumeState(setup, selectedBuilds, resumeKey);
     if (builds.length === 0) throw new Error(`No PivotTable rows match template/group selection: ${selectedTemplates}`);
 
     writeStatus(setup, `Preparing source data for ${builds.length} PivotTable(s)...`);
@@ -178,7 +184,8 @@ function main(workbook: ExcelScript.Workbook): string {
       : buildDirectSource(dataSheet, used, headers, builds);
     const sourceSeconds = (Date.now() - sourceStarted) / 1000;
     const pivotStarted = Date.now();
-    buildAllPivots(workbook, setup, source, builds, dataSheet.getName(), Date.now());
+    buildAllPivots(workbook, setup, source, builds, dataSheet.getName(), Date.now(), resumeKey);
+    clearResumeState(setup);
     const pivotSeconds = (Date.now() - pivotStarted) / 1000;
     if (source.sourceSheetName === SOURCE_SHEET) {
       const sourceSheet = workbook.getWorksheet(SOURCE_SHEET);
@@ -192,6 +199,7 @@ function main(workbook: ExcelScript.Workbook): string {
     return JSON.stringify({ dataSheet: dataSheet.getName(), headers });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (!message.startsWith(CONTROLLED_STOP_PREFIX)) clearResumeState(setup);
     flagSetupError(setup, message);
     writeStatus(setup, message.startsWith(CONTROLLED_STOP_PREFIX) ? message.slice(CONTROLLED_STOP_PREFIX.length).trim() : `ERROR: ${message}`);
     throw error;
@@ -1282,7 +1290,8 @@ function buildAllPivots(
   source: SourceModel,
   setups: PivotSetup[],
   dataSheetName: string,
-  runStarted: number
+  runStarted: number,
+  resumeKey: string
 ) {
   const outputs = distinct(setups.map(setup => safeSheetName(setup.outputSheet || "Pivot_Output")));
   const protectedNames = [setupSheet.getName(), source.sourceSheetName, dataSheetName];
@@ -1322,11 +1331,12 @@ function buildAllPivots(
     const setup = setups[index];
     const elapsedSeconds = (Date.now() - runStarted) / 1000;
     if (elapsedSeconds > MAX_RUN_SECONDS) {
+      saveResumeState(setupSheet, resumeKey, setup.sourceRow);
       writeStatus(
         setupSheet,
-        `Stopped before Excel timeout after ${index}/${setups.length} PivotTable(s). Select remaining template rows or reduce the batch, then run again.`
+        `Stopped before Excel timeout after ${index}/${setups.length} PivotTable(s). Run Build pivots again to continue from setup row ${setup.sourceRow}.`
       );
-      throw new Error(`${CONTROLLED_STOP_PREFIX} Stopped before Excel timeout after ${index}/${setups.length} PivotTable(s). Select remaining template rows or reduce the batch, then run again.`);
+      throw new Error(`${CONTROLLED_STOP_PREFIX} Stopped before Excel timeout after ${index}/${setups.length} PivotTable(s). Run Build pivots again to continue from setup row ${setup.sourceRow}.`);
     }
     const outputName = safeSheetName(setup.outputSheet || "Pivot_Output");
     const sheet = outputSheets.get(lower(outputName));
@@ -1337,6 +1347,40 @@ function buildAllPivots(
     buildOnePivot(workbook, sheet, source, setup, placement, outputName, builtPivots);
   }
 
+}
+
+function buildResumeKey(dataSheetName: string, selectedTemplates: string): string {
+  return `${lower(text(dataSheetName))}|${lower(text(selectedTemplates))}`;
+}
+
+function applyResumeState(
+  setup: ExcelScript.Worksheet,
+  builds: PivotSetup[],
+  resumeKey: string
+): PivotSetup[] {
+  const storedKey = text(setup.getRange(RESUME_KEY_CELL).getValue());
+  const storedRow = Number(setup.getRange(RESUME_ROW_CELL).getValue());
+  if (!storedKey || !equalsText(storedKey, resumeKey) || !Number.isFinite(storedRow) || storedRow <= 0) {
+    if (storedKey && !equalsText(storedKey, resumeKey)) clearResumeState(setup);
+    return builds;
+  }
+  const startIndex = builds.findIndex(item => item.sourceRow >= storedRow);
+  if (startIndex < 0) {
+    clearResumeState(setup);
+    return builds;
+  }
+  writeStatus(setup, `Resuming from setup row ${builds[startIndex].sourceRow} (${builds.length - startIndex} PivotTable(s) left)...`);
+  return builds.slice(startIndex);
+}
+
+function saveResumeState(setup: ExcelScript.Worksheet, resumeKey: string, sourceRow: number) {
+  setup.getRange(RESUME_KEY_CELL).setValue(resumeKey);
+  setup.getRange(RESUME_ROW_CELL).setValue(sourceRow);
+}
+
+function clearResumeState(setup: ExcelScript.Worksheet) {
+  setup.getRange(RESUME_KEY_CELL).clear(ExcelScript.ClearApplyTo.contents);
+  setup.getRange(RESUME_ROW_CELL).clear(ExcelScript.ClearApplyTo.contents);
 }
 
 function clearLegacyOutputMarker(sheet: ExcelScript.Worksheet) {
@@ -1519,11 +1563,12 @@ function writePivotTitleBox(
   fillOverflowBlockers(sheet, titleRow, titleCol + OUTPUT_DESCRIPTION_COLUMNS, 1);
   const box = sheet.getRangeByIndexes(titleRow, titleCol, 1, OUTPUT_DESCRIPTION_COLUMNS);
   const format = box.getFormat();
-  format.getFill().setColor("#FFF2CC");
+  format.getFill().setColor("#FFFFFF");
   format.setWrapText(false);
   format.setHorizontalAlignment(ExcelScript.HorizontalAlignment.left);
   format.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
   format.setRowHeight(20);
+  title.getFormat().getFill().setColor("#FFF2CC");
   title.getFormat().getFont().setBold(true);
   title.getFormat().getFont().setSize(14);
   setDescriptionColumnWidths(sheet, titleCol);
@@ -1629,7 +1674,10 @@ function buildOnePivot(
   const topFilterSpacerRows = topFilters.length > 0
     ? Math.max(OUTPUT_SPACER_ROWS_WITH_FILTERS, topFilters.length + 1)
     : OUTPUT_SPACER_ROWS_WITHOUT_FILTERS;
-  let pivotStartRow = titleRow + 1 + summaryLines.length + topFilterSpacerRows;
+  const pivotStartOffset = 1 + summaryLines.length + topFilterSpacerRows;
+  let pivotStartRow = titleRow + pivotStartOffset;
+  titleRow = avoidPivotRangeConflicts(sheet, titleRow, titleCol, pivotStartOffset, topFilters.length);
+  pivotStartRow = titleRow + pivotStartOffset;
   validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
   preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
   writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
@@ -1651,7 +1699,8 @@ function buildOnePivot(
     pivotName = uniquePivotName(workbook, setup.pivotName);
     clearFailedPivotHeader(sheet, titleRow, titleCol, pivotStartRow);
     titleRow = Math.max(nextAvailableOutputRow(sheet), titleRow + 12);
-    pivotStartRow = titleRow + 1 + summaryLines.length + topFilterSpacerRows;
+    titleRow = avoidPivotRangeConflicts(sheet, titleRow, titleCol, pivotStartOffset, topFilters.length);
+    pivotStartRow = titleRow + pivotStartOffset;
     validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
     preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
     writePivotTitleBox(sheet, titleRow, titleCol, setup.pivotName);
@@ -1785,6 +1834,50 @@ function validatePivotDestination(
       `Setup row ${setup.sourceRow}: Output Sheet '${sheet.getName()}' has no remaining columns for '${setup.pivotName}'.`
     );
   }
+}
+
+function avoidPivotRangeConflicts(
+  sheet: ExcelScript.Worksheet,
+  titleRow: number,
+  titleCol: number,
+  pivotStartOffset: number,
+  topFilterCount: number
+): number {
+  let candidateTitleRow = titleRow;
+  let candidatePivotStartRow = titleRow + pivotStartOffset;
+  let tries = 0;
+  while (tries < 25) {
+    const conflictingBottom = findConflictingPivotBottom(sheet, candidateTitleRow, titleCol, candidatePivotStartRow, topFilterCount);
+    if (conflictingBottom < 0) return candidateTitleRow;
+    candidateTitleRow = conflictingBottom + OUTPUT_NEXT_DOWN_GAP_ROWS + 2;
+    candidatePivotStartRow = candidateTitleRow + pivotStartOffset;
+    tries++;
+  }
+  return candidateTitleRow;
+}
+
+function findConflictingPivotBottom(
+  sheet: ExcelScript.Worksheet,
+  titleRow: number,
+  titleCol: number,
+  pivotStartRow: number,
+  topFilterCount: number
+): number {
+  const blockTop = titleRow;
+  const blockLeft = titleCol;
+  const blockBottom = pivotStartRow + Math.max(12, topFilterCount + 6);
+  const blockRight = titleCol + Math.max(16, OUTPUT_DESCRIPTION_COLUMNS + 8);
+  let conflictBottom = -1;
+  sheet.getPivotTables().forEach(pivot => {
+    const range = pivot.getLayout().getRange();
+    const top = Math.max(0, range.getRowIndex() - 3);
+    const left = Math.max(0, range.getColumnIndex());
+    const bottom = range.getRowIndex() + range.getRowCount() - 1 + 3;
+    const right = range.getColumnIndex() + range.getColumnCount() - 1 + 4;
+    const overlaps = !(blockBottom < top || blockTop > bottom || blockRight < left || blockLeft > right);
+    if (overlaps) conflictBottom = Math.max(conflictBottom, bottom);
+  });
+  return conflictBottom;
 }
 
 function clearFailedPivotHeader(
