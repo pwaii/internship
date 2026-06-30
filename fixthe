@@ -1,3 +1,4 @@
+
 /**
  * Excel Pivot Builder - single-workbook Office Script.
  *
@@ -496,6 +497,7 @@ function setListValidation(range: ExcelScript.Range, source: string, showError =
   validation.setIgnoreBlanks(true);
   validation.setErrorAlert({
     showAlert: showError,
+    style: ExcelScript.DataValidationAlertStyle.stop,
     title: "Pivot Builder",
     message: "Choose a suggestion or type the required comma/semicolon expression."
   });
@@ -1635,7 +1637,9 @@ function boundedWidth(maxLength: number, minimum: number, maximum: number): numb
 
 function applyCommaNumberFormat(range: ExcelScript.Range, values: CellValue[][]) {
   if (values.length === 0 || values[0].length === 0) return;
-  const formats = values.map(row => row.map(value => typeof value === "number" ? "#,##0" : "General"));
+  const formats: string[][] = values.map(row =>
+    row.map(value => typeof value === "number" ? "#,##0" : "General")
+  );
   try {
     range.setNumberFormat(formats);
   } catch (_ignored) {
@@ -1978,7 +1982,7 @@ function addCalculatedOutputs(
   const outputRange = sheet.getRangeByIndexes(outputStartRow, outputStartColumn, outputRowCount, specs.length);
   outputRange.getFormat().getFill().setColor("#D9EAD3");
   outputRange.getFormat().setWrapText(false);
-  const numberFormats = matrix.map((row, rowIndex) =>
+  const numberFormats: string[][] = matrix.map((row, rowIndex) =>
     row.map(() => rowIndex === 0 ? "General" : "#,##0")
   );
   try {
