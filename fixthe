@@ -1580,6 +1580,24 @@ function writeChunkWithRetry(
   if (rowCount === 0) return;
   const columnCount = values[0].length;
   if (columnCount === 0) return;
+  if (startRow < 0 || startColumn < 0) {
+    throw new Error(
+      `Invalid write target on sheet '${sheet.getName()}': row ${startRow + 1}, column ${startColumn + 1}.`
+    );
+  }
+  if (startRow >= EXCEL_MAX_ROWS || startColumn >= EXCEL_MAX_COLUMNS) {
+    throw new Error(
+      `Write target is outside Excel limits on sheet '${sheet.getName()}': ` +
+      `row ${startRow + 1}, column ${startColumn + 1}.`
+    );
+  }
+  if (startRow + rowCount > EXCEL_MAX_ROWS || startColumn + columnCount > EXCEL_MAX_COLUMNS) {
+    throw new Error(
+      `Write range is outside Excel limits on sheet '${sheet.getName()}': ` +
+      `start row ${startRow + 1}, start column ${startColumn + 1}, ` +
+      `rows ${rowCount}, columns ${columnCount}.`
+    );
+  }
   const rectangular = values.map(row => {
     const result = row.slice(0, columnCount);
     while (result.length < columnCount) result.push("");
@@ -1608,7 +1626,7 @@ function writeChunkWithRetry(
       return;
     } catch (cellError) {
       throw new Error(
-        `Could not write source cell at row ${startRow + 1}, column ${startColumn + 1}: ` +
+        `Could not write source cell on sheet '${sheet.getName()}' at row ${startRow + 1}, column ${startColumn + 1}: ` +
         `${errorDetail(error)}; cell fallback: ${errorDetail(cellError)}`
       );
     }
