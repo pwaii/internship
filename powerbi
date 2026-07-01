@@ -58,8 +58,13 @@ IMPORTANT DENEB SETUP
           "as": "NumericPrice"
         },
         {
+          "type": "formula",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? datum.Date : time(toDate(datum.Date))",
+          "as": "DateKey"
+        },
+        {
           "type": "filter",
-          "expr": "isFinite(datum.NumericPrice)"
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.DateKey)"
         },
         {
           "type": "formula",
@@ -74,7 +79,7 @@ IMPORTANT DENEB SETUP
         {
           "type": "collect",
           "sort": {
-            "field": "Date",
+            "field": "DateKey",
             "order": "ascending"
           }
         }
@@ -87,7 +92,7 @@ IMPORTANT DENEB SETUP
         {
           "type": "collect",
           "sort": {
-            "field": "Date",
+            "field": "DateKey",
             "order": "descending"
           }
         },
@@ -137,10 +142,10 @@ IMPORTANT DENEB SETUP
   "scales": [
     {
       "name": "x",
-      "type": "point",
+      "type": "time",
       "domain": {
         "data": "chartData",
-        "field": "Date"
+        "field": "DateKey"
       },
       "range": [
         260,
@@ -167,6 +172,7 @@ IMPORTANT DENEB SETUP
       "orient": "bottom",
       "scale": "x",
       "position": 830,
+      "format": "%b %Y",
       "labelColor": "#8EACDF",
       "labelFontSize": 11,
       "labelPadding": 10,
@@ -1290,7 +1296,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "DateKey"
           },
           "y": {
             "scale": "y",
@@ -1314,7 +1320,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "DateKey"
           },
           "y": {
             "scale": "y",
@@ -1338,7 +1344,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "DateKey"
           },
           "y": {
             "scale": "y",
@@ -1362,7 +1368,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "Date"
+            "field": "DateKey"
           },
           "y": {
             "scale": "y",
