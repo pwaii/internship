@@ -82,6 +82,15 @@ IMPORTANT DENEB SETUP
             "field": "DateKey",
             "order": "ascending"
           }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "RowIndex"
+          ]
         }
       ]
     },
@@ -142,10 +151,10 @@ IMPORTANT DENEB SETUP
   "scales": [
     {
       "name": "x",
-      "type": "time",
+      "type": "linear",
       "domain": {
         "data": "chartData",
-        "field": "DateKey"
+        "field": "RowIndex"
       },
       "range": [
         260,
@@ -172,7 +181,7 @@ IMPORTANT DENEB SETUP
       "orient": "bottom",
       "scale": "x",
       "position": 830,
-      "format": "%b %Y",
+      "labels": false,
       "labelColor": "#8EACDF",
       "labelFontSize": 11,
       "labelPadding": 10,
@@ -1296,7 +1305,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
@@ -1320,7 +1329,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
@@ -1344,7 +1353,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
@@ -1368,7 +1377,7 @@ IMPORTANT DENEB SETUP
         "enter": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
