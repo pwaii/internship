@@ -1055,8 +1055,13 @@ function setFormulaColumnR1C1InChunks(
   let offset = 0;
   while (offset < rowCount) {
     const chunkSize = Math.min(MAX_FORMULA_ROWS_PER_CHUNK, rowCount - offset);
-    const matrix = Array.from({ length: chunkSize }, () => [formulaR1C1]);
-    sheet.getRangeByIndexes(startRow + offset, column, chunkSize, 1).setFormulasR1C1(matrix);
+    const chunkStartRow = startRow + offset;
+    const seedCell = sheet.getCell(chunkStartRow, column);
+    seedCell.setFormulaR1C1(formulaR1C1);
+    if (chunkSize > 1) {
+      const destination = sheet.getRangeByIndexes(chunkStartRow, column, chunkSize, 1);
+      seedCell.autoFill(destination, ExcelScript.AutoFillType.fillDefault);
+    }
     offset += chunkSize;
   }
 }
@@ -2487,8 +2492,7 @@ function addCalculatedOutputs(
     }
     if (outputDataRowCount > 0) {
       const formulaR1C1 = rowCalculationFormulaR1C1(targetColumn, formulaTerms);
-      const formulaColumn = Array.from({ length: outputDataRowCount }, () => [formulaR1C1]);
-      sheet.getRangeByIndexes(outputStartRow + 1, targetColumn, outputDataRowCount, 1).setFormulasR1C1(formulaColumn);
+      setFormulaColumnR1C1InChunks(sheet, outputStartRow + 1, targetColumn, outputDataRowCount, formulaR1C1);
     }
   });
 
