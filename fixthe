@@ -1000,6 +1000,12 @@ function appendRawColumnsToSheet(
 }
 
 function parseRawColumnSpecs(setup: PivotSetup, headers: string[]): CalculationSpec[] {
+  if (!text(setup.calculations).trim()) {
+    throw new Error(
+      `Setup row ${setup.sourceRow}: Input Sheet and Output Sheet are the same, so this row runs in raw-column mode. ` +
+      `Fill in Calculated Columns to append/update raw columns on '${setup.inputSheet}'.`
+    );
+  }
   let specs: CalculationSpec[];
   try {
     specs = parseCalculationSpecs(setup.calculations);
