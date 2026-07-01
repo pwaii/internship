@@ -979,6 +979,24 @@ function appendRawColumnsToSheet(
     const existingIndex = currentHeaders.findIndex(header => headerNamesMatch(header, spec.label));
     const targetIndex = existingIndex >= 0 ? existingIndex : currentHeaders.length;
     const absoluteColumn = startColumn + targetIndex;
+    if (absoluteColumn < 0 || absoluteColumn >= EXCEL_MAX_COLUMNS) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: raw column '${spec.label}' cannot be written on sheet '${sheet.getName()}'. ` +
+        `Target column index ${absoluteColumn + 1} is outside Excel's column limit. ` +
+        `Current used range starts at column ${startColumn + 1} and spans ${currentHeaders.length} header(s).`
+      );
+    }
+    if (headerRow < 0 || headerRow >= EXCEL_MAX_ROWS) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: sheet '${sheet.getName()}' has an invalid header row index (${headerRow + 1}) for raw append.`
+      );
+    }
+    const formatRowCount = Math.max(1, dataRowCount + 1);
+    if (headerRow + formatRowCount > EXCEL_MAX_ROWS) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: raw column '${spec.label}' would exceed Excel's row limit on sheet '${sheet.getName()}'.`
+      );
+    }
     const formulaTerms = spec.terms.map(term => ({
       operator: term.operator,
       operand: rawCalculatedOperand(currentHeaders, specs, specIndex, term.reference, startColumn)
@@ -990,7 +1008,7 @@ function appendRawColumnsToSheet(
     }
 
     writeValuesInChunks(sheet, columnValues, 1, headerRow, absoluteColumn);
-    const formatRange = sheet.getRangeByIndexes(headerRow, absoluteColumn, Math.max(1, dataRowCount + 1), 1);
+    const formatRange = sheet.getRangeByIndexes(headerRow, absoluteColumn, formatRowCount, 1);
     formatRange.getFormat().setWrapText(false);
     if (dataRowCount > 0) {
       try {
