@@ -17,7 +17,7 @@ const OUTPUT_DESCRIPTION_COLUMNS = 4;
 const OUTPUT_DESCRIPTION_COLUMN_WIDTH = 58;
 const OUTPUT_SPACER_ROWS_WITH_FILTERS = 2;
 const OUTPUT_SPACER_ROWS_WITHOUT_FILTERS = 1;
-const OUTPUT_NEXT_RIGHT_GAP_COLUMNS = 2;
+const OUTPUT_NEXT_RIGHT_GAP_COLUMNS = 4;
 const OUTPUT_NEXT_DOWN_GAP_ROWS = 2;
 const EXCEL_MAX_ROWS = 1048576;
 const EXCEL_MAX_COLUMNS = 16384;
@@ -146,6 +146,11 @@ interface PendingBuildItem {
   sourceMarker: string;
 }
 
+interface RawAppendResult {
+  updatedColumns: number;
+  processedRows: number;
+}
+
 const splitListCache = new Map<string, string[]>();
 const splitSemicolonCache = new Map<string, string[]>();
 const filterSpecCache = new Map<string, FieldCondition[]>();
@@ -170,12 +175,22 @@ function main(workbook: ExcelScript.Workbook): string {
     }
 
     const action = text(setup.getRange("B4").getValue());
+    const selectedTemplateInput = text(setup.getRange("B3").getValue()) || "All";
     if (equalsText(action, "Restore starter template") || equalsText(action, "Restore embedded templates")) {
       clearResumeState(setup);
       restoreEmbeddedTemplates(setup);
       refreshCloudSetup(workbook, setup);
       setup.getRange("B4").setValue("Build pivots");
       writeStatus(setup, "Embedded templates restored. Edit the setup rows normally; later builds will preserve your changes.");
+      return "";
+    }
+    if (
+      equalsText(action, "Append raw columns") ||
+      equalsText(action, "Append source columns") ||
+      equalsText(action, "Build raw columns")
+    ) {
+      clearResumeState(setup);
+      appendRawColumns(workbook, setup, selectedTemplateInput);
       return "";
     }
     if (
@@ -191,7 +206,6 @@ function main(workbook: ExcelScript.Workbook): string {
       return "";
     }
 
-    const selectedTemplateInput = text(setup.getRange("B3").getValue()) || "All";
     const selectedTemplates = applyMonthlyInputs(selectedTemplateInput, readMonthlyInputs(setup));
 
     const sourceStarted = Date.now();
@@ -201,8 +215,23 @@ function main(workbook: ExcelScript.Workbook): string {
     const builds = applyResumeState(setup, selectedBuilds, resumeKey);
     if (builds.length === 0) throw new Error(`No PivotTable rows match template/group selection: ${selectedTemplates}`);
 
-    writeStatus(setup, `Preparing source data for ${builds.length} PivotTable(s)...`);
-    const groupedBuilds = groupSetupsByInputSheet(builds);
+    const autoRawBuilds = builds.filter(row => outputMatchesInput(row));
+    const pivotBuilds = builds.filter(row => !outputMatchesInput(row));
+
+    let autoRawResult: RawAppendResult = { updatedColumns: 0, processedRows: 0 };
+    if (autoRawBuilds.length > 0) {
+      writeStatus(setup, `Appending raw columns for ${autoRawBuilds.length} setup row(s) where Input Sheet matches Output Sheet...`);
+      autoRawResult = appendRawColumnsForSetups(workbook, setup, autoRawBuilds, "Auto raw append");
+    }
+
+    if (pivotBuilds.length === 0) {
+      clearResumeState(setup);
+      writeStatus(setup, `Finished. Raw append updated ${autoRawResult.updatedColumns} column(s) across ${autoRawResult.processedRows} setup row(s).`);
+      return JSON.stringify({ rawUpdatedColumns: autoRawResult.updatedColumns, rawRows: autoRawResult.processedRows, built: 0, skipped: 0 });
+    }
+
+    writeStatus(setup, `Preparing source data for ${pivotBuilds.length} PivotTable(s)...`);
+    const groupedBuilds = groupSetupsByInputSheet(pivotBuilds);
     const pendingItems: PendingBuildItem[] = [];
     let totalSkipped = 0;
 
@@ -274,9 +303,10 @@ function main(workbook: ExcelScript.Workbook): string {
       setup,
       `Finished: ${pendingItems.length} PivotTable(s)` +
       `${totalSkipped > 0 ? `, skipped ${totalSkipped}` : ""}. ` +
+      `${autoRawResult.processedRows > 0 ? ` Raw append rows ${autoRawResult.processedRows}, columns updated ${autoRawResult.updatedColumns}.` : ""} ` +
       `Source ${sourceSeconds.toFixed(1)}s; Pivot build ${pivotSeconds.toFixed(1)}s.`
     );
-    return JSON.stringify({ built: pendingItems.length, skipped: totalSkipped });
+    return JSON.stringify({ built: pendingItems.length, skipped: totalSkipped, rawUpdatedColumns: autoRawResult.updatedColumns, rawRows: autoRawResult.processedRows });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.startsWith(CONTROLLED_STOP_PREFIX)) clearResumeState(setup);
@@ -567,7 +597,7 @@ function populateFieldSuggestions(setup: ExcelScript.Worksheet, headers: string[
 function applySetupValidations(setup: ExcelScript.Worksheet) {
   setup.getRange(`A${FIRST_SETUP_ROW}:O${LAST_SETUP_ROW}`).getDataValidation().clear();
   setListValidation(setup.getRange("B3"), "=$T$4:$T$500");
-  setListValidation(setup.getRange("B4"), "Build pivots,Refresh fields,Restore starter template");
+  setListValidation(setup.getRange("B4"), "Build pivots,Append raw columns,Refresh fields,Restore starter template");
   setListValidation(setup.getRange("E4"), "\"Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec\"");
   setListValidation(setup.getRange(`A${FIRST_SETUP_ROW}:A${LAST_SETUP_ROW}`), "=$U$4:$U$500", false);
   setListValidation(setup.getRange(`B${FIRST_SETUP_ROW}:B${LAST_SETUP_ROW}`), "=$T$5:$T$500", false);
@@ -867,6 +897,148 @@ function prepareSetups(setups: PivotSetup[], headers: string[]): PreparedPivotSe
       requiresPreparedSource
     };
   });
+}
+
+function appendRawColumns(
+  workbook: ExcelScript.Workbook,
+  setupSheet: ExcelScript.Worksheet,
+  selectedTemplateInput: string
+) {
+  const selectedTemplates = applyMonthlyInputs(selectedTemplateInput, readMonthlyInputs(setupSheet));
+  const allSetups = readSetups(setupSheet);
+  const selectedBuilds = allSetups.filter(row => templateSelected(row.template, selectedTemplates));
+  if (selectedBuilds.length === 0) {
+    throw new Error(`No setup rows match template/group selection: ${selectedTemplates}`);
+  }
+
+  const result = appendRawColumnsForSetups(workbook, setupSheet, selectedBuilds, "Appending raw columns");
+  writeStatus(setupSheet, `Finished raw column append. Updated ${result.updatedColumns} column(s).`);
+}
+
+function appendRawColumnsForSetups(
+  workbook: ExcelScript.Workbook,
+  setupSheet: ExcelScript.Worksheet,
+  selectedBuilds: PivotSetup[],
+  statusPrefix: string
+): RawAppendResult {
+
+  let changedCount = 0;
+  let processedRows = 0;
+  const groupedBuilds = groupSetupsByInputSheet(selectedBuilds);
+  groupedBuilds.forEach(group => {
+    const sheet = findWorksheetByName(workbook, group.inputSheet);
+    if (!sheet) throw new Error(`Data sheet not found: ${group.inputSheet}`);
+    if (sheet.getName() === SETUP_SHEET || isHelperSourceSheet(sheet.getName())) {
+      throw new Error(`Choose a normal data sheet in setup rows, not the setup/helper sheet: ${group.inputSheet}`);
+    }
+
+    let used = sheet.getUsedRange(true);
+    if (!used || used.getRowCount() < 1 || used.getColumnCount() < 1) {
+      throw new Error(`Data sheet '${sheet.getName()}' is empty.`);
+    }
+
+    group.setups.forEach(setup => {
+      writeStatus(setupSheet, `${statusPrefix} on ${sheet.getName()} for setup row ${setup.sourceRow}...`);
+      changedCount += appendRawColumnsToSheet(sheet, used, setup);
+      processedRows++;
+      used = sheet.getUsedRange(true) || used;
+    });
+  });
+
+  return { updatedColumns: changedCount, processedRows };
+}
+
+function appendRawColumnsToSheet(
+  sheet: ExcelScript.Worksheet,
+  used: ExcelScript.Range,
+  setup: PivotSetup
+): number {
+  const rawHeaders = normalizeHeaders(readRawHeaderRow(used));
+  const headerRow = used.getRowIndex();
+  const startColumn = used.getColumnIndex();
+  const dataStartRow = headerRow + 1;
+  const dataRowCount = Math.max(0, used.getRowCount() - 1);
+  const specs = parseRawColumnSpecs(setup, rawHeaders);
+  if (specs.length === 0) return 0;
+
+  let currentHeaders = [...rawHeaders];
+  let changedCount = 0;
+  specs.forEach((spec, specIndex) => {
+    const existingIndex = currentHeaders.findIndex(header => headerNamesMatch(header, spec.label));
+    const targetIndex = existingIndex >= 0 ? existingIndex : currentHeaders.length;
+    const absoluteColumn = startColumn + targetIndex;
+    const formulaTerms = spec.terms.map(term => ({
+      operator: term.operator,
+      operand: rawCalculatedOperand(currentHeaders, specs, specIndex, term.reference, startColumn)
+    }));
+
+    const columnValues: CellValue[][] = [[spec.label]];
+    for (let offset = 0; offset < dataRowCount; offset++) {
+      columnValues.push([rowCalculationFormula(dataStartRow + offset, formulaTerms)]);
+    }
+
+    writeValuesInChunks(sheet, columnValues, 1, headerRow, absoluteColumn);
+    const formatRange = sheet.getRangeByIndexes(headerRow, absoluteColumn, Math.max(1, dataRowCount + 1), 1);
+    formatRange.getFormat().setWrapText(false);
+    if (dataRowCount > 0) {
+      try {
+        sheet.getRangeByIndexes(dataStartRow, absoluteColumn, dataRowCount, 1).setNumberFormat(
+          Array.from({ length: dataRowCount }, () => ["#,##0"])
+        );
+      } catch (_ignored) {
+        // Keep formulas even if number formatting is rejected.
+      }
+    }
+    sheet.getRangeByIndexes(0, absoluteColumn, 1, 1).getEntireColumn().getFormat().setColumnWidth(130);
+
+    if (existingIndex < 0) currentHeaders.push(spec.label);
+    else currentHeaders[existingIndex] = spec.label;
+    changedCount++;
+  });
+
+  return changedCount;
+}
+
+function parseRawColumnSpecs(setup: PivotSetup, headers: string[]): CalculationSpec[] {
+  let specs: CalculationSpec[];
+  try {
+    specs = parseCalculationSpecs(setup.calculations);
+  } catch (error) {
+    throw new Error(`Setup row ${setup.sourceRow}: ${errorDetail(error)}`);
+  }
+  specs.forEach((spec, specIndex) => {
+    spec.terms.forEach(term => {
+      if (isPivotLookupReference(term.reference)) {
+        throw new Error(`Setup row ${setup.sourceRow}: Raw column append does not support pivot lookups. Use raw headers and numbers only.`);
+      }
+      if (isNumericLiteral(term.reference)) return;
+      const knownHeader = headers.some(header => headerNamesMatch(header, term.reference));
+      const knownCalculated = specs.slice(0, specIndex).some(previous => headerNamesMatch(previous.label, term.reference));
+      if (!knownHeader && !knownCalculated) {
+        throw new Error(`Setup row ${setup.sourceRow}: Raw calculated column reference '${term.reference}' was not found in source headers or earlier calculated columns.`);
+      }
+    });
+  });
+  return specs;
+}
+
+function rawCalculatedOperand(
+  headers: string[],
+  specs: CalculationSpec[],
+  currentSpecIndex: number,
+  reference: string,
+  startColumn: number
+): string | number {
+  if (isNumericLiteral(reference)) return normalizedNumberLiteral(reference);
+  for (let index = 0; index < currentSpecIndex; index++) {
+    if (headerNamesMatch(specs[index].label, reference)) {
+      const headerIndex = headers.findIndex(header => headerNamesMatch(header, specs[index].label));
+      if (headerIndex >= 0) return startColumn + headerIndex;
+    }
+  }
+  const sourceIndex = headers.findIndex(header => headerNamesMatch(header, reference));
+  if (sourceIndex < 0) throw new Error(`Raw column reference not found: ${reference}`);
+  return startColumn + sourceIndex;
 }
 
 function requireSetupHeader(
@@ -1892,12 +2064,6 @@ function buildOnePivot(
   const filters = setup.filtersParsed;
   const conditions = setup.conditionsParsed;
 
-  const existingPivot = !setup.replaceOutput ? findExistingOutputPivot(sheet, setup) : undefined;
-  if (existingPivot) {
-    appendToExistingPivot(workbook, sheet, existingPivot, setup, outputAlias, builtPivots, placement);
-    return;
-  }
-
   let titleRow = placement.row;
   const titleCol = placement.col;
   const summaryLines: string[] = [];
@@ -2061,76 +2227,6 @@ function buildOnePivot(
   }
 }
 
-function findExistingOutputPivot(
-  sheet: ExcelScript.Worksheet,
-  setup: PreparedPivotSetup
-): ExcelScript.PivotTable | undefined {
-  return sheet.getPivotTables().find(pivot => pivotNameMatches(pivot.getName(), setup.pivotName));
-}
-
-function appendToExistingPivot(
-  workbook: ExcelScript.Workbook,
-  sheet: ExcelScript.Worksheet,
-  pivot: ExcelScript.PivotTable,
-  setup: PreparedPivotSetup,
-  outputAlias: string,
-  builtPivots: BuiltPivot[],
-  placement: Placement
-) {
-  const pivotRange = pivot.getLayout().getRange();
-  const rowCaptions = expectedPivotRowCaptions(setup);
-  const rowColumnCount = rowCaptions.length;
-  builtPivots.push({
-    inputName: setup.pivotName,
-    actualName: pivot.getName(),
-    outputAlias,
-    sheetName: sheet.getName(),
-    rangeRow: pivotRange.getRowIndex(),
-    rangeColumn: pivotRange.getColumnIndex(),
-    values: pivotRange.getValues() as CellValue[][]
-  });
-  const titleRow = findPivotTitleRow(sheet, pivotRange.getRowIndex(), pivotRange.getColumnIndex(), [setup.pivotName]);
-  const calculatedExtent = addCalculatedOutputs(
-    workbook,
-    sheet,
-    pivotRange,
-    setup,
-    rowCaptions,
-    rowColumnCount,
-    builtPivots,
-    true
-  );
-  const measuredBottom = Math.max(
-    titleRow + 1,
-    pivotRange.getRowIndex() + pivotRange.getRowCount() - 1,
-    calculatedExtent.bottomRow
-  );
-  const measuredRight = Math.max(
-    pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1,
-    calculatedExtent.rightColumn
-  );
-  const bottom = measuredBottom + OUTPUT_NEXT_DOWN_GAP_ROWS;
-  const right = measuredRight + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
-  placement.bandBottom = Math.max(placement.bandBottom, bottom);
-  if (setup.nextRight && right + 12 <= EXCEL_MAX_COLUMNS) {
-    placement.col = right;
-  } else {
-    placement.row = placement.bandBottom + 1;
-    placement.col = 0;
-    placement.bandBottom = placement.row;
-  }
-}
-
-function expectedPivotRowCaptions(setup: PreparedPivotSetup): string[] {
-  const result: string[] = [];
-  setup.rowFieldsParsed.forEach((field, position) => {
-    if (!field) return;
-    const caption = setup.rowNamesParsed[position] || field;
-    if (!containsText(result, caption)) result.push(caption);
-  });
-  return result;
-}
-
 function validatePivotDestination(
   setup: PivotSetup,
   sheet: ExcelScript.Worksheet,
@@ -2215,10 +2311,9 @@ function addCalculatedOutputs(
   setup: PreparedPivotSetup,
   rowCaptions: string[],
   rowColumnCount: number,
-  builtPivots: BuiltPivot[],
-  appendToExisting = false
+  builtPivots: BuiltPivot[]
 ): { rightColumn: number; bottomRow: number } {
-  let specs = setup.calculationSpecsParsed;
+  const specs = setup.calculationSpecsParsed;
   const pivotRight = pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1;
   const pivotBottom = pivotRange.getRowIndex() + pivotRange.getRowCount() - 1;
   if (specs.length === 0) return { rightColumn: pivotRight, bottomRow: pivotBottom };
@@ -2226,19 +2321,7 @@ function addCalculatedOutputs(
   const values = pivotRange.getValues() as CellValue[][];
   const headerRowOffset = findPivotHeaderRow(values, rowCaptions);
   const outputStartRow = pivotRange.getRowIndex() + headerRowOffset;
-  const existingCalculatedHeaders = appendToExisting
-    ? existingCalculatedOutputHeaders(sheet, pivotRange, outputStartRow)
-    : [];
-  if (appendToExisting && existingCalculatedHeaders.length > 0) {
-    specs = specs.filter(spec => !existingCalculatedHeaders.some(header => headerNamesMatch(header, spec.label)));
-  }
-  if (specs.length === 0) {
-    const existingRight = existingCalculatedHeaders.length > 0
-      ? pivotRight + 1 + existingCalculatedHeaders.length
-      : pivotRight;
-    return { rightColumn: existingRight, bottomRow: pivotBottom };
-  }
-  const outputStartColumn = nextCalculatedOutputStartColumn(sheet, pivotRange, outputStartRow, existingCalculatedHeaders, appendToExisting);
+  const outputStartColumn = pivotRight + 2;
   const outputRowCount = Math.max(2, values.length - headerRowOffset);
   if (outputStartColumn + specs.length > EXCEL_MAX_COLUMNS) {
     throw new Error(
@@ -2323,38 +2406,6 @@ function addCalculatedOutputs(
     rightColumn: outputStartColumn + specs.length - 1,
     bottomRow: outputStartRow + outputRowCount - 1
   };
-}
-
-function nextCalculatedOutputStartColumn(
-  sheet: ExcelScript.Worksheet,
-  pivotRange: ExcelScript.Range,
-  outputStartRow: number,
-  existingHeaders: string[],
-  appendToExisting: boolean
-): number {
-  const pivotRight = pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1;
-  const defaultStart = pivotRight + 2;
-  if (!appendToExisting) return defaultStart;
-  return defaultStart + existingHeaders.length;
-}
-
-function existingCalculatedOutputHeaders(
-  sheet: ExcelScript.Worksheet,
-  pivotRange: ExcelScript.Range,
-  outputStartRow: number
-): string[] {
-  const defaultStart = pivotRange.getColumnIndex() + pivotRange.getColumnCount() + 1;
-  const width = Math.min(100, EXCEL_MAX_COLUMNS - defaultStart);
-  if (width <= 0) return [];
-  const headerValues = readValuesInChunks(sheet.getRangeByIndexes(outputStartRow, defaultStart, 1, width))[0];
-  if (!headerValues || headerValues.length === 0) return [];
-  const result: string[] = [];
-  for (let index = 0; index < headerValues.length; index++) {
-    const label = text(headerValues[index]).trim();
-    if (!label) break;
-    result.push(label);
-  }
-  return result;
 }
 
 function findPivotHeaderRow(values: CellValue[][], rowCaptions: string[]): number {
@@ -3116,6 +3167,10 @@ function groupSetupsByInputSheet(setups: PivotSetup[]): { inputSheet: string; se
     group.setups.push(setup);
   });
   return groups;
+}
+
+function outputMatchesInput(setup: PivotSetup): boolean {
+  return equalsText(safeSheetName(setup.outputSheet || ""), safeSheetName(setup.inputSheet || ""));
 }
 
 function firstDataSheetName(workbook: ExcelScript.Workbook): string {
