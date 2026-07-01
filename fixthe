@@ -2404,32 +2404,36 @@ function addCalculatedOutputs(
       `Setup row ${setup.sourceRow}: Calculated Columns for '${setup.pivotName}' exceed Excel's row limit.`
     );
   }
-  const matrix: CellValue[][] = Array.from(
-    { length: outputRowCount },
-    () => Array(specs.length).fill("") as CellValue[]
-  );
+  const outputDataRowCount = Math.max(0, outputRowCount - 1);
 
   specs.forEach((spec, specIndex) => {
-    matrix[0][specIndex] = spec.label;
+    const targetColumn = outputStartColumn + specIndex;
+    sheet.getCell(outputStartRow, targetColumn).setValue(spec.label);
     if (spec.terms.some(term => isPivotLookupReference(term.reference))) {
       const lookupTerms = spec.terms.filter(term => isPivotLookupReference(term.reference));
+      const formulaColumn: string[][] = Array.from({ length: outputDataRowCount }, () => [""]);
       if (lookupTerms.length > 0 && lookupTerms.every(term => parsePivotLookup(term.reference).allRows)) {
         for (let row = headerRowOffset + 1; row < values.length; row++) {
           const rowLabel = currentPivotRowLabel(values[row], rowColumnCount);
+          const outputRowIndex = row - headerRowOffset - 1;
+          if (outputRowIndex < 0 || outputRowIndex >= formulaColumn.length) continue;
           if (!rowLabel) {
-            matrix[row - headerRowOffset][specIndex] = isGrandTotalRow(values[row])
+            formulaColumn[outputRowIndex][0] = isGrandTotalRow(values[row])
               ? calculatedColumnTotalFormula(outputStartRow, row - headerRowOffset, outputStartColumn + specIndex)
               : "";
             continue;
           }
           try {
-            matrix[row - headerRowOffset][specIndex] = pivotLookupFormula(workbook, sheet, spec, builtPivots, rowLabel);
+            formulaColumn[outputRowIndex][0] = pivotLookupFormula(workbook, sheet, spec, builtPivots, rowLabel);
           } catch (error) {
             throw new Error(`Calculated Columns '${spec.label}' failed for row '${rowLabel}': ${errorDetail(error)}`);
           }
         }
       } else {
-        matrix[1][specIndex] = pivotLookupFormula(workbook, sheet, spec, builtPivots);
+        if (formulaColumn.length > 0) formulaColumn[0][0] = pivotLookupFormula(workbook, sheet, spec, builtPivots);
+      }
+      if (formulaColumn.length > 0) {
+        sheet.getRangeByIndexes(outputStartRow + 1, targetColumn, formulaColumn.length, 1).setFormulas(formulaColumn);
       }
       return;
     }
@@ -2448,28 +2452,27 @@ function addCalculatedOutputs(
         )
       });
     }
-    for (let row = headerRowOffset + 1; row < values.length; row++) {
-      matrix[row - headerRowOffset][specIndex] = rowCalculationFormula(
-        pivotRange.getRowIndex() + row,
-        formulaTerms
-      );
+    if (outputDataRowCount > 0) {
+      const formulaR1C1 = rowCalculationFormulaR1C1(targetColumn, formulaTerms);
+      const formulaColumn = Array.from({ length: outputDataRowCount }, () => [formulaR1C1]);
+      sheet.getRangeByIndexes(outputStartRow + 1, targetColumn, outputDataRowCount, 1).setFormulasR1C1(formulaColumn);
     }
   });
 
-  writeValuesInChunks(sheet, matrix, specs.length, outputStartRow, outputStartColumn);
   const outputRange = sheet.getRangeByIndexes(outputStartRow, outputStartColumn, outputRowCount, specs.length);
   outputRange.getFormat().getFill().setColor("#D9EAD3");
   outputRange.getFormat().setWrapText(false);
-  const numberFormats: string[][] = matrix.map((row, rowIndex) =>
-    row.map(() => rowIndex === 0 ? "General" : "#,##0")
-  );
-  try {
-    outputRange.setNumberFormat(numberFormats);
-  } catch (_ignored) {
-    // Keep calculated formulas even if a tenant rejects number formatting.
+  if (outputDataRowCount > 0) {
+    try {
+      sheet.getRangeByIndexes(outputStartRow + 1, outputStartColumn, outputDataRowCount, specs.length).setNumberFormat(
+        Array.from({ length: outputDataRowCount }, () => Array(specs.length).fill("#,##0"))
+      );
+    } catch (_ignored) {
+      // Keep calculated formulas even if a tenant rejects number formatting.
+    }
   }
   for (let offset = 0; offset < specs.length; offset++) {
-    const width = boundedWidth(maxDisplayLength(matrix, offset), OUTPUT_VALUE_COLUMN_WIDTH, 130);
+    const width = boundedWidth(Math.max(specs[offset].label.length, 12), OUTPUT_VALUE_COLUMN_WIDTH, 130);
     sheet.getRangeByIndexes(0, outputStartColumn + offset, 1, 1).getEntireColumn().getFormat().setColumnWidth(width);
   }
 
