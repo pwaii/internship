@@ -965,7 +965,8 @@ function appendRawColumnsToSheet(
   used: ExcelScript.Range,
   setup: PivotSetup
 ): number {
-  const rawHeaders = normalizeHeaders(readRawHeaderRow(used));
+  const rawHeaderCells = readRawHeaderRow(used);
+  const rawHeaders = normalizeHeaders(trimTrailingEmptyHeaderCells(rawHeaderCells));
   const headerRow = used.getRowIndex();
   const startColumn = used.getColumnIndex();
   const dataStartRow = headerRow + 1;
@@ -1007,7 +1008,14 @@ function appendRawColumnsToSheet(
       columnValues.push([rowCalculationFormula(dataStartRow + offset, formulaTerms)]);
     }
 
-    writeValuesInChunks(sheet, columnValues, 1, headerRow, absoluteColumn);
+    try {
+      writeValuesInChunks(sheet, columnValues, 1, headerRow, absoluteColumn);
+    } catch (error) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: could not append raw column '${spec.label}' on sheet '${sheet.getName()}' ` +
+        `(header row ${headerRow + 1}, target column ${absoluteColumn + 1}, data rows ${dataRowCount}): ${errorDetail(error)}`
+      );
+    }
     const formatRange = sheet.getRangeByIndexes(headerRow, absoluteColumn, formatRowCount, 1);
     formatRange.getFormat().setWrapText(false);
     if (dataRowCount > 0) {
@@ -1027,6 +1035,15 @@ function appendRawColumnsToSheet(
   });
 
   return changedCount;
+}
+
+function trimTrailingEmptyHeaderCells(values: CellValue[]): CellValue[] {
+  let lastNonEmpty = -1;
+  values.forEach((value, index) => {
+    if (text(value).trim() !== "") lastNonEmpty = index;
+  });
+  if (lastNonEmpty < 0) return ["Column 1"];
+  return values.slice(0, lastNonEmpty + 1);
 }
 
 function parseRawColumnSpecs(setup: PivotSetup, headers: string[]): CalculationSpec[] {
