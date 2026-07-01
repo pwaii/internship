@@ -185,15 +185,6 @@ function main(workbook: ExcelScript.Workbook): string {
       return "";
     }
     if (
-      equalsText(action, "Append raw columns") ||
-      equalsText(action, "Append source columns") ||
-      equalsText(action, "Build raw columns")
-    ) {
-      clearResumeState(setup);
-      appendRawColumns(workbook, setup, selectedTemplateInput);
-      return "";
-    }
-    if (
       equalsText(action, "Refresh fields") ||
       equalsText(action, "Refresh fields only") ||
       equalsText(action, "Refresh template") ||
@@ -597,7 +588,7 @@ function populateFieldSuggestions(setup: ExcelScript.Worksheet, headers: string[
 function applySetupValidations(setup: ExcelScript.Worksheet) {
   setup.getRange(`A${FIRST_SETUP_ROW}:O${LAST_SETUP_ROW}`).getDataValidation().clear();
   setListValidation(setup.getRange("B3"), "=$T$4:$T$500");
-  setListValidation(setup.getRange("B4"), "Build pivots,Append raw columns,Refresh fields,Restore starter template");
+  setListValidation(setup.getRange("B4"), "Build pivots,Refresh fields,Restore starter template");
   setListValidation(setup.getRange("E4"), "\"Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec\"");
   setListValidation(setup.getRange(`A${FIRST_SETUP_ROW}:A${LAST_SETUP_ROW}`), "=$U$4:$U$500", false);
   setListValidation(setup.getRange(`B${FIRST_SETUP_ROW}:B${LAST_SETUP_ROW}`), "=$T$5:$T$500", false);
@@ -692,18 +683,39 @@ function readSetups(setup: ExcelScript.Worksheet): PivotSetup[] {
   const result: PivotSetup[] = [];
   values.forEach((row, index) => {
     const inputSheet = applyMonthlyInputs(text(row[0]), inputs);
-    const pivotName = applyMonthlyInputs(text(row[2]), inputs);
     const template = applyMonthlyInputs(text(row[1]), inputs);
-    if (!pivotName || !template || !inputSheet) return;
+    const outputSheet = applyMonthlyInputs(text(row[3]), inputs) || "Pivot_Output";
+    const pivotNameInput = applyMonthlyInputs(text(row[2]), inputs);
+    const calculations = applyMonthlyInputs(text(row[6]), inputs);
+    const sameSheetRaw = !!inputSheet && !!template && outputMatchesInput({
+      inputSheet,
+      template,
+      pivotName: pivotNameInput,
+      outputSheet,
+      replaceOutput: true,
+      rows: "",
+      rowNames: "",
+      calculations,
+      values: "",
+      filters: "",
+      conditions: "",
+      nextRight: false,
+      sourceRow: FIRST_SETUP_ROW + index
+    });
+    const pivotName = pivotNameInput || (sameSheetRaw && calculations
+      ? `Raw_${safeSheetName(inputSheet)}_${FIRST_SETUP_ROW + index}`
+      : "");
+    if (!template || !inputSheet) return;
+    if (!pivotName) return;
     result.push({
       inputSheet,
       template,
       pivotName,
-      outputSheet: applyMonthlyInputs(text(row[3]), inputs) || "Pivot_Output",
+      outputSheet,
       replaceOutput: !equalsText(text(row[12]), "Keep previous outputs"),
       rows: applyMonthlyInputs(text(row[4]), inputs),
       rowNames: applyMonthlyInputs(text(row[5]), inputs),
-      calculations: applyMonthlyInputs(text(row[6]), inputs),
+      calculations,
       values: applyMonthlyInputs(text(row[7]), inputs),
       filters: applyMonthlyInputs(text(row[8]), inputs),
       conditions: applyMonthlyInputs(text(row[9]), inputs),
