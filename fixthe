@@ -2672,17 +2672,7 @@ function lookupPivotCellAddress(
   if (cachedAddress !== undefined) return cachedAddress;
   const located = findPivotRangeForLookup(workbook, currentSheet, lookup, builtPivots);
   const values = located.values;
-  let rowIndex = -1;
   let columnIndex = -1;
-
-  for (let row = 0; row < values.length; row++) {
-    if (values[row].some(value => headerNamesMatch(text(value), lookup.rowLabel))) {
-      rowIndex = row;
-      break;
-    }
-  }
-  if (rowIndex < 0 && lookup.allRows) rowIndex = findGrandTotalRow(values);
-  if (rowIndex < 0) throw new Error(`Calculated Columns could not find row '${lookup.rowLabel}' in PivotTable '${lookup.pivotName}'.`);
 
   for (let row = 0; row < values.length; row++) {
     for (let column = 0; column < values[row].length; column++) {
@@ -2694,6 +2684,16 @@ function lookupPivotCellAddress(
     if (columnIndex >= 0) break;
   }
   if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${lookup.pivotName}'.`);
+  let rowIndex = -1;
+  for (let row = 0; row < values.length; row++) {
+    const candidateRowLabel = currentPivotRowLabel(values[row], Math.max(1, columnIndex));
+    if (candidateRowLabel && headerNamesMatch(candidateRowLabel, lookup.rowLabel)) {
+      rowIndex = row;
+      break;
+    }
+  }
+  if (rowIndex < 0 && lookup.allRows) rowIndex = findGrandTotalRow(values);
+  if (rowIndex < 0) throw new Error(`Calculated Columns could not find row '${lookup.rowLabel}' in PivotTable '${lookup.pivotName}'.`);
   const cellAddress = a1Address(located.rangeRow + rowIndex, located.rangeColumn + columnIndex);
   const resolved = located.sheetName === currentSheet.getName()
     ? cellAddress
@@ -3521,3 +3521,4 @@ function normalizedConditionSignature(conditions: string): string {
     return `${lower(condition.field)}|${caption}|${values}|${measure}`;
   }).join(";");
 }
+
