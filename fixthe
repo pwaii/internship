@@ -1003,13 +1003,13 @@ function appendRawColumnsToSheet(
       operand: rawCalculatedOperand(currentHeaders, specs, specIndex, term.reference, startColumn)
     }));
 
-    const columnValues: CellValue[][] = [[spec.label]];
-    for (let offset = 0; offset < dataRowCount; offset++) {
-      columnValues.push([rowCalculationFormula(dataStartRow + offset, formulaTerms)]);
-    }
-
     try {
-      writeValuesInChunks(sheet, columnValues, 1, headerRow, absoluteColumn);
+      sheet.getCell(headerRow, absoluteColumn).setValue(spec.label);
+      if (dataRowCount > 0) {
+        const formulaR1C1 = rowCalculationFormulaR1C1(absoluteColumn, formulaTerms);
+        const formulaMatrix = Array.from({ length: dataRowCount }, () => [formulaR1C1]);
+        sheet.getRangeByIndexes(dataStartRow, absoluteColumn, dataRowCount, 1).setFormulasR1C1(formulaMatrix);
+      }
     } catch (error) {
       throw new Error(
         `Setup row ${setup.sourceRow}: could not append raw column '${spec.label}' on sheet '${sheet.getName()}' ` +
@@ -2538,6 +2538,26 @@ function rowCalculationFormula(
     formula += `${formula === "=" ? "" : term.operator}${operand}`;
   });
   return formula === "=" ? "" : formula;
+}
+
+function rowCalculationFormulaR1C1(
+  targetColumn: number,
+  terms: { operator: string; operand: string | number }[]
+): string {
+  let formula = "=";
+  terms.forEach(term => {
+    const operand = typeof term.operand === "number"
+      ? r1c1ColumnReference(targetColumn, term.operand)
+      : term.operand;
+    formula += `${formula === "=" ? "" : term.operator}${operand}`;
+  });
+  return formula === "=" ? "" : formula;
+}
+
+function r1c1ColumnReference(targetColumn: number, sourceColumn: number): string {
+  const offset = sourceColumn - targetColumn;
+  if (offset === 0) return "RC";
+  return `RC[${offset}]`;
 }
 
 function calculatedColumnTotalFormula(
