@@ -2336,6 +2336,7 @@ function buildOnePivot(
   const right = measuredRight + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight && right + 12 <= EXCEL_MAX_COLUMNS) {
+    placement.row = titleRow;
     placement.col = right;
   } else {
     placement.row = placement.bandBottom + 1;
@@ -2685,9 +2686,9 @@ function lookupPivotCellAddress(
   }
   if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${lookup.pivotName}'.`);
   let rowIndex = -1;
-  for (let row = 0; row < values.length; row++) {
-    const candidateRowLabel = currentPivotRowLabel(values[row], Math.max(1, columnIndex));
-    if (candidateRowLabel && headerNamesMatch(candidateRowLabel, lookup.rowLabel)) {
+  const rowLabelColumnCount = Math.max(1, columnIndex);
+  for (let row = 1; row < values.length; row++) {
+    if (pivotRowAreaMatches(values[row], lookup.rowLabel, rowLabelColumnCount)) {
       rowIndex = row;
       break;
     }
@@ -2755,6 +2756,16 @@ function findPivotRangeForLookup(
   };
   pivotRangeCache.set(rangeCacheKey, resolved);
   return resolved;
+}
+
+function pivotRowAreaMatches(row: CellValue[], expected: string, rowLabelColumnCount: number): boolean {
+  const limit = Math.max(1, Math.min(row.length, rowLabelColumnCount));
+  for (let column = 0; column < limit; column++) {
+    const candidate = text(row[column]);
+    if (!candidate || isGrandTotalLabel(candidate)) continue;
+    if (headerNamesMatch(candidate, expected)) return true;
+  }
+  return false;
 }
 
 function findWorksheetNameForLookup(workbook: ExcelScript.Workbook, expected: string): string {
@@ -3521,4 +3532,3 @@ function normalizedConditionSignature(conditions: string): string {
     return `${lower(condition.field)}|${caption}|${values}|${measure}`;
   }).join(";");
 }
-
