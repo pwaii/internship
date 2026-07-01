@@ -1007,8 +1007,7 @@ function appendRawColumnsToSheet(
       sheet.getCell(headerRow, absoluteColumn).setValue(spec.label);
       if (dataRowCount > 0) {
         const formulaR1C1 = rowCalculationFormulaR1C1(absoluteColumn, formulaTerms);
-        const formulaMatrix = Array.from({ length: dataRowCount }, () => [formulaR1C1]);
-        sheet.getRangeByIndexes(dataStartRow, absoluteColumn, dataRowCount, 1).setFormulasR1C1(formulaMatrix);
+        setFormulaColumnR1C1InChunks(sheet, dataStartRow, absoluteColumn, dataRowCount, formulaR1C1);
       }
     } catch (error) {
       throw new Error(
@@ -1016,18 +1015,18 @@ function appendRawColumnsToSheet(
         `(header row ${headerRow + 1}, target column ${absoluteColumn + 1}, data rows ${dataRowCount}): ${errorDetail(error)}`
       );
     }
-    const formatRange = sheet.getRangeByIndexes(headerRow, absoluteColumn, formatRowCount, 1);
-    formatRange.getFormat().setWrapText(false);
-    if (dataRowCount > 0) {
+    sheet.getCell(headerRow, absoluteColumn).getEntireColumn().getFormat().setColumnWidth(130);
+    if (dataRowCount <= RAW_FORMAT_SKIP_THRESHOLD) {
+      const formatRange = sheet.getRangeByIndexes(headerRow, absoluteColumn, formatRowCount, 1);
+      formatRange.getFormat().setWrapText(false);
+    }
+    if (dataRowCount > 0 && dataRowCount <= RAW_FORMAT_SKIP_THRESHOLD) {
       try {
-        sheet.getRangeByIndexes(dataStartRow, absoluteColumn, dataRowCount, 1).setNumberFormat(
-          Array.from({ length: dataRowCount }, () => ["#,##0"])
-        );
+        setNumberFormatColumnInChunks(sheet, dataStartRow, absoluteColumn, dataRowCount, "#,##0");
       } catch (_ignored) {
         // Keep formulas even if number formatting is rejected.
       }
     }
-    sheet.getRangeByIndexes(0, absoluteColumn, 1, 1).getEntireColumn().getFormat().setColumnWidth(130);
 
     if (existingIndex < 0) currentHeaders.push(spec.label);
     else currentHeaders[existingIndex] = spec.label;
@@ -1044,6 +1043,38 @@ function trimTrailingEmptyHeaderCells(values: CellValue[]): CellValue[] {
   });
   if (lastNonEmpty < 0) return ["Column 1"];
   return values.slice(0, lastNonEmpty + 1);
+}
+
+function setFormulaColumnR1C1InChunks(
+  sheet: ExcelScript.Worksheet,
+  startRow: number,
+  column: number,
+  rowCount: number,
+  formulaR1C1: string
+) {
+  let offset = 0;
+  while (offset < rowCount) {
+    const chunkSize = Math.min(MAX_FORMULA_ROWS_PER_CHUNK, rowCount - offset);
+    const matrix = Array.from({ length: chunkSize }, () => [formulaR1C1]);
+    sheet.getRangeByIndexes(startRow + offset, column, chunkSize, 1).setFormulasR1C1(matrix);
+    offset += chunkSize;
+  }
+}
+
+function setNumberFormatColumnInChunks(
+  sheet: ExcelScript.Worksheet,
+  startRow: number,
+  column: number,
+  rowCount: number,
+  format: string
+) {
+  let offset = 0;
+  while (offset < rowCount) {
+    const chunkSize = Math.min(MAX_FORMULA_ROWS_PER_CHUNK, rowCount - offset);
+    const matrix = Array.from({ length: chunkSize }, () => [format]);
+    sheet.getRangeByIndexes(startRow + offset, column, chunkSize, 1).setNumberFormat(matrix);
+    offset += chunkSize;
+  }
 }
 
 function parseRawColumnSpecs(setup: PivotSetup, headers: string[]): CalculationSpec[] {
@@ -1687,6 +1718,8 @@ const MAX_READ_COLUMNS_PER_CHUNK = 100;
 const MAX_READ_SPAN_GAP = 3;
 const MAX_WRITE_COLUMNS_PER_CHUNK = 20;
 const MAX_WRITE_PAYLOAD_BYTES = 750000;
+const MAX_FORMULA_ROWS_PER_CHUNK = 5000;
+const RAW_FORMAT_SKIP_THRESHOLD = 20000;
 
 function chunkRowCount(columnCount: number): number {
   // Keep individual Excel API requests comfortably below the documented
