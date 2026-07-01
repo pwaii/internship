@@ -117,6 +117,13 @@ interface Placement {
   bandBottom: number;
 }
 
+interface OccupiedBlock {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+}
+
 interface SourceModel {
   sourceSheetName: string;
   sourceAddress: string;
@@ -158,6 +165,7 @@ const conditionCache = new Map<string, FieldCondition[]>();
 const calculationSpecCache = new Map<string, CalculationSpec[]>();
 const pivotRangeCache = new Map<string, LocatedPivotRange>();
 const pivotLookupAddressCache = new Map<string, string>();
+const sheetPivotNamesCache = new Map<string, string[]>();
 
 function main(workbook: ExcelScript.Workbook): string {
   clearRuntimeCaches();
@@ -313,6 +321,7 @@ function main(workbook: ExcelScript.Workbook): string {
 function clearRuntimeCaches() {
   pivotRangeCache.clear();
   pivotLookupAddressCache.clear();
+  sheetPivotNamesCache.clear();
 }
 
 function headerPayloadJson(dataSheet: ExcelScript.Worksheet): string {
@@ -1777,9 +1786,17 @@ function buildAllPivots(
   });
 
   const placements = new Map<string, Placement>();
+  const occupiedBlocks = new Map<string, OccupiedBlock[]>();
   outputs.forEach(name => {
+    const sheet = outputSheets.get(lower(name));
+    const existingBlocks = sheet ? buildInitialOccupiedBlocks(sheet) : [];
+    occupiedBlocks.set(lower(name), existingBlocks);
     const initialRow = initialRows.get(lower(name)) || 0;
-    placements.set(lower(name), { row: initialRow, col: 0, bandBottom: initialRow });
+    placements.set(lower(name), {
+      row: initialRow,
+      col: 0,
+      bandBottom: Math.max(initialRow, maxOccupiedBlockBottom(existingBlocks))
+    });
   });
   const builtPivots: BuiltPivot[] = [];
 
@@ -1798,10 +1815,11 @@ function buildAllPivots(
     const outputName = safeSheetName(setup.outputSheet || "Pivot_Output");
     const sheet = outputSheets.get(lower(outputName));
     const placement = placements.get(lower(outputName));
-    if (!sheet || !placement) throw new Error(`Output sheet unavailable: ${outputName}`);
+    const sheetBlocks = occupiedBlocks.get(lower(outputName));
+    if (!sheet || !placement || !sheetBlocks) throw new Error(`Output sheet unavailable: ${outputName}`);
 
     writeStatus(setupSheet, `Building PivotTable ${index + 1}/${items.length}: ${setup.pivotName}`);
-    buildOnePivot(workbook, sheet, item.source, setup, placement, outputName, builtPivots);
+    buildOnePivot(workbook, sheet, item.source, setup, placement, sheetBlocks, outputName, builtPivots);
     saveBuildStamp(setupSheet, setup, item.sourceMarker);
   }
 
@@ -1892,7 +1910,7 @@ function shouldSkipUnchangedTable(
   if (!equalsText(storedSourceMarker, sourceMarker)) return false;
   const outputSheet = findWorksheetByName(workbook, safeSheetName(setup.outputSheet || "Pivot_Output"));
   if (!outputSheet) return false;
-  return outputSheet.getPivotTables().some(pivot => pivotNameMatches(pivot.getName(), setup.pivotName));
+  return getSheetPivotNamesCached(outputSheet).some(name => pivotNameMatches(name, setup.pivotName));
 }
 
 function hashText(value: string): string {
@@ -1920,6 +1938,7 @@ function removeMatchingGeneratedPivots(
   sheet.getPivotTables().forEach(pivot => {
     const matchingSetup = setups.find(setup => pivotNameMatches(pivot.getName(), setup.pivotName));
     if (!matchingSetup) return;
+    removeSheetPivotNameCached(sheet, pivot.getName());
     const pivotRange = pivot.getLayout().getRange();
     const pivotRow = pivotRange.getRowIndex();
     const pivotColumn = pivotRange.getColumnIndex();
@@ -2172,6 +2191,7 @@ function buildOnePivot(
   source: SourceModel,
   setup: PreparedPivotSetup,
   placement: Placement,
+  occupiedBlocks: OccupiedBlock[],
   outputAlias: string,
   builtPivots: BuiltPivot[]
 ) {
@@ -2194,7 +2214,7 @@ function buildOnePivot(
     : OUTPUT_SPACER_ROWS_WITHOUT_FILTERS;
   const pivotStartOffset = 1 + summaryLines.length + topFilterSpacerRows;
   let pivotStartRow = titleRow + pivotStartOffset;
-  titleRow = avoidPivotRangeConflicts(sheet, titleRow, titleCol, pivotStartOffset, topFilters.length);
+  titleRow = avoidPivotRangeConflicts(occupiedBlocks, titleRow, titleCol, pivotStartOffset, topFilters.length);
   pivotStartRow = titleRow + pivotStartOffset;
   validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
   preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
@@ -2211,13 +2231,17 @@ function buildOnePivot(
       source.sourceAddress,
       sheet.getCell(pivotStartRow, titleCol).getAddress()
     );
+    addSheetPivotNameCached(sheet, pivotName);
   } catch (firstError) {
     const partialPivot = sheet.getPivotTables().find(item => equalsText(item.getName(), pivotName));
-    if (partialPivot) partialPivot.delete();
+    if (partialPivot) {
+      removeSheetPivotNameCached(sheet, pivotName);
+      partialPivot.delete();
+    }
     pivotName = uniquePivotName(workbook, setup.pivotName);
     clearFailedPivotHeader(sheet, titleRow, titleCol, pivotStartRow);
-    titleRow = Math.max(nextAvailableOutputRow(sheet), titleRow + 12);
-    titleRow = avoidPivotRangeConflicts(sheet, titleRow, titleCol, pivotStartOffset, topFilters.length);
+    titleRow = Math.max(placement.bandBottom + 1, titleRow + 12);
+    titleRow = avoidPivotRangeConflicts(occupiedBlocks, titleRow, titleCol, pivotStartOffset, topFilters.length);
     pivotStartRow = titleRow + pivotStartOffset;
     validatePivotDestination(setup, sheet, pivotStartRow, titleCol);
     preparePivotOutputArea(sheet, titleRow, titleCol, pivotStartRow, topFilters.length);
@@ -2229,6 +2253,7 @@ function buildOnePivot(
         source.sourceAddress,
         sheet.getCell(pivotStartRow, titleCol).getAddress()
       );
+      addSheetPivotNameCached(sheet, pivotName);
       placement.row = titleRow;
       placement.bandBottom = Math.max(placement.bandBottom, titleRow);
     } catch (secondError) {
@@ -2334,6 +2359,12 @@ function buildOnePivot(
   const measuredRight = Math.max(summaryRight, actualTableRight);
   const bottom = measuredBottom + OUTPUT_NEXT_DOWN_GAP_ROWS;
   const right = measuredRight + OUTPUT_NEXT_RIGHT_GAP_COLUMNS + 1;
+  reserveOccupiedBlock(occupiedBlocks, {
+    top: titleRow,
+    left: titleCol,
+    bottom: measuredBottom,
+    right: measuredRight
+  });
   placement.bandBottom = Math.max(placement.bandBottom, bottom);
   if (setup.nextRight && right + 12 <= EXCEL_MAX_COLUMNS) {
     placement.row = titleRow;
@@ -2364,7 +2395,7 @@ function validatePivotDestination(
 }
 
 function avoidPivotRangeConflicts(
-  sheet: ExcelScript.Worksheet,
+  occupiedBlocks: OccupiedBlock[],
   titleRow: number,
   titleCol: number,
   pivotStartOffset: number,
@@ -2374,7 +2405,7 @@ function avoidPivotRangeConflicts(
   let candidatePivotStartRow = titleRow + pivotStartOffset;
   let tries = 0;
   while (tries < 25) {
-    const conflictingBottom = findConflictingPivotBottom(sheet, candidateTitleRow, titleCol, candidatePivotStartRow, topFilterCount);
+    const conflictingBottom = findConflictingPivotBottom(occupiedBlocks, candidateTitleRow, titleCol, candidatePivotStartRow, topFilterCount);
     if (conflictingBottom < 0) return candidateTitleRow;
     candidateTitleRow = conflictingBottom + OUTPUT_NEXT_DOWN_GAP_ROWS + 2;
     candidatePivotStartRow = candidateTitleRow + pivotStartOffset;
@@ -2384,7 +2415,7 @@ function avoidPivotRangeConflicts(
 }
 
 function findConflictingPivotBottom(
-  sheet: ExcelScript.Worksheet,
+  occupiedBlocks: OccupiedBlock[],
   titleRow: number,
   titleCol: number,
   pivotStartRow: number,
@@ -2395,16 +2426,40 @@ function findConflictingPivotBottom(
   const blockBottom = pivotStartRow + Math.max(12, topFilterCount + 6);
   const blockRight = titleCol + Math.max(16, OUTPUT_DESCRIPTION_COLUMNS + 8);
   let conflictBottom = -1;
-  sheet.getPivotTables().forEach(pivot => {
-    const range = pivot.getLayout().getRange();
-    const top = Math.max(0, range.getRowIndex() - 3);
-    const left = Math.max(0, range.getColumnIndex());
-    const bottom = range.getRowIndex() + range.getRowCount() - 1 + 3;
-    const right = range.getColumnIndex() + range.getColumnCount() - 1 + 4;
-    const overlaps = !(blockBottom < top || blockTop > bottom || blockRight < left || blockLeft > right);
-    if (overlaps) conflictBottom = Math.max(conflictBottom, bottom);
+  occupiedBlocks.forEach(block => {
+    const overlaps = !(blockBottom < block.top || blockTop > block.bottom || blockRight < block.left || blockLeft > block.right);
+    if (overlaps) conflictBottom = Math.max(conflictBottom, block.bottom);
   });
   return conflictBottom;
+}
+
+function buildInitialOccupiedBlocks(sheet: ExcelScript.Worksheet): OccupiedBlock[] {
+  const result: OccupiedBlock[] = [];
+  sheet.getPivotTables().forEach(pivot => {
+    result.push(estimateOccupiedBlockFromPivotRange(pivot.getLayout().getRange()));
+  });
+  return result;
+}
+
+function estimateOccupiedBlockFromPivotRange(range: ExcelScript.Range): OccupiedBlock {
+  const pivotTop = range.getRowIndex();
+  const pivotLeft = range.getColumnIndex();
+  const pivotBottom = pivotTop + range.getRowCount() - 1;
+  const pivotRight = pivotLeft + range.getColumnCount() - 1;
+  return {
+    top: Math.max(0, pivotTop - 6),
+    left: Math.max(0, pivotLeft),
+    bottom: Math.min(EXCEL_MAX_ROWS - 1, pivotBottom + 6),
+    right: Math.min(EXCEL_MAX_COLUMNS - 1, pivotRight + 16)
+  };
+}
+
+function reserveOccupiedBlock(occupiedBlocks: OccupiedBlock[], block: OccupiedBlock) {
+  occupiedBlocks.push(block);
+}
+
+function maxOccupiedBlockBottom(occupiedBlocks: OccupiedBlock[]): number {
+  return occupiedBlocks.reduce((max, block) => Math.max(max, block.bottom), 0);
 }
 
 function clearFailedPivotHeader(
@@ -2693,7 +2748,6 @@ function lookupPivotCellAddress(
       break;
     }
   }
-  if (rowIndex < 0 && lookup.allRows) rowIndex = findGrandTotalRow(values);
   if (rowIndex < 0) throw new Error(`Calculated Columns could not find row '${lookup.rowLabel}' in PivotTable '${lookup.pivotName}'.`);
   const cellAddress = a1Address(located.rangeRow + rowIndex, located.rangeColumn + columnIndex);
   const resolved = located.sheetName === currentSheet.getName()
@@ -2792,8 +2846,8 @@ function findWorksheetNameContainingPivot(
   currentSheet: ExcelScript.Worksheet,
   pivotName: string
 ): string {
-  if (currentSheet.getPivotTables().some(pivot => pivotNameMatches(pivot.getName(), pivotName))) return currentSheet.getName();
-  const found = workbook.getWorksheets().find(sheet => sheet.getPivotTables().some(pivot => pivotNameMatches(pivot.getName(), pivotName)));
+  if (getSheetPivotNamesCached(currentSheet).some(name => pivotNameMatches(name, pivotName))) return currentSheet.getName();
+  const found = workbook.getWorksheets().find(sheet => getSheetPivotNamesCached(sheet).some(name => pivotNameMatches(name, pivotName)));
   return found ? found.getName() : "";
 }
 
@@ -2824,7 +2878,29 @@ function pivotNameMatches(actual: string, expected: string): boolean {
 }
 
 function pivotTableNames(sheet: ExcelScript.Worksheet): string[] {
-  return sheet.getPivotTables().map(pivot => pivot.getName());
+  return [...getSheetPivotNamesCached(sheet)];
+}
+
+function getSheetPivotNamesCached(sheet: ExcelScript.Worksheet): string[] {
+  const key = lower(sheet.getName());
+  const cached = sheetPivotNamesCache.get(key);
+  if (cached) return [...cached];
+  const names = sheet.getPivotTables().map(pivot => pivot.getName());
+  sheetPivotNamesCache.set(key, names);
+  return [...names];
+}
+
+function addSheetPivotNameCached(sheet: ExcelScript.Worksheet, pivotName: string) {
+  const key = lower(sheet.getName());
+  const names = getSheetPivotNamesCached(sheet);
+  if (!names.some(name => equalsText(name, pivotName))) names.push(pivotName);
+  sheetPivotNamesCache.set(key, names);
+}
+
+function removeSheetPivotNameCached(sheet: ExcelScript.Worksheet, pivotName: string) {
+  const key = lower(sheet.getName());
+  const names = getSheetPivotNamesCached(sheet).filter(name => !equalsText(name, pivotName));
+  sheetPivotNamesCache.set(key, names);
 }
 
 function normalizedPivotHeader(value: string): string {
