@@ -2790,8 +2790,47 @@ function findPivotRangeForLookup(
     return resolved;
   }
 
+  if (!resolvedLookupSheetName) {
+    const aliasCandidates = builtPivots.filter(candidate =>
+      sheetNameMatches(candidate.sheetName, candidate.outputAlias, resolvedLookupPivotName)
+    );
+    if (aliasCandidates.length === 1) {
+      const candidate = aliasCandidates[0];
+      const resolved = {
+        sheetName: candidate.sheetName,
+        rangeRow: candidate.rangeRow,
+        rangeColumn: candidate.rangeColumn,
+        rangeRowCount: candidate.values.length,
+        rangeColumnCount: candidate.values.length > 0 ? candidate.values[0].length : 0,
+        values: candidate.values
+      };
+      pivotRangeCache.set(rangeCacheKey, resolved);
+      return resolved;
+    }
+  }
+
   const sheetName = resolvedLookupSheetName ? findWorksheetNameForLookup(workbook, resolvedLookupSheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, resolvedLookupPivotName);
   const sheet = sheetName ? workbook.getWorksheet(sheetName) : undefined;
+  if (!sheet && !resolvedLookupSheetName) {
+    const aliasSheetName = findWorksheetNameForLookup(workbook, resolvedLookupPivotName);
+    const aliasSheet = aliasSheetName ? workbook.getWorksheet(aliasSheetName) : undefined;
+    if (aliasSheet) {
+      const aliasSheetPivots = aliasSheet.getPivotTables();
+      if (aliasSheetPivots.length === 1) {
+        const aliasRange = aliasSheetPivots[0].getLayout().getRange();
+        const resolved = {
+          sheetName: aliasSheet.getName(),
+          rangeRow: aliasRange.getRowIndex(),
+          rangeColumn: aliasRange.getColumnIndex(),
+          rangeRowCount: aliasRange.getRowCount(),
+          rangeColumnCount: aliasRange.getColumnCount(),
+          values: aliasRange.getValues() as CellValue[][]
+        };
+        pivotRangeCache.set(rangeCacheKey, resolved);
+        return resolved;
+      }
+    }
+  }
   if (!sheet) {
     const targetLabel = resolvedLookupSheetName ? `sheet '${resolvedLookupSheetName}'` : `a sheet containing PivotTable '${resolvedLookupPivotName}'`;
     throw new Error(`Calculated Columns could not find ${targetLabel}. Available sheets: ${workbook.getWorksheets().map(sheet => sheet.getName()).join(", ")}`);
@@ -3281,7 +3320,8 @@ function parsePivotLookup(value: string): PivotLookup {
 }
 
 function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
-  const match = value.trim().match(/^([^\[\]]+)\[(.+)\]$/);
+  const normalizedValue = value.trim();
+  const match = normalizedValue.match(/^([^\[\]]+)\[(.+)\]$/);
   if (!match) return undefined;
   const target = match[1].trim();
   const bang = target.indexOf("!");
@@ -3294,7 +3334,7 @@ function parsePivotLookupOrUndefined(value: string): PivotLookup | undefined {
     const equals = part.indexOf("=");
     if (equals < 1) return;
     const key = lower(part.slice(0, equals));
-    const itemValue = part.slice(equals + 1).trim();
+      const itemValue = part.slice(equals + 1).trim();
     if (key === "sheet" || key === "worksheet" || key === "output sheet") {
       sheetName = itemValue;
     }
