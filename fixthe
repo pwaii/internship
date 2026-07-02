@@ -65,6 +65,7 @@ interface FieldCondition {
   field: string;
   values: string[];
   rawValue: string;
+  compareField?: string;
   measureField?: string;
   caption?: string;
 }
@@ -82,6 +83,18 @@ interface CalculationSpec {
 interface CalculationTerm {
   operator: string;
   reference: string;
+}
+
+interface ComparisonExpression {
+  left: string;
+  operator: string;
+  right: string;
+}
+
+interface IfExpression {
+  condition: string;
+  whenTrue: string;
+  whenFalse: string;
 }
 
 interface PivotLookup {
@@ -890,6 +903,7 @@ function prepareSetups(setups: PivotSetup[], headers: string[]): PreparedPivotSe
     filtersParsed.forEach(filter => requireSetupHeader(index, filter.field, setup.sourceRow, "Filters"));
     conditionsParsed.forEach(condition => {
       requireSetupHeader(index, condition.field, setup.sourceRow, "Conditions");
+      if (condition.compareField) requireSetupHeader(index, condition.compareField, setup.sourceRow, "Conditions compare field");
       if (condition.measureField) requireSetupHeader(index, condition.measureField, setup.sourceRow, "Conditions measure");
     });
     if (conditionsParsed.some(condition => !condition.measureField) && valueFieldsParsed.length === 0) {
@@ -1017,7 +1031,7 @@ function appendRawColumnsToSheet(
     }
     const formulaTerms = spec.terms.map(term => ({
       operator: term.operator,
-      operand: rawCalculatedOperand(currentHeaders, specs, specIndex, term.reference, startColumn)
+      operand: rawCalculatedOperand(currentHeaders, specs, specIndex, term.reference, startColumn, absoluteColumn)
     }));
 
     try {
@@ -1114,18 +1128,42 @@ function parseRawColumnSpecs(setup: PivotSetup, headers: string[]): CalculationS
   }
   specs.forEach((spec, specIndex) => {
     spec.terms.forEach(term => {
-      if (isPivotLookupReference(term.reference)) {
-        throw new Error(`Setup row ${setup.sourceRow}: Raw column append does not support pivot lookups. Use raw headers and numbers only.`);
-      }
-      if (isNumericLiteral(term.reference)) return;
-      const knownHeader = headers.some(header => headerNamesMatch(header, term.reference));
-      const knownCalculated = specs.slice(0, specIndex).some(previous => headerNamesMatch(previous.label, term.reference));
-      if (!knownHeader && !knownCalculated) {
-        throw new Error(`Setup row ${setup.sourceRow}: Raw calculated column reference '${term.reference}' was not found in source headers or earlier calculated columns.`);
-      }
+      validateRawCalculationReference(term.reference, headers, specs, specIndex, setup.sourceRow);
     });
   });
   return specs;
+}
+
+function validateRawCalculationReference(
+  reference: string,
+  headers: string[],
+  specs: CalculationSpec[],
+  specIndex: number,
+  setupRow: number
+) {
+  if (isPivotLookupReference(reference)) {
+    throw new Error(`Setup row ${setupRow}: Raw column append does not support pivot lookups. Use raw headers and numbers only.`);
+  }
+  const ifExpression = parseIfExpression(reference);
+  if (ifExpression) {
+    validateRawCalculationReference(ifExpression.condition, headers, specs, specIndex, setupRow);
+    validateRawCalculationReference(ifExpression.whenTrue, headers, specs, specIndex, setupRow);
+    validateRawCalculationReference(ifExpression.whenFalse, headers, specs, specIndex, setupRow);
+    return;
+  }
+  const comparison = parseComparisonExpression(reference);
+  if (comparison) {
+    [comparison.left, comparison.right].forEach(side =>
+      validateRawCalculationReference(side, headers, specs, specIndex, setupRow)
+    );
+    return;
+  }
+  if (isNumericLiteral(reference) || isQuotedStringLiteral(reference)) return;
+  const knownHeader = headers.some(header => headerNamesMatch(header, reference));
+  const knownCalculated = specs.slice(0, specIndex).some(previous => headerNamesMatch(previous.label, reference));
+  if (!knownHeader && !knownCalculated) {
+    throw new Error(`Setup row ${setupRow}: Raw calculated column reference '${reference}' was not found in source headers or earlier calculated columns.`);
+  }
 }
 
 function rawCalculatedOperand(
@@ -1133,9 +1171,27 @@ function rawCalculatedOperand(
   specs: CalculationSpec[],
   currentSpecIndex: number,
   reference: string,
-  startColumn: number
+  startColumn: number,
+  targetColumn: number
 ): string | number {
+  const ifExpression = parseIfExpression(reference);
+  if (ifExpression) {
+    return ifFormulaR1C1(
+      compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, ifExpression.condition, startColumn, targetColumn), targetColumn),
+      compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, ifExpression.whenTrue, startColumn, targetColumn), targetColumn),
+      compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, ifExpression.whenFalse, startColumn, targetColumn), targetColumn)
+    );
+  }
+  const comparison = parseComparisonExpression(reference);
+  if (comparison) {
+    return comparisonFormulaR1C1(
+      compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, comparison.left, startColumn, targetColumn), targetColumn),
+      comparison.operator,
+      compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, comparison.right, startColumn, targetColumn), targetColumn)
+    );
+  }
   if (isNumericLiteral(reference)) return normalizedNumberLiteral(reference);
+  if (isQuotedStringLiteral(reference)) return reference.trim();
   for (let index = 0; index < currentSpecIndex; index++) {
     if (headerNamesMatch(specs[index].label, reference)) {
       const headerIndex = headers.findIndex(header => headerNamesMatch(header, specs[index].label));
@@ -1276,6 +1332,7 @@ function buildNormalizedSource(
     setup.filtersParsed.forEach(filter => addRequiredField(filter.field));
     setup.conditionsParsed.forEach(condition => {
       addRequiredField(condition.field);
+      if (condition.compareField) addRequiredField(condition.compareField);
       if (condition.measureField) addRequiredField(condition.measureField);
     });
   });
@@ -1455,6 +1512,7 @@ function finalSourceBaseIndexes(
       if (!helperByKey.has(filterKey(filter.field))) addField(filter.field);
     });
     setup.conditionsParsed.forEach(condition => {
+      if (condition.compareField) addField(condition.compareField);
       if (condition.measureField) addField(condition.measureField);
     });
   });
@@ -2584,7 +2642,8 @@ function addCalculatedOutputs(
           term.reference,
           values[headerRowOffset],
           pivotRange.getColumnIndex(),
-          outputStartColumn
+          outputStartColumn,
+          targetColumn
         )
       });
     }
@@ -2654,8 +2713,80 @@ function calculatedOrPivotOperand(
   reference: string,
   headerRow: CellValue[],
   pivotStartColumn: number,
-  outputStartColumn: number
+  outputStartColumn: number,
+  targetColumn: number
 ): string | number {
+  const ifExpression = parseIfExpression(reference);
+  if (ifExpression) {
+    return ifFormulaR1C1(
+      compareOperandToFormulaToken(
+        calculatedOrPivotOperand(
+          specs,
+          currentSpecIndex,
+          ifExpression.condition,
+          headerRow,
+          pivotStartColumn,
+          outputStartColumn,
+          targetColumn
+        ),
+        targetColumn
+      ),
+      compareOperandToFormulaToken(
+        calculatedOrPivotOperand(
+          specs,
+          currentSpecIndex,
+          ifExpression.whenTrue,
+          headerRow,
+          pivotStartColumn,
+          outputStartColumn,
+          targetColumn
+        ),
+        targetColumn
+      ),
+      compareOperandToFormulaToken(
+        calculatedOrPivotOperand(
+          specs,
+          currentSpecIndex,
+          ifExpression.whenFalse,
+          headerRow,
+          pivotStartColumn,
+          outputStartColumn,
+          targetColumn
+        ),
+        targetColumn
+      )
+    );
+  }
+  const comparison = parseComparisonExpression(reference);
+  if (comparison) {
+    return comparisonFormulaR1C1(
+      compareOperandToFormulaToken(
+        calculatedOrPivotOperand(
+          specs,
+          currentSpecIndex,
+          comparison.left,
+          headerRow,
+          pivotStartColumn,
+          outputStartColumn,
+          targetColumn
+        ),
+        targetColumn
+      ),
+      comparison.operator,
+      compareOperandToFormulaToken(
+        calculatedOrPivotOperand(
+          specs,
+          currentSpecIndex,
+          comparison.right,
+          headerRow,
+          pivotStartColumn,
+          outputStartColumn,
+          targetColumn
+        ),
+        targetColumn
+      )
+    );
+  }
   if (isNumericLiteral(reference)) return normalizedNumberLiteral(reference);
   for (let index = 0; index < currentSpecIndex; index++) {
     if (headerNamesMatch(specs[index].label, reference)) return outputStartColumn + index;
@@ -2704,6 +2835,21 @@ function rowCalculationFormulaR1C1(
     formula += `${formula === "=" ? "" : term.operator}${operand}`;
   });
   return formula === "=" ? "" : formula;
+}
+
+function compareOperandToFormulaToken(operand: string | number, targetColumn = 0): string {
+  return typeof operand === "number"
+    ? r1c1ColumnReference(targetColumn, operand)
+    : operand;
+}
+
+function comparisonFormulaR1C1(left: string, operator: string, right: string): string {
+  const excelOperator = operator === "!=" ? "<>" : operator;
+  return `IF(${left}${excelOperator}${right},1,-1)`;
+}
+
+function ifFormulaR1C1(condition: string, whenTrue: string, whenFalse: string): string {
+  return `IF(${condition},${whenTrue},${whenFalse})`;
 }
 
 function r1c1ColumnReference(targetColumn: number, sourceColumn: number): string {
@@ -3251,6 +3397,18 @@ function parseConditions(value: string): FieldCondition[] {
     const field = expression.slice(0, adjustedEquals).trim();
     const rawValue = expression.slice(adjustedEquals + 1).trim();
     if (!rawValue) throw new Error(`Condition value is blank: ${piece}`);
+    const compareField = parseConditionCompareField(rawValue);
+    if (compareField) {
+      result.push({
+        field,
+        values: [],
+        rawValue,
+        compareField,
+        measureField: measureField || undefined,
+        caption: caption || undefined
+      });
+      return;
+    }
     const values = splitList(rawValue);
     if (caption || values.length <= 1) {
       result.push({
@@ -3295,9 +3453,22 @@ function conditionSelectedItems(conditions: FieldCondition[]): string[] {
       result.push(condition.caption);
       return;
     }
+    if (condition.compareField) {
+      result.push(condition.rawValue);
+      return;
+    }
     condition.values.forEach(value => result.push(value));
   });
   return result;
+}
+
+function parseConditionCompareField(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  const bracketMatch = trimmed.match(/^\[(.+)\]$/);
+  if (bracketMatch) return bracketMatch[1].trim();
+  const atMatch = trimmed.match(/^@(.+)$/);
+  if (atMatch) return atMatch[1].trim();
+  return "";
 }
 
 function parseCalculationSpecs(value: string): CalculationSpec[] {
@@ -3317,14 +3488,16 @@ function parseCalculationSpecs(value: string): CalculationSpec[] {
     if (terms.some(term => isCellReference(term.reference))) {
       throw new Error(`Calculated Columns no longer accepts cell addresses like E4. Use pivot headers or PivotName[row=..., column=...].`);
     }
-    const lookupBased = terms.some(term => isPivotLookupReference(term.reference));
-    if (lookupBased && terms.some(term => !isPivotLookupReference(term.reference) && !isNumericLiteral(term.reference))) {
+    const lookupBased = terms.some(term => containsPivotLookupReference(term.reference));
+    if (lookupBased && terms.some(term => isComparisonReference(term.reference) || containsIfExpression(term.reference))) {
+      throw new Error(`Calculated Columns cannot mix Pivot lookups with comparison expressions yet: ${piece}`);
+    }
+    if (lookupBased && terms.some(term => !containsPivotLookupReference(term.reference) && !isNumericLiteral(term.reference) && !isComparisonReference(term.reference) && !containsIfExpression(term.reference))) {
       throw new Error(`Calculated Columns can only mix pivot lookups with numeric constants: ${piece}`);
     }
     if (lookupBased) {
       const lookups = terms
-        .filter(term => isPivotLookupReference(term.reference))
-        .map(term => parsePivotLookup(term.reference));
+        .flatMap(term => collectPivotLookups(term.reference));
       const allRows = lookups.some(lookup => lookup.allRows);
       if (allRows && lookups.some(lookup => !lookup.allRows)) {
         throw new Error(`Calculated Columns cannot mix row=* lookup and exact-row lookup: ${piece}`);
@@ -3341,6 +3514,7 @@ function parseCalculationTerms(expression: string): CalculationTerm[] {
   let operator = "+";
   let buffer = "";
   let bracketDepth = 0;
+  let parenthesisDepth = 0;
   for (let index = 0; index < expression.length; index++) {
     const character = expression[index];
     const previous = index > 0 ? expression[index - 1] : "";
@@ -3355,8 +3529,18 @@ function parseCalculationTerms(expression: string): CalculationTerm[] {
       buffer += character;
       continue;
     }
+    if (character === "(") {
+      parenthesisDepth++;
+      buffer += character;
+      continue;
+    }
+    if (character === ")") {
+      parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      buffer += character;
+      continue;
+    }
     const isMinusOperator = character === "-" && previous === " " && next === " ";
-    const isOperator = bracketDepth === 0 && (character === "+" || character === "*" || character === "/" || isMinusOperator);
+    const isOperator = bracketDepth === 0 && parenthesisDepth === 0 && (character === "+" || character === "*" || character === "/" || isMinusOperator);
     if (isOperator) {
       const reference = buffer.trim();
       if (reference) terms.push({ operator, reference });
@@ -3369,6 +3553,141 @@ function parseCalculationTerms(expression: string): CalculationTerm[] {
   const finalReference = buffer.trim();
   if (finalReference) terms.push({ operator, reference: finalReference });
   return terms;
+}
+
+function isComparisonReference(value: string): boolean {
+  return parseComparisonExpression(value) !== undefined;
+}
+
+function containsIfExpression(value: string): boolean {
+  return parseIfExpression(value) !== undefined;
+}
+
+function containsPivotLookupReference(value: string): boolean {
+  if (isPivotLookupReference(value)) return true;
+  const ifExpression = parseIfExpression(value);
+  if (ifExpression) {
+    return containsPivotLookupReference(ifExpression.condition) ||
+      containsPivotLookupReference(ifExpression.whenTrue) ||
+      containsPivotLookupReference(ifExpression.whenFalse);
+  }
+  const comparison = parseComparisonExpression(value);
+  if (comparison) {
+    return containsPivotLookupReference(comparison.left) || containsPivotLookupReference(comparison.right);
+  }
+  return false;
+}
+
+function collectPivotLookups(value: string): PivotLookup[] {
+  if (isPivotLookupReference(value)) return [parsePivotLookup(value)];
+  const ifExpression = parseIfExpression(value);
+  if (ifExpression) {
+    return [
+      ...collectPivotLookups(ifExpression.condition),
+      ...collectPivotLookups(ifExpression.whenTrue),
+      ...collectPivotLookups(ifExpression.whenFalse)
+    ];
+  }
+  const comparison = parseComparisonExpression(value);
+  if (comparison) {
+    return [...collectPivotLookups(comparison.left), ...collectPivotLookups(comparison.right)];
+  }
+  return [];
+}
+
+function parseIfExpression(value: string): IfExpression | undefined {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^if\s*\((.*)\)$/i);
+  if (!match) return undefined;
+  const parts = splitTopLevelCommaParts(match[1]);
+  if (parts.length !== 3) {
+    throw new Error(`IF() must use exactly 3 parts: IF(condition, true_value, false_value).`);
+  }
+  const condition = parts[0].trim();
+  const whenTrue = parts[1].trim();
+  const whenFalse = parts[2].trim();
+  if (!condition || !whenTrue || !whenFalse) {
+    throw new Error(`IF() cannot have blank condition/true/false parts.`);
+  }
+  return { condition, whenTrue, whenFalse };
+}
+
+function splitTopLevelCommaParts(value: string): string[] {
+  const parts: string[] = [];
+  let buffer = "";
+  let bracketDepth = 0;
+  let parenthesisDepth = 0;
+  let inQuote = false;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (character === "\"" && value[index - 1] !== "\\") {
+      inQuote = !inQuote;
+      buffer += character;
+      continue;
+    }
+    if (!inQuote) {
+      if (character === "[") bracketDepth++;
+      else if (character === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+      else if (character === "(") parenthesisDepth++;
+      else if (character === ")") parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      else if (character === "," && bracketDepth === 0 && parenthesisDepth === 0) {
+        parts.push(buffer.trim());
+        buffer = "";
+        continue;
+      }
+    }
+    buffer += character;
+  }
+  if (buffer.trim()) parts.push(buffer.trim());
+  return parts;
+}
+
+function parseComparisonExpression(value: string): ComparisonExpression | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (parseIfExpression(trimmed)) return undefined;
+  let bracketDepth = 0;
+  let parenthesisDepth = 0;
+  for (let index = 0; index < trimmed.length; index++) {
+    const character = trimmed[index];
+    if (character === "[") {
+      bracketDepth++;
+      continue;
+    }
+    if (character === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+      continue;
+    }
+    if (character === "(") {
+      parenthesisDepth++;
+      continue;
+    }
+    if (character === ")") {
+      parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      continue;
+    }
+    if (bracketDepth > 0 || parenthesisDepth > 0) continue;
+
+    const twoChars = trimmed.slice(index, index + 2);
+    if (twoChars === "!=" || twoChars === ">=" || twoChars === "<=") {
+      const left = trimmed.slice(0, index).trim();
+      const right = trimmed.slice(index + 2).trim();
+      if (!left || !right) return undefined;
+      return { left, operator: twoChars, right };
+    }
+    if (character === ">" || character === "<" || character === "=") {
+      const left = trimmed.slice(0, index).trim();
+      const right = trimmed.slice(index + 1).trim();
+      if (!left || !right) return undefined;
+      return { left, operator: character, right };
+    }
+  }
+  return undefined;
+}
+
+function isQuotedStringLiteral(value: string): boolean {
+  const trimmed = value.trim();
+  return /^".*"$/.test(trimmed);
 }
 
 function isCellReference(value: string): boolean {
@@ -3477,12 +3796,24 @@ function conditionCategory(
   conditions: FieldCondition[]
 ): string {
   for (const condition of conditions) {
-    const index = requireHeader(headerIndex, condition.field, "Conditions");
-    if (valueMatches(row[index], condition.values)) {
+    if (conditionMatches(row, headerIndex, condition)) {
       return condition.caption || condition.rawValue;
     }
   }
   return "";
+}
+
+function conditionMatches(
+  row: CellValue[],
+  headerIndex: Map<string, number>,
+  condition: FieldCondition
+): boolean {
+  const index = requireHeader(headerIndex, condition.field, "Conditions");
+  if (condition.compareField) {
+    const compareIndex = requireHeader(headerIndex, condition.compareField, "Conditions compare field");
+    return categoryCompareKey(text(row[index])) === categoryCompareKey(text(row[compareIndex]));
+  }
+  return valueMatches(row[index], condition.values);
 }
 
 function templateSelected(template: string, selected: string): boolean {
@@ -3655,6 +3986,7 @@ function cloneFieldConditions(values: FieldCondition[]): FieldCondition[] {
     field: item.field,
     values: [...item.values],
     rawValue: item.rawValue,
+    compareField: item.compareField,
     measureField: item.measureField,
     caption: item.caption
   }));
@@ -3742,8 +4074,9 @@ function normalizedConditionSignature(conditions: string): string {
   const parsed = parseConditions(conditions);
   return parsed.map(condition => {
     const values = condition.values.map(value => lower(value.trim())).join(",");
+    const compareField = lower(text(condition.compareField || ""));
     const caption = lower(text(condition.caption || ""));
     const measure = lower(text(condition.measureField || ""));
-    return `${lower(condition.field)}|${caption}|${values}|${measure}`;
+    return `${lower(condition.field)}|${caption}|${values}|${compareField}|${measure}`;
   }).join(";");
 }
