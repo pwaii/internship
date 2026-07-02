@@ -277,25 +277,22 @@ function main(workbook: ExcelScript.Workbook): string {
         return;
       }
 
-      const directPending = pendingBuilds.filter(item => !item.requiresPreparedSource);
-      const normalizedPending = pendingBuilds.filter(item => item.requiresPreparedSource);
-
-      if (directPending.length > 0) {
-        const directSource = buildDirectSource(dataSheet, used, headers, directPending);
-        directPending.forEach(item => pendingItems.push({ setup: item, source: directSource, sourceMarker }));
-      }
-
-      if (normalizedPending.length > 0) {
+      const requiresPreparedSource = pendingBuilds.some(item => item.requiresPreparedSource);
+      if (requiresPreparedSource) {
         const normalizedSource = buildNormalizedSource(
           workbook,
           dataSheet,
           used,
           headers,
-          normalizedPending,
+          pendingBuilds,
           helperSourceSheetName(dataSheet.getName())
         );
-        normalizedPending.forEach(item => pendingItems.push({ setup: item, source: normalizedSource, sourceMarker }));
+        pendingBuilds.forEach(item => pendingItems.push({ setup: item, source: normalizedSource, sourceMarker }));
+        return;
       }
+
+      const directSource = buildDirectSource(dataSheet, used, headers, pendingBuilds);
+      pendingBuilds.forEach(item => pendingItems.push({ setup: item, source: directSource, sourceMarker }));
     });
 
     if (pendingItems.length === 0) {
