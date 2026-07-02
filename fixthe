@@ -1,3 +1,4 @@
+
 /**
  * Excel Pivot Builder - single-workbook Office Script.
  *
@@ -805,7 +806,7 @@ function normalizeMonthInput(value: string): string {
 }
 
 function parseMonthCycle(value: string): { monthIndex: number } | null {
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1").trim();
   if (!trimmed) return null;
 
   const numeric = Number(trimmed);
@@ -834,14 +835,8 @@ function shiftedMonthName(monthIndex: number, offset: number): string {
 }
 
 function replacePlaceholder(value: string, key: string, replacement: string): string {
-  let result = value;
-  const needle = `{${key}}`;
-  let index = lower(result).indexOf(needle);
-  while (index >= 0) {
-    result = `${result.slice(0, index)}${replacement}${result.slice(index + needle.length)}`;
-    index = lower(result).indexOf(needle, index + replacement.length);
-  }
-  return result;
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(new RegExp(`\\{\\s*${escapedKey}\\s*\\}`, "gi"), replacement);
 }
 
 function prepareSetups(setups: PivotSetup[], headers: string[]): PreparedPivotSetup[] {
