@@ -1,4 +1,3 @@
-
 /**
  * Excel Pivot Builder - single-workbook Office Script.
  *
@@ -2790,7 +2789,10 @@ function findPivotRangeForLookup(
 
   const sheetName = lookup.sheetName ? findWorksheetNameForLookup(workbook, lookup.sheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
   const sheet = sheetName ? workbook.getWorksheet(sheetName) : undefined;
-  if (!sheet) throw new Error(`Calculated Columns could not find sheet '${lookup.sheetName}'. Available sheets: ${workbook.getWorksheets().map(sheet => sheet.getName()).join(", ")}`);
+  if (!sheet) {
+    const targetLabel = lookup.sheetName ? `sheet '${lookup.sheetName}'` : `a sheet containing PivotTable '${lookup.pivotName}'`;
+    throw new Error(`Calculated Columns could not find ${targetLabel}. Available sheets: ${workbook.getWorksheets().map(sheet => sheet.getName()).join(", ")}`);
+  }
   const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
   const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
   if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'. Available PivotTables on '${sheet.getName()}': ${pivotTableNames(sheet).join(", ") || "none"}`);
@@ -2843,7 +2845,13 @@ function findWorksheetNameContainingPivot(
 ): string {
   if (getSheetPivotNamesCached(currentSheet).some(name => pivotNameMatches(name, pivotName))) return currentSheet.getName();
   const found = workbook.getWorksheets().find(sheet => getSheetPivotNamesCached(sheet).some(name => pivotNameMatches(name, pivotName)));
-  return found ? found.getName() : "";
+  if (found) return found.getName();
+  const directFound = workbook.getWorksheets().find(sheet => sheet.getPivotTables().some(pivot => pivotNameMatches(pivot.getName(), pivotName)));
+  if (directFound) {
+    sheetPivotNamesCache.set(lower(directFound.getName()), directFound.getPivotTables().map(pivot => pivot.getName()));
+    return directFound.getName();
+  }
+  return "";
 }
 
 function sheetNameMatches(actualName: string, outputAlias: string, expected: string): boolean {
