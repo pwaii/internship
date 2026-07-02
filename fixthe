@@ -2764,9 +2764,10 @@ function findPivotRangeForLookup(
   lookup: PivotLookup,
   builtPivots: BuiltPivot[]
 ): LocatedPivotRange {
+  const resolvedLookupSheetName = lookup.sheetName ? resolveWorksheetLookupName(workbook, lookup.sheetName) : "";
   const rangeCacheKey = [
     lower(currentSheet.getName()),
-    lower(lookup.sheetName || ""),
+    lower(resolvedLookupSheetName),
     lower(lookup.pivotName)
   ].join("|");
   const cachedRange = pivotRangeCache.get(rangeCacheKey);
@@ -2774,7 +2775,7 @@ function findPivotRangeForLookup(
   for (let index = builtPivots.length - 1; index >= 0; index--) {
     const candidate = builtPivots[index];
     if (!pivotNameMatches(candidate.actualName, lookup.pivotName) && !pivotNameMatches(candidate.inputName, lookup.pivotName)) continue;
-    if (lookup.sheetName && !sheetNameMatches(candidate.sheetName, candidate.outputAlias, lookup.sheetName)) continue;
+    if (resolvedLookupSheetName && !sheetNameMatches(candidate.sheetName, candidate.outputAlias, resolvedLookupSheetName)) continue;
     const resolved = {
       sheetName: candidate.sheetName,
       rangeRow: candidate.rangeRow,
@@ -2787,14 +2788,14 @@ function findPivotRangeForLookup(
     return resolved;
   }
 
-  const sheetName = lookup.sheetName ? findWorksheetNameForLookup(workbook, lookup.sheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
+  const sheetName = resolvedLookupSheetName ? findWorksheetNameForLookup(workbook, resolvedLookupSheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
   const sheet = sheetName ? workbook.getWorksheet(sheetName) : undefined;
   if (!sheet) {
-    const targetLabel = lookup.sheetName ? `sheet '${lookup.sheetName}'` : `a sheet containing PivotTable '${lookup.pivotName}'`;
+    const targetLabel = resolvedLookupSheetName ? `sheet '${resolvedLookupSheetName}'` : `a sheet containing PivotTable '${lookup.pivotName}'`;
     throw new Error(`Calculated Columns could not find ${targetLabel}. Available sheets: ${workbook.getWorksheets().map(sheet => sheet.getName()).join(", ")}`);
   }
   const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
-  const pivotLabel = lookup.sheetName ? `${lookup.sheetName}!${lookup.pivotName}` : lookup.pivotName;
+  const pivotLabel = resolvedLookupSheetName ? `${resolvedLookupSheetName}!${lookup.pivotName}` : lookup.pivotName;
   if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'. Available PivotTables on '${sheet.getName()}': ${pivotTableNames(sheet).join(", ") || "none"}`);
   const range = pivot.getLayout().getRange();
   const resolved = {
@@ -2820,15 +2821,16 @@ function pivotRowAreaMatches(row: CellValue[], expected: string, rowLabelColumnC
 }
 
 function findWorksheetNameForLookup(workbook: ExcelScript.Workbook, expected: string): string {
-  const exact = findWorksheetByName(workbook, expected);
+  const resolvedExpected = resolveWorksheetLookupName(workbook, expected);
+  const exact = findWorksheetByName(workbook, resolvedExpected);
   if (exact) return exact.getName();
-  const safeExpected = safeSheetName(expected);
-  const found = workbook.getWorksheets().find(sheet => sheetNameMatches(sheet.getName(), safeExpected, expected));
+  const safeExpected = safeSheetName(resolvedExpected);
+  const found = workbook.getWorksheets().find(sheet => sheetNameMatches(sheet.getName(), safeExpected, resolvedExpected));
   return found ? found.getName() : "";
 }
 
 function findWorksheetByName(workbook: ExcelScript.Workbook, expected: string): ExcelScript.Worksheet | undefined {
-  const clean = text(expected);
+  const clean = resolveWorksheetLookupName(workbook, text(expected));
   if (!clean) return undefined;
   const exact = workbook.getWorksheets().find(sheet => equalsText(sheet.getName(), clean));
   if (exact) return exact;
@@ -2836,6 +2838,14 @@ function findWorksheetByName(workbook: ExcelScript.Workbook, expected: string): 
   return workbook.getWorksheets().find(sheet =>
     equalsText(sheet.getName(), safeExpected) || equalsText(safeSheetName(sheet.getName()), safeExpected)
   );
+}
+
+function resolveWorksheetLookupName(workbook: ExcelScript.Workbook, value: string): string {
+  const clean = text(value);
+  if (!clean || !clean.includes("{")) return clean;
+  const setup = workbook.getWorksheet(SETUP_SHEET);
+  if (!setup) return clean;
+  return applyMonthlyInputs(clean, readMonthlyInputs(setup));
 }
 
 function findWorksheetNameContainingPivot(
@@ -3611,5 +3621,3 @@ function normalizedConditionSignature(conditions: string): string {
     return `${lower(condition.field)}|${caption}|${values}|${measure}`;
   }).join(";");
 }
-
-
