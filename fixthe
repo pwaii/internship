@@ -102,6 +102,15 @@ interface BuiltPivot {
   values: CellValue[][];
 }
 
+interface PendingCalculatedOutput {
+  sheetName: string;
+  pivotInputName: string;
+  pivotActualName: string;
+  setup: PreparedPivotSetup;
+  rowCaptions: string[];
+  rowColumnCount: number;
+}
+
 interface LocatedPivotRange {
   sheetName: string;
   rangeRow: number;
@@ -1793,6 +1802,7 @@ function buildAllPivots(
     });
   });
   const builtPivots: BuiltPivot[] = [];
+  const pendingCalculatedOutputs: PendingCalculatedOutput[] = [];
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
@@ -1813,8 +1823,32 @@ function buildAllPivots(
     if (!sheet || !placement || !sheetBlocks) throw new Error(`Output sheet unavailable: ${outputName}`);
 
     writeStatus(setupSheet, `Building PivotTable ${index + 1}/${items.length}: ${setup.pivotName}`);
-    buildOnePivot(workbook, sheet, item.source, setup, placement, sheetBlocks, outputName, builtPivots);
+    buildOnePivot(workbook, sheet, item.source, setup, placement, sheetBlocks, outputName, builtPivots, pendingCalculatedOutputs);
     saveBuildStamp(setupSheet, setup, item.sourceMarker);
+  }
+
+  for (let index = 0; index < pendingCalculatedOutputs.length; index++) {
+    const pending = pendingCalculatedOutputs[index];
+    const elapsedSeconds = (Date.now() - runStarted) / 1000;
+    if (elapsedSeconds > MAX_RUN_SECONDS) {
+      saveResumeState(setupSheet, resumeKey, pending.setup.sourceRow);
+      writeStatus(
+        setupSheet,
+        `Stopped before Excel timeout after building pivots. Run Build pivots again to finish calculated columns from setup row ${pending.setup.sourceRow}.`
+      );
+      throw new Error(`${CONTROLLED_STOP_PREFIX} Stopped before Excel timeout after building pivots. Run Build pivots again to finish calculated columns from setup row ${pending.setup.sourceRow}.`);
+    }
+    writeStatus(setupSheet, `Writing calculated columns ${index + 1}/${pendingCalculatedOutputs.length}: ${pending.setup.pivotName}`);
+    const sheet = workbook.getWorksheet(pending.sheetName);
+    if (!sheet) throw new Error(`Calculated Columns could not find output sheet '${pending.sheetName}'.`);
+    const located = findBuiltPivotRange(pending.sheetName, pending.pivotInputName, pending.pivotActualName, builtPivots);
+    const pivotRange = sheet.getRangeByIndexes(
+      located.rangeRow,
+      located.rangeColumn,
+      located.rangeRowCount,
+      located.rangeColumnCount
+    );
+    addCalculatedOutputs(workbook, sheet, pivotRange, pending.setup, pending.rowCaptions, pending.rowColumnCount, builtPivots);
   }
 
 }
@@ -2187,7 +2221,8 @@ function buildOnePivot(
   placement: Placement,
   occupiedBlocks: OccupiedBlock[],
   outputAlias: string,
-  builtPivots: BuiltPivot[]
+  builtPivots: BuiltPivot[],
+  pendingCalculatedOutputs: PendingCalculatedOutput[]
 ) {
   const rowFields = [...setup.rowFieldsParsed];
   const rowNames = setup.rowNamesParsed;
@@ -2339,7 +2374,15 @@ function buildOnePivot(
     values: pivotRange.getValues() as CellValue[][]
   });
   expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
-  const calculatedExtent = addCalculatedOutputs(workbook, sheet, pivotRange, setup, rowCaptions, rowColumnCount, builtPivots);
+  pendingCalculatedOutputs.push({
+    sheetName: sheet.getName(),
+    pivotInputName: setup.pivotName,
+    pivotActualName: pivotName,
+    setup,
+    rowCaptions: [...rowCaptions],
+    rowColumnCount
+  });
+  const calculatedExtent = estimatedCalculatedExtent(pivotRange, setup);
   const reportFilterBottom = topFilters.length > 0 ? pivotStartRow - 1 : pivotStartRow;
   const measuredBottom = Math.max(
     titleRow + 1,
@@ -2574,6 +2617,20 @@ function addCalculatedOutputs(
   return {
     rightColumn: outputStartColumn + specs.length - 1,
     bottomRow: outputStartRow + outputRowCount - 1
+  };
+}
+
+function estimatedCalculatedExtent(
+  pivotRange: ExcelScript.Range,
+  setup: PreparedPivotSetup
+): { rightColumn: number; bottomRow: number } {
+  const pivotRight = pivotRange.getColumnIndex() + pivotRange.getColumnCount() - 1;
+  const pivotBottom = pivotRange.getRowIndex() + pivotRange.getRowCount() - 1;
+  const count = setup.calculationSpecsParsed.length;
+  if (count <= 0) return { rightColumn: pivotRight, bottomRow: pivotBottom };
+  return {
+    rightColumn: pivotRight + 1 + count,
+    bottomRow: pivotBottom
   };
 }
 
@@ -2849,6 +2906,28 @@ function findPivotRangeForLookup(
   };
   pivotRangeCache.set(rangeCacheKey, resolved);
   return resolved;
+}
+
+function findBuiltPivotRange(
+  sheetName: string,
+  inputName: string,
+  actualName: string,
+  builtPivots: BuiltPivot[]
+): LocatedPivotRange {
+  for (let index = builtPivots.length - 1; index >= 0; index--) {
+    const candidate = builtPivots[index];
+    if (!equalsText(candidate.sheetName, sheetName)) continue;
+    if (!pivotNameMatches(candidate.actualName, actualName) && !pivotNameMatches(candidate.inputName, inputName)) continue;
+    return {
+      sheetName: candidate.sheetName,
+      rangeRow: candidate.rangeRow,
+      rangeColumn: candidate.rangeColumn,
+      rangeRowCount: candidate.values.length,
+      rangeColumnCount: candidate.values.length > 0 ? candidate.values[0].length : 0,
+      values: candidate.values
+    };
+  }
+  throw new Error(`Calculated Columns could not find the built PivotTable '${inputName}' on '${sheetName}'.`);
 }
 
 function pivotRowAreaMatches(row: CellValue[], expected: string, rowLabelColumnCount: number): boolean {
