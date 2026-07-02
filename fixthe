@@ -2821,7 +2821,7 @@ function pivotRowAreaMatches(row: CellValue[], expected: string, rowLabelColumnC
 }
 
 function findWorksheetNameForLookup(workbook: ExcelScript.Workbook, expected: string): string {
-  const resolvedExpected = resolveWorksheetLookupName(workbook, expected);
+  const resolvedExpected = normalizeWorksheetLookupName(workbook, expected);
   const exact = findWorksheetByName(workbook, resolvedExpected);
   if (exact) return exact.getName();
   const safeExpected = safeSheetName(resolvedExpected);
@@ -2830,7 +2830,7 @@ function findWorksheetNameForLookup(workbook: ExcelScript.Workbook, expected: st
 }
 
 function findWorksheetByName(workbook: ExcelScript.Workbook, expected: string): ExcelScript.Worksheet | undefined {
-  const clean = resolveWorksheetLookupName(workbook, text(expected));
+  const clean = normalizeWorksheetLookupName(workbook, text(expected));
   if (!clean) return undefined;
   const exact = workbook.getWorksheets().find(sheet => equalsText(sheet.getName(), clean));
   if (exact) return exact;
@@ -2846,6 +2846,14 @@ function resolveWorksheetLookupName(workbook: ExcelScript.Workbook, value: strin
   const setup = workbook.getWorksheet(SETUP_SHEET);
   if (!setup) return clean;
   return applyMonthlyInputs(clean, readMonthlyInputs(setup));
+}
+
+function normalizeWorksheetLookupName(workbook: ExcelScript.Workbook, value: string): string {
+  return resolveWorksheetLookupName(workbook, value)
+    .trim()
+    .replace(/^"(.*)"$/, "$1")
+    .replace(/^'(.*)'$/, "$1")
+    .trim();
 }
 
 function findWorksheetNameContainingPivot(
@@ -3621,3 +3629,5 @@ function normalizedConditionSignature(conditions: string): string {
     return `${lower(condition.field)}|${caption}|${values}|${measure}`;
   }).join(";");
 }
+
+
