@@ -2710,10 +2710,11 @@ function lookupPivotCellAddress(
   lookup: PivotLookup,
   builtPivots: BuiltPivot[]
 ): string {
+  const resolvedLookupPivotName = resolveWorksheetLookupName(workbook, lookup.pivotName);
   const addressCacheKey = [
     lower(currentSheet.getName()),
     lower(lookup.sheetName || ""),
-    lower(lookup.pivotName),
+    lower(resolvedLookupPivotName),
     lower(lookup.rowLabel),
     lower(lookup.columnLabel),
     lookup.allRows ? "1" : "0"
@@ -2733,7 +2734,7 @@ function lookupPivotCellAddress(
     }
     if (columnIndex >= 0) break;
   }
-  if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${lookup.pivotName}'.`);
+  if (columnIndex < 0) throw new Error(`Calculated Columns could not find column '${lookup.columnLabel}' in PivotTable '${resolvedLookupPivotName}'.`);
   let rowIndex = -1;
   const rowLabelColumnCount = Math.max(1, columnIndex);
   for (let row = 1; row < values.length; row++) {
@@ -2742,7 +2743,7 @@ function lookupPivotCellAddress(
       break;
     }
   }
-  if (rowIndex < 0) throw new Error(`Calculated Columns could not find row '${lookup.rowLabel}' in PivotTable '${lookup.pivotName}'.`);
+  if (rowIndex < 0) throw new Error(`Calculated Columns could not find row '${lookup.rowLabel}' in PivotTable '${resolvedLookupPivotName}'.`);
   const cellAddress = a1Address(located.rangeRow + rowIndex, located.rangeColumn + columnIndex);
   const resolved = located.sheetName === currentSheet.getName()
     ? cellAddress
@@ -2765,16 +2766,17 @@ function findPivotRangeForLookup(
   builtPivots: BuiltPivot[]
 ): LocatedPivotRange {
   const resolvedLookupSheetName = lookup.sheetName ? resolveWorksheetLookupName(workbook, lookup.sheetName) : "";
+  const resolvedLookupPivotName = resolveWorksheetLookupName(workbook, lookup.pivotName);
   const rangeCacheKey = [
     lower(currentSheet.getName()),
     lower(resolvedLookupSheetName),
-    lower(lookup.pivotName)
+    lower(resolvedLookupPivotName)
   ].join("|");
   const cachedRange = pivotRangeCache.get(rangeCacheKey);
   if (cachedRange) return cachedRange;
   for (let index = builtPivots.length - 1; index >= 0; index--) {
     const candidate = builtPivots[index];
-    if (!pivotNameMatches(candidate.actualName, lookup.pivotName) && !pivotNameMatches(candidate.inputName, lookup.pivotName)) continue;
+    if (!pivotNameMatches(candidate.actualName, resolvedLookupPivotName) && !pivotNameMatches(candidate.inputName, resolvedLookupPivotName)) continue;
     if (resolvedLookupSheetName && !sheetNameMatches(candidate.sheetName, candidate.outputAlias, resolvedLookupSheetName)) continue;
     const resolved = {
       sheetName: candidate.sheetName,
@@ -2788,14 +2790,14 @@ function findPivotRangeForLookup(
     return resolved;
   }
 
-  const sheetName = resolvedLookupSheetName ? findWorksheetNameForLookup(workbook, resolvedLookupSheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, lookup.pivotName);
+  const sheetName = resolvedLookupSheetName ? findWorksheetNameForLookup(workbook, resolvedLookupSheetName) : findWorksheetNameContainingPivot(workbook, currentSheet, resolvedLookupPivotName);
   const sheet = sheetName ? workbook.getWorksheet(sheetName) : undefined;
   if (!sheet) {
-    const targetLabel = resolvedLookupSheetName ? `sheet '${resolvedLookupSheetName}'` : `a sheet containing PivotTable '${lookup.pivotName}'`;
+    const targetLabel = resolvedLookupSheetName ? `sheet '${resolvedLookupSheetName}'` : `a sheet containing PivotTable '${resolvedLookupPivotName}'`;
     throw new Error(`Calculated Columns could not find ${targetLabel}. Available sheets: ${workbook.getWorksheets().map(sheet => sheet.getName()).join(", ")}`);
   }
-  const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), lookup.pivotName));
-  const pivotLabel = resolvedLookupSheetName ? `${resolvedLookupSheetName}!${lookup.pivotName}` : lookup.pivotName;
+  const pivot = sheet.getPivotTables().find(item => pivotNameMatches(item.getName(), resolvedLookupPivotName));
+  const pivotLabel = resolvedLookupSheetName ? `${resolvedLookupSheetName}!${resolvedLookupPivotName}` : resolvedLookupPivotName;
   if (!pivot) throw new Error(`Calculated Columns could not find PivotTable '${pivotLabel}'. Available PivotTables on '${sheet.getName()}': ${pivotTableNames(sheet).join(", ") || "none"}`);
   const range = pivot.getLayout().getRange();
   const resolved = {
@@ -3629,5 +3631,3 @@ function normalizedConditionSignature(conditions: string): string {
     return `${lower(condition.field)}|${caption}|${values}|${measure}`;
   }).join(";");
 }
-
-
