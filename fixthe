@@ -66,6 +66,8 @@ interface FieldCondition {
   values: string[];
   rawValue: string;
   compareField?: string;
+  matchMode?: "all" | "any";
+  subconditions?: FieldCondition[];
   measureField?: string;
   caption?: string;
 }
@@ -902,8 +904,7 @@ function prepareSetups(setups: PivotSetup[], headers: string[]): PreparedPivotSe
     }
     filtersParsed.forEach(filter => requireSetupHeader(index, filter.field, setup.sourceRow, "Filters"));
     conditionsParsed.forEach(condition => {
-      requireSetupHeader(index, condition.field, setup.sourceRow, "Conditions");
-      if (condition.compareField) requireSetupHeader(index, condition.compareField, setup.sourceRow, "Conditions compare field");
+      validateConditionHeaders(index, condition, setup.sourceRow);
       if (condition.measureField) requireSetupHeader(index, condition.measureField, setup.sourceRow, "Conditions measure");
     });
     if (conditionsParsed.some(condition => !condition.measureField) && valueFieldsParsed.length === 0) {
@@ -1331,8 +1332,7 @@ function buildNormalizedSource(
     setup.effectiveValueFieldsParsed.forEach(field => addRequiredField(field));
     setup.filtersParsed.forEach(filter => addRequiredField(filter.field));
     setup.conditionsParsed.forEach(condition => {
-      addRequiredField(condition.field);
-      if (condition.compareField) addRequiredField(condition.compareField);
+      conditionFields(condition).forEach(field => addRequiredField(field));
       if (condition.measureField) addRequiredField(condition.measureField);
     });
   });
@@ -1512,7 +1512,7 @@ function finalSourceBaseIndexes(
       if (!helperByKey.has(filterKey(filter.field))) addField(filter.field);
     });
     setup.conditionsParsed.forEach(condition => {
-      if (condition.compareField) addField(condition.compareField);
+      conditionFields(condition).forEach(field => addField(field));
       if (condition.measureField) addField(condition.measureField);
     });
   });
@@ -3393,44 +3393,104 @@ function parseConditions(value: string): FieldCondition[] {
       caption = expression.slice(0, colon).trim();
       expression = expression.slice(colon + 1).trim();
     }
-    const adjustedEquals = expression.indexOf("=");
-    const field = expression.slice(0, adjustedEquals).trim();
-    const rawValue = expression.slice(adjustedEquals + 1).trim();
-    if (!rawValue) throw new Error(`Condition value is blank: ${piece}`);
-    const compareField = parseConditionCompareField(rawValue);
-    if (compareField) {
-      result.push({
-        field,
-        values: [],
-        rawValue,
-        compareField,
-        measureField: measureField || undefined,
-        caption: caption || undefined
-      });
-      return;
-    }
-    const values = splitList(rawValue);
-    if (caption || values.length <= 1) {
-      result.push({
-        field,
-        values,
-        rawValue,
-        measureField: measureField || undefined,
-        caption: caption || undefined
-      });
-      return;
-    }
-    values.forEach(singleValue => {
-      result.push({
-        field,
-        values: [singleValue],
-        rawValue: singleValue,
-        measureField: measureField || undefined
-      });
-    });
+    const parsedConditions = parseConditionExpression(expression, measureField || undefined, caption || undefined, piece);
+    parsedConditions.forEach(item => result.push(item));
   });
   conditionCache.set(lower(normalizedValue), cloneFieldConditions(result));
   return result;
+}
+
+function parseConditionExpression(
+  expression: string,
+  measureField: string | undefined,
+  caption: string | undefined,
+  piece: string
+): FieldCondition[] {
+  const logical = parseLogicalCondition(expression);
+  if (logical) {
+    return [{
+      field: logical.subconditions[0].field,
+      values: [],
+      rawValue: expression,
+      matchMode: logical.matchMode,
+      subconditions: logical.subconditions,
+      measureField,
+      caption
+    }];
+  }
+  return parseAtomicConditionExpression(expression, measureField, caption, piece);
+}
+
+function parseAtomicConditionExpression(
+  expression: string,
+  measureField: string | undefined,
+  caption: string | undefined,
+  piece: string
+): FieldCondition[] {
+  const adjustedEquals = expression.indexOf("=");
+  const field = expression.slice(0, adjustedEquals).trim();
+  const rawValue = expression.slice(adjustedEquals + 1).trim();
+  if (!rawValue) throw new Error(`Condition value is blank: ${piece}`);
+  const compareField = parseConditionCompareField(rawValue);
+  if (compareField) {
+    return [{
+      field,
+      values: [],
+      rawValue,
+      compareField,
+      measureField,
+      caption
+    }];
+  }
+  const values = splitList(rawValue);
+  if (caption || values.length <= 1) {
+    return [{
+      field,
+      values,
+      rawValue,
+      measureField,
+      caption
+    }];
+  }
+  return values.map(singleValue => ({
+    field,
+    values: [singleValue],
+    rawValue: singleValue,
+    measureField
+  }));
+}
+
+function parseLogicalCondition(expression: string): { matchMode: "all" | "any"; subconditions: FieldCondition[] } | undefined {
+  const andParts = splitConditionByWord(expression, "and");
+  if (andParts.length > 1) {
+    const subconditions: FieldCondition[] = [];
+    andParts.forEach(part => {
+      parseAtomicConditionExpression(part, undefined, undefined, expression).forEach(item => subconditions.push(item));
+    });
+    return {
+      matchMode: "all",
+      subconditions
+    };
+  }
+  const orParts = splitConditionByWord(expression, "or");
+  if (orParts.length > 1) {
+    const subconditions: FieldCondition[] = [];
+    orParts.forEach(part => {
+      parseAtomicConditionExpression(part, undefined, undefined, expression).forEach(item => subconditions.push(item));
+    });
+    return {
+      matchMode: "any",
+      subconditions
+    };
+  }
+  return undefined;
+}
+
+function splitConditionByWord(expression: string, word: string): string[] {
+  return expression
+    .split(new RegExp(`\\s+${word}\\s+`, "i"))
+    .map(part => part.trim())
+    .filter(part => part !== "");
 }
 
 function validateConditionCategories(conditions: FieldCondition[]) {
@@ -3451,6 +3511,10 @@ function conditionSelectedItems(conditions: FieldCondition[]): string[] {
   conditions.forEach(condition => {
     if (condition.caption) {
       result.push(condition.caption);
+      return;
+    }
+    if (condition.subconditions && condition.subconditions.length > 0) {
+      result.push(condition.rawValue);
       return;
     }
     if (condition.compareField) {
@@ -3496,8 +3560,10 @@ function parseCalculationSpecs(value: string): CalculationSpec[] {
       throw new Error(`Calculated Columns can only mix pivot lookups with numeric constants: ${piece}`);
     }
     if (lookupBased) {
-      const lookups = terms
-        .flatMap(term => collectPivotLookups(term.reference));
+      const lookups: PivotLookup[] = [];
+      terms.forEach(term => {
+        collectPivotLookups(term.reference).forEach(lookup => lookups.push(lookup));
+      });
       const allRows = lookups.some(lookup => lookup.allRows);
       if (allRows && lookups.some(lookup => !lookup.allRows)) {
         throw new Error(`Calculated Columns cannot mix row=* lookup and exact-row lookup: ${piece}`);
@@ -3808,12 +3874,42 @@ function conditionMatches(
   headerIndex: Map<string, number>,
   condition: FieldCondition
 ): boolean {
+  if (condition.subconditions && condition.subconditions.length > 0) {
+    if (condition.matchMode === "all") {
+      return condition.subconditions.every(item => conditionMatches(row, headerIndex, item));
+    }
+    return condition.subconditions.some(item => conditionMatches(row, headerIndex, item));
+  }
   const index = requireHeader(headerIndex, condition.field, "Conditions");
   if (condition.compareField) {
     const compareIndex = requireHeader(headerIndex, condition.compareField, "Conditions compare field");
     return categoryCompareKey(text(row[index])) === categoryCompareKey(text(row[compareIndex]));
   }
   return valueMatches(row[index], condition.values);
+}
+
+function conditionFields(condition: FieldCondition): string[] {
+  if (condition.subconditions && condition.subconditions.length > 0) {
+    const result: string[] = [];
+    condition.subconditions.forEach(item => {
+      conditionFields(item).forEach(field => {
+        if (!result.some(existing => headerNamesMatch(existing, field))) result.push(field);
+      });
+    });
+    return result;
+  }
+  const result = [condition.field];
+  if (condition.compareField) result.push(condition.compareField);
+  return result.filter(field => field !== "");
+}
+
+function validateConditionHeaders(index: Map<string, number>, condition: FieldCondition, setupRow: number) {
+  if (condition.subconditions && condition.subconditions.length > 0) {
+    condition.subconditions.forEach(item => validateConditionHeaders(index, item, setupRow));
+    return;
+  }
+  requireSetupHeader(index, condition.field, setupRow, "Conditions");
+  if (condition.compareField) requireSetupHeader(index, condition.compareField, setupRow, "Conditions compare field");
 }
 
 function templateSelected(template: string, selected: string): boolean {
@@ -3987,6 +4083,8 @@ function cloneFieldConditions(values: FieldCondition[]): FieldCondition[] {
     values: [...item.values],
     rawValue: item.rawValue,
     compareField: item.compareField,
+    matchMode: item.matchMode,
+    subconditions: item.subconditions ? cloneFieldConditions(item.subconditions) : undefined,
     measureField: item.measureField,
     caption: item.caption
   }));
@@ -4072,11 +4170,20 @@ function conditionGroupKey(conditions: string): string {
 
 function normalizedConditionSignature(conditions: string): string {
   const parsed = parseConditions(conditions);
-  return parsed.map(condition => {
+  return parsed.map(condition => normalizedConditionItemSignature(condition)).join(";");
+}
+
+function normalizedConditionItemSignature(condition: FieldCondition): string {
+  if (condition.subconditions && condition.subconditions.length > 0) {
+    const mode = lower(text(condition.matchMode || ""));
+    const caption = lower(text(condition.caption || ""));
+    const measure = lower(text(condition.measureField || ""));
+    const subs = condition.subconditions.map(item => normalizedConditionItemSignature(item)).join("&");
+    return `logic|${mode}|${caption}|${measure}|${subs}`;
+  }
     const values = condition.values.map(value => lower(value.trim())).join(",");
     const compareField = lower(text(condition.compareField || ""));
     const caption = lower(text(condition.caption || ""));
     const measure = lower(text(condition.measureField || ""));
     return `${lower(condition.field)}|${caption}|${values}|${compareField}|${measure}`;
-  }).join(";");
 }
