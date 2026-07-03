@@ -3782,7 +3782,7 @@ function collectPivotLookups(value: string): PivotLookup[] {
 
 function parseIfExpression(value: string): IfExpression | undefined {
   const trimmed = value.trim();
-  const match = trimmed.match(/^if\s*\((.*)\)$/i);
+  const match = trimmed.match(/^if\s*\(([\s\S]*)\)$/i);
   if (!match) return undefined;
   const parts = splitTopLevelCommaParts(match[1]);
   if (parts.length !== 2 && parts.length !== 3) {
