@@ -3785,12 +3785,12 @@ function parseIfExpression(value: string): IfExpression | undefined {
   const match = trimmed.match(/^if\s*\((.*)\)$/i);
   if (!match) return undefined;
   const parts = splitTopLevelCommaParts(match[1]);
-  if (parts.length !== 3) {
-    throw new Error(`IF() must use exactly 3 parts: IF(condition, true_value, false_value).`);
+  if (parts.length !== 2 && parts.length !== 3) {
+    throw new Error(`IF() must use 2 or 3 parts: IF(condition, true_value) or IF(condition, true_value, false_value).`);
   }
   const condition = parts[0].trim();
   const whenTrue = parts[1].trim();
-  const whenFalse = parts[2].trim();
+  const whenFalse = parts.length >= 3 ? parts[2].trim() : "\"\"";
   if (!condition || !whenTrue || !whenFalse) {
     throw new Error(`IF() cannot have blank condition/true/false parts.`);
   }
