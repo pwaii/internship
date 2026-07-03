@@ -1178,7 +1178,7 @@ function rawCalculatedOperand(
   const ifExpression = parseIfExpression(reference);
   if (ifExpression) {
     return ifFormulaR1C1(
-      compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, ifExpression.condition, startColumn, targetColumn), targetColumn),
+      rawConditionFormulaR1C1(headers, specs, currentSpecIndex, ifExpression.condition, startColumn, targetColumn),
       compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, ifExpression.whenTrue, startColumn, targetColumn), targetColumn),
       compareOperandToFormulaToken(rawCalculatedOperand(headers, specs, currentSpecIndex, ifExpression.whenFalse, startColumn, targetColumn), targetColumn)
     );
@@ -1202,6 +1202,33 @@ function rawCalculatedOperand(
   const sourceIndex = headers.findIndex(header => headerNamesMatch(header, reference));
   if (sourceIndex < 0) throw new Error(`Raw column reference not found: ${reference}`);
   return startColumn + sourceIndex;
+}
+
+function rawConditionFormulaR1C1(
+  headers: string[],
+  specs: CalculationSpec[],
+  currentSpecIndex: number,
+  reference: string,
+  startColumn: number,
+  targetColumn: number
+): string {
+  const comparison = parseComparisonExpression(reference);
+  if (comparison) {
+    const left = compareOperandToFormulaToken(
+      rawCalculatedOperand(headers, specs, currentSpecIndex, comparison.left, startColumn, targetColumn),
+      targetColumn
+    );
+    const right = compareOperandToFormulaToken(
+      rawCalculatedOperand(headers, specs, currentSpecIndex, comparison.right, startColumn, targetColumn),
+      targetColumn
+    );
+    const excelOperator = comparison.operator === "!=" ? "<>" : comparison.operator;
+    return `${left}${excelOperator}${right}`;
+  }
+  return compareOperandToFormulaToken(
+    rawCalculatedOperand(headers, specs, currentSpecIndex, reference, startColumn, targetColumn),
+    targetColumn
+  );
 }
 
 function requireSetupHeader(
@@ -2719,16 +2746,13 @@ function calculatedOrPivotOperand(
   const ifExpression = parseIfExpression(reference);
   if (ifExpression) {
     return ifFormulaR1C1(
-      compareOperandToFormulaToken(
-        calculatedOrPivotOperand(
-          specs,
-          currentSpecIndex,
-          ifExpression.condition,
-          headerRow,
-          pivotStartColumn,
-          outputStartColumn,
-          targetColumn
-        ),
+      calculatedConditionFormulaR1C1(
+        specs,
+        currentSpecIndex,
+        ifExpression.condition,
+        headerRow,
+        pivotStartColumn,
+        outputStartColumn,
         targetColumn
       ),
       compareOperandToFormulaToken(
@@ -2792,6 +2816,58 @@ function calculatedOrPivotOperand(
     if (headerNamesMatch(specs[index].label, reference)) return outputStartColumn + index;
   }
   return pivotStartColumn + findPivotHeaderColumn(headerRow, reference);
+}
+
+function calculatedConditionFormulaR1C1(
+  specs: CalculationSpec[],
+  currentSpecIndex: number,
+  reference: string,
+  headerRow: CellValue[],
+  pivotStartColumn: number,
+  outputStartColumn: number,
+  targetColumn: number
+): string {
+  const comparison = parseComparisonExpression(reference);
+  if (comparison) {
+    const left = compareOperandToFormulaToken(
+      calculatedOrPivotOperand(
+        specs,
+        currentSpecIndex,
+        comparison.left,
+        headerRow,
+        pivotStartColumn,
+        outputStartColumn,
+        targetColumn
+      ),
+      targetColumn
+    );
+    const right = compareOperandToFormulaToken(
+      calculatedOrPivotOperand(
+        specs,
+        currentSpecIndex,
+        comparison.right,
+        headerRow,
+        pivotStartColumn,
+        outputStartColumn,
+        targetColumn
+      ),
+      targetColumn
+    );
+    const excelOperator = comparison.operator === "!=" ? "<>" : comparison.operator;
+    return `${left}${excelOperator}${right}`;
+  }
+  return compareOperandToFormulaToken(
+    calculatedOrPivotOperand(
+      specs,
+      currentSpecIndex,
+      reference,
+      headerRow,
+      pivotStartColumn,
+      outputStartColumn,
+      targetColumn
+    ),
+    targetColumn
+  );
 }
 
 function currentPivotRowLabel(row: CellValue[], rowColumnCount: number): string {
