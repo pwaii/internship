@@ -1,6 +1,6 @@
-Actual_Paid: IF(Paid Date<>"",
+Actual_Paid: IF(Paid Date!="",
 IF(Paid_Date_Then_Answer_Date=1,
-IF(Answer_10Sec>=10,
+IF(Answer_10Sec="10 or more",
 IF(Call Attempt=1,"Yes_10sec_AT1",
 IF(Call Attempt=2,"Yes_10sec_AT2",
 IF(Call Attempt=3,"Yes_10sec_AT3",
