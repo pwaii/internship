@@ -74,6 +74,7 @@ interface FieldCondition {
 
 interface CustomRowRule {
   label: string;
+  logic: "all" | "any";
   conditions: FieldCondition[];
 }
 
@@ -3953,9 +3954,18 @@ function parseCustomRowRule(value: string): CustomRowRule | undefined {
   const label = trimmed.slice(0, colon).trim();
   const expression = trimmed.slice(colon + 1).trim();
   if (!label || !expression) return undefined;
-  const conditions = expression.split("&").map(part => part.trim()).filter(part => part !== "").map(part => {
+  const usesAnd = expression.indexOf("&") >= 0;
+  const usesOr = /\s+or\s+/i.test(expression);
+  if (usesAnd && usesOr) {
+    throw new Error(`Custom row rule cannot mix & and OR in the same rule. Use one style only: ${expression}`);
+  }
+  const logic: "all" | "any" = usesOr ? "any" : "all";
+  const parts = usesOr
+    ? expression.split(/\s+or\s+/i)
+    : expression.split("&");
+  const conditions = parts.map(part => part.trim()).filter(part => part !== "").map(part => {
     const separator = part.indexOf("=");
-    if (separator < 1) throw new Error(`Custom row rule must use Label: Field=Value & Field=Value. Bad part: ${part}`);
+    if (separator < 1) throw new Error(`Custom row rule must use Label: Field=Value & Field=Value, or Label: Field=Value OR Field=Value. Bad part: ${part}`);
     const field = part.slice(0, separator).trim();
     const rawValue = part.slice(separator + 1).trim();
     if (!field || !rawValue) throw new Error(`Custom row rule has blank field or value: ${part}`);
@@ -3966,7 +3976,7 @@ function parseCustomRowRule(value: string): CustomRowRule | undefined {
     } as FieldCondition;
   });
   if (conditions.length === 0) return undefined;
-  return { label, conditions };
+  return { label, logic, conditions };
 }
 
 function customRowRuleMatches(
@@ -3974,10 +3984,13 @@ function customRowRuleMatches(
   headerIndex: Map<string, number>,
   rule: CustomRowRule
 ): boolean {
-  return rule.conditions.every(condition => {
+  const matcher = (condition: FieldCondition): boolean => {
     const index = requireHeader(headerIndex, condition.field, "Rows custom rule");
     return valueMatches(row[index], condition.values);
-  });
+  };
+  return rule.logic === "any"
+    ? rule.conditions.some(matcher)
+    : rule.conditions.every(matcher);
 }
 
 function conditionCategory(
@@ -4294,8 +4307,8 @@ function rowRuleKey(ruleText: string): string {
   if (!rule) return `row-rule|${lower(ruleText)}`;
   const signature = rule.conditions
     .map(condition => `${lower(condition.field)}=${condition.values.map(value => lower(value)).join(",")}`)
-    .join("&");
-  return `row-rule|${lower(rule.label)}|${signature}`;
+    .join(rule.logic === "any" ? "|or|" : "&");
+  return `row-rule|${lower(rule.label)}|${rule.logic}|${signature}`;
 }
 
 function conditionGroupKey(conditions: string): string {
