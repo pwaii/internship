@@ -289,6 +289,10 @@ function main(workbook: ExcelScript.Workbook): string {
       pendingBuilds.forEach(item => pendingItems.push({ setup: item, source: compactSource, sourceMarker }));
     });
 
+    // Source preparation is grouped for speed, but output order must always
+    // follow the user's setup rows across different inputs and templates.
+    pendingItems.sort((left, right) => left.setup.sourceRow - right.setup.sourceRow);
+
     if (pendingItems.length === 0) {
       clearResumeState(setup);
       writeStatus(setup, `All selected tables are unchanged. Nothing to build.`);
@@ -1812,12 +1816,15 @@ function buildAllPivots(
     const setup = item.setup;
     const elapsedSeconds = (Date.now() - runStarted) / 1000;
     if (elapsedSeconds > MAX_RUN_SECONDS) {
-      saveResumeState(setupSheet, resumeKey, setup.sourceRow);
+      const resumeRow = pendingCalculatedOutputs.length > 0
+        ? pendingCalculatedOutputs[0].setup.sourceRow
+        : setup.sourceRow;
+      saveResumeState(setupSheet, resumeKey, resumeRow);
       writeStatus(
         setupSheet,
-        `Stopped before Excel timeout after ${index}/${items.length} PivotTable(s). Run Build pivots again to continue from setup row ${setup.sourceRow}.`
+        `Stopped before Excel timeout after ${index}/${items.length} PivotTable(s). Run Build pivots again to continue from setup row ${resumeRow}.`
       );
-      throw new Error(`${CONTROLLED_STOP_PREFIX} Stopped before Excel timeout after ${index}/${items.length} PivotTable(s). Run Build pivots again to continue from setup row ${setup.sourceRow}.`);
+      throw new Error(`${CONTROLLED_STOP_PREFIX} Stopped before Excel timeout after ${index}/${items.length} PivotTable(s). Run Build pivots again to continue from setup row ${resumeRow}.`);
     }
     const outputName = safeSheetName(setup.outputSheet || "Pivot_Output");
     const sheet = outputSheets.get(lower(outputName));
@@ -1827,7 +1834,9 @@ function buildAllPivots(
 
     writeStatus(setupSheet, `Building PivotTable ${index + 1}/${items.length}: ${setup.pivotName}`);
     buildOnePivot(workbook, sheet, item.source, setup, placement, sheetBlocks, outputName, builtPivots, pendingCalculatedOutputs);
-    saveBuildStamp(setupSheet, setup, item.sourceMarker);
+    if (setup.calculationSpecsParsed.length === 0) {
+      saveBuildStamp(setupSheet, setup, item.sourceMarker);
+    }
   }
 
   for (let index = 0; index < pendingCalculatedOutputs.length; index++) {
@@ -1852,6 +1861,11 @@ function buildAllPivots(
       located.rangeColumnCount
     );
     addCalculatedOutputs(workbook, sheet, pivotRange, pending.setup, pending.rowCaptions, pending.rowColumnCount, builtPivots);
+    const completedItem = items.find(item => item.setup.sourceRow === pending.setup.sourceRow);
+    if (!completedItem) {
+      throw new Error(`Calculated Columns could not save completion state for setup row ${pending.setup.sourceRow}.`);
+    }
+    saveBuildStamp(setupSheet, pending.setup, completedItem.sourceMarker);
   }
 
 }
@@ -2377,14 +2391,16 @@ function buildOnePivot(
     values: pivotRange.getValues() as CellValue[][]
   });
   expandPivotTableLayout(sheet, pivotRange, rowColumnCount);
-  pendingCalculatedOutputs.push({
-    sheetName: sheet.getName(),
-    pivotInputName: setup.pivotName,
-    pivotActualName: pivotName,
-    setup,
-    rowCaptions: [...rowCaptions],
-    rowColumnCount
-  });
+  if (setup.calculationSpecsParsed.length > 0) {
+    pendingCalculatedOutputs.push({
+      sheetName: sheet.getName(),
+      pivotInputName: setup.pivotName,
+      pivotActualName: pivotName,
+      setup,
+      rowCaptions: [...rowCaptions],
+      rowColumnCount
+    });
+  }
   const calculatedExtent = estimatedCalculatedExtent(pivotRange, setup);
   const reportFilterBottom = topFilters.length > 0 ? pivotStartRow - 1 : pivotStartRow;
   const measuredBottom = Math.max(
