@@ -25,6 +25,7 @@ const MAX_RUN_SECONDS = 240;
 const CONTROLLED_STOP_PREFIX = "CONTROLLED_STOP:";
 const RESUME_KEY_CELL = "Z5";
 const RESUME_ROW_CELL = "Z6";
+const LAST_ERROR_ROW_CELL = "Z8";
 const BUILD_SIGNATURE_COLUMN = "AA";
 const BUILD_SOURCE_MARKER_COLUMN = "AB";
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -36,7 +37,7 @@ type CellValue = string | number | boolean;
 // you want new workbooks to receive different organization-wide defaults.
 const EMBEDDED_TEMPLATE_VERSION = "PB_EMBEDDED_1";
 const SETUP_SCHEMA_VERSION = "PB_SCHEMA_6";
-const SETUP_STYLE_VERSION = "PB_STYLE_14";
+const SETUP_STYLE_VERSION = "PB_STYLE_15";
 const EMBEDDED_TEMPLATE_ROWS: CellValue[][] = [
   [
     "", "Default", "Pivot 1", "Pivot_Output", "", "", "",
@@ -257,7 +258,10 @@ function main(workbook: ExcelScript.Workbook): string {
     }
 
     writeStatus(setup, `Preparing source data for ${pivotBuilds.length} PivotTable(s)...`);
-    const groupedBuilds = groupSetupsByInputSheetAndTemplate(pivotBuilds);
+    const groupedBuilds = groupSetupsByInputSheet(pivotBuilds);
+    const buildStamps = readValuesInChunks(
+      setup.getRange(`${BUILD_SIGNATURE_COLUMN}${FIRST_SETUP_ROW}:${BUILD_SOURCE_MARKER_COLUMN}${LAST_SETUP_ROW}`)
+    );
     const pendingItems: PendingBuildItem[] = [];
     let totalSkipped = 0;
 
@@ -274,19 +278,28 @@ function main(workbook: ExcelScript.Workbook): string {
       const headers = normalizeHeaders(rawHeaders);
       const preparedBuilds = prepareSetups(group.setups, headers);
       const sourceMarker = buildSourceMarker(dataSheet, used, headers);
-      const pendingBuilds = preparedBuilds.filter(item => !shouldSkipUnchangedTable(workbook, item, sourceMarker));
+      const pendingBuilds = preparedBuilds.filter(item =>
+        !shouldSkipUnchangedTable(workbook, item, sourceMarker, buildStamps)
+      );
       totalSkipped += preparedBuilds.length - pendingBuilds.length;
       if (pendingBuilds.length === 0) return;
 
-      const compactSource = buildNormalizedSource(
-        workbook,
-        dataSheet,
-        used,
-        headers,
-        preparedBuilds,
-        helperSourceSheetName(dataSheet.getName(), group.template)
-      );
-      pendingBuilds.forEach(item => pendingItems.push({ setup: item, source: compactSource, sourceMarker }));
+      const templateGroups = groupPreparedSetupsByTemplate(preparedBuilds);
+      templateGroups.forEach(templateGroup => {
+        const pendingTemplateBuilds = templateGroup.setups.filter(item =>
+          pendingBuilds.some(pending => pending.sourceRow === item.sourceRow)
+        );
+        if (pendingTemplateBuilds.length === 0) return;
+        const compactSource = buildNormalizedSource(
+          workbook,
+          dataSheet,
+          used,
+          headers,
+          templateGroup.setups,
+          helperSourceSheetName(dataSheet.getName(), templateGroup.template)
+        );
+        pendingTemplateBuilds.forEach(item => pendingItems.push({ setup: item, source: compactSource, sourceMarker }));
+      });
     });
 
     // Source preparation is grouped for speed, but output order must always
@@ -451,13 +464,17 @@ function applySetupStyle(sheet: ExcelScript.Worksheet) {
   sheet.getRange("M:O").setColumnHidden(true);
   sheet.getRange(`${BUILD_SIGNATURE_COLUMN}:${BUILD_SOURCE_MARKER_COLUMN}`).setColumnHidden(true);
   sheet.getFreezePanes().freezeRows(8);
+  sheet.getRange(LAST_ERROR_ROW_CELL).clear(ExcelScript.ClearApplyTo.contents);
   sheet.getRange("Z2").setValue(SETUP_STYLE_VERSION);
 }
 
 function resetSetupErrorStyle(sheet: ExcelScript.Worksheet) {
-  const body = sheet.getRange(`A${FIRST_SETUP_ROW}:O${LAST_SETUP_ROW}`);
-  body.getFormat().getFill().setColor("#FFFFFF");
-  body.getFormat().getFont().setColor("#000000");
+  const row = Number(sheet.getRange(LAST_ERROR_ROW_CELL).getValue());
+  if (!Number.isFinite(row) || row < FIRST_SETUP_ROW || row > LAST_SETUP_ROW) return;
+  const range = sheet.getRange(`A${row}:O${row}`);
+  range.getFormat().getFill().setColor("#FFFFFF");
+  range.getFormat().getFont().setColor("#000000");
+  sheet.getRange(LAST_ERROR_ROW_CELL).clear(ExcelScript.ClearApplyTo.contents);
 }
 
 function seedMonthlyInputs(sheet: ExcelScript.Worksheet) {
@@ -477,6 +494,7 @@ function seedMonthlyInputs(sheet: ExcelScript.Worksheet) {
 }
 
 function ensureCurrentSetupSchema(workbook: ExcelScript.Workbook, sheet: ExcelScript.Worksheet) {
+  if (equalsText(text(sheet.getRange("Z4").getValue()), SETUP_SCHEMA_VERSION)) return;
   migrateSetupSchema(workbook, sheet);
   if (equalsText(text(sheet.getRange("B4").getValue()), "Create output copy")) {
     sheet.getRange("B4").setValue("Build pivots");
@@ -1224,6 +1242,7 @@ function flagSetupError(setup: ExcelScript.Worksheet, message: string) {
   const range = setup.getRange(`A${row}:O${row}`);
   range.getFormat().getFill().setColor("#FCE8EC");
   range.getFormat().getFont().setColor("#8D021F");
+  setup.getRange(LAST_ERROR_ROW_CELL).setValue(row);
 }
 
 function setupValueFields(setups: PreparedPivotSetup[]): string[] {
@@ -1944,12 +1963,16 @@ function saveBuildStamp(setupSheet: ExcelScript.Worksheet, setup: PreparedPivotS
 function shouldSkipUnchangedTable(
   workbook: ExcelScript.Workbook,
   setup: PreparedPivotSetup,
-  sourceMarker: string
+  sourceMarker: string,
+  buildStamps: CellValue[][]
 ): boolean {
-  const setupSheet = workbook.getWorksheet(SETUP_SHEET);
-  if (!setupSheet) return false;
-  const storedSignature = text(setupSheet.getRange(`${BUILD_SIGNATURE_COLUMN}${setup.sourceRow}`).getValue());
-  const storedSourceMarker = text(setupSheet.getRange(`${BUILD_SOURCE_MARKER_COLUMN}${setup.sourceRow}`).getValue());
+  const stampIndex = setup.sourceRow - FIRST_SETUP_ROW;
+  let storedSignature = "";
+  let storedSourceMarker = "";
+  if (stampIndex >= 0 && stampIndex < buildStamps.length) {
+    storedSignature = text(buildStamps[stampIndex][0]);
+    storedSourceMarker = text(buildStamps[stampIndex][1]);
+  }
   if (!storedSignature || !storedSourceMarker) return false;
   if (!equalsText(storedSignature, buildSetupSignature(setup))) return false;
   if (!equalsText(storedSourceMarker, sourceMarker)) return false;
@@ -2085,7 +2108,8 @@ function addTopFilterHierarchies(
   source: SourceModel,
   setup: PivotSetup,
   filters: FieldCondition[]
-) {
+): ExcelScript.FilterPivotHierarchy[] {
+  const addedFilters: ExcelScript.FilterPivotHierarchy[] = [];
   filters.forEach(spec => {
     const duplicateFilterField = source.helperByKey.get(filterKey(spec.field));
     const actual = duplicateFilterField || requirePivotHeader(source, spec.field);
@@ -2098,17 +2122,29 @@ function addTopFilterHierarchies(
       throw new Error(`Setup row ${setup.sourceRow}: Excel could not add '${spec.field}' to Filters. Do not repeat the same field in Filters, Rows, and Values unless the filter has selected values. Detail: ${errorDetail(error)}`);
     }
     added.setName(spec.field);
-    const filterField = added.getFields()[0];
-    if (spec.values.length > 0) {
-      const selectedItems = duplicateFilterField
-        ? distinct(spec.values.map(value => normalizedCategoryValue(value)))
-        : spec.values.map(value => normalizedCategoryValue(value));
-      try {
-        filterField.applyFilter({ manualFilter: { selectedItems } });
-      } catch (_ignored) {
-        // Keep the filter dropdown when a requested item is absent, but leave
-        // it unselected instead of failing the entire PivotTable build.
-      }
+    addedFilters.push(added);
+  });
+  return addedFilters;
+}
+
+function applyTopFilterSelections(
+  setup: PivotSetup,
+  filters: FieldCondition[],
+  addedFilters: ExcelScript.FilterPivotHierarchy[]
+) {
+  filters.forEach((spec, index) => {
+    if (spec.values.length === 0) return;
+    const added = addedFilters[index];
+    if (!added) throw new Error(`Setup row ${setup.sourceRow}: Filter dropdown was not created for '${spec.field}'.`);
+    const selectedItems = distinct(spec.values.map(value => normalizedCategoryValue(value)));
+    try {
+      added.setEnableMultipleFilterItems(selectedItems.length > 1);
+      added.getFields()[0].applyFilter({ manualFilter: { selectedItems } });
+    } catch (error) {
+      throw new Error(
+        `Setup row ${setup.sourceRow}: Excel could not preselect '${spec.field}' as ` +
+        `${selectedItems.join(", ")}. Check that these values exist in the source field. Detail: ${errorDetail(error)}`
+      );
     }
   });
 }
@@ -2316,7 +2352,7 @@ function buildOnePivot(
   let rowColumnCount = 0;
   const rowCaptions: string[] = [];
   const addedRowFields: string[] = [];
-  addTopFilterHierarchies(pivot, source, setup, topFilters);
+  const addedTopFilters = addTopFilterHierarchies(pivot, source, setup, topFilters);
   for (let position = 0; position < maxRows; position++) {
     const field = rowFields[position] || "";
     const rowName = rowNames[position] || "";
@@ -2376,6 +2412,7 @@ function buildOnePivot(
     const actual = requirePivotHeader(source, field);
     addDataHierarchy(pivot, source, actual, field);
   });
+  applyTopFilterSelections(setup, topFilters, addedTopFilters);
 
   pivot.getLayout().setLayoutType(ExcelScript.PivotLayoutType.tabular);
   pivot.getLayout().setShowFieldHeaders(true);
@@ -4067,15 +4104,15 @@ function groupSetupsByInputSheet(setups: PivotSetup[]): { inputSheet: string; se
   return groups;
 }
 
-function groupSetupsByInputSheetAndTemplate(
-  setups: PivotSetup[]
-): { inputSheet: string; template: string; setups: PivotSetup[] }[] {
-  const groups: { inputSheet: string; template: string; setups: PivotSetup[] }[] = [];
+function groupPreparedSetupsByTemplate(
+  setups: PreparedPivotSetup[]
+): { template: string; setups: PreparedPivotSetup[] }[] {
+  const groups: { template: string; setups: PreparedPivotSetup[] }[] = [];
   setups.forEach(setup => {
-    const key = `${lower(setup.inputSheet)}|${lower(setup.template)}`;
-    let group = groups.find(item => `${lower(item.inputSheet)}|${lower(item.template)}` === key);
+    const key = lower(setup.template);
+    let group = groups.find(item => lower(item.template) === key);
     if (!group) {
-      group = { inputSheet: setup.inputSheet, template: setup.template, setups: [] };
+      group = { template: setup.template, setups: [] };
       groups.push(group);
     }
     group.setups.push(setup);
