@@ -1,8 +1,14 @@
-POWER BI DENEB - MTL INDEX PRODUCT DASHBOARD
+POWER BI DENEB - MTL CLEAN RED DASHBOARD
+
+This is rebuilt from the working AIA file:
+C:/Users/legion/Documents/IndexBasedInsurance/PowerBI_Deneb_Vega_SingleCanvas_Dashboard.txt
+
+It keeps the same formula-aware Vega logic, but restyles the dashboard with
+a clean light UI, red as the main color, and baby blue/green/purple/yellow accents.
 
 DATA SOURCE
 Import: MTL Index Products PowerBI Template.xlsx
-Select sheet: PowerBI_Data
+Select sheet/table: PowerBI_Data
 
 ADD THESE FIELDS TO DENEB VALUES
 - Company
@@ -17,32 +23,37 @@ ADD THESE FIELDS TO DENEB VALUES
 - CohortNo
 - CohortStartDate
 - CohortEndDate
+- ObservationEndDate
 - IndexBaseValue
 - Date
 - Price
+- FXPair
 - FXRate
-- IndexNormalized
-- ProductValue
 
-IMPORTANT
-- Use Date, not Date hierarchy.
-- Select Don't summarize for numeric fields.
-- ProductValue is already calculated in Excel using FormulaType.
-- Use external Power BI slicers for Company, ProductName, and CohortNo.
-- The three dark boxes inside Deneb display the current Power BI filter context.
-
-SETUP
-1. Add a Deneb visual.
+IMPORTANT DENEB SETUP
+1. Create a new Deneb visual.
 2. Add all 18 fields above.
-3. Choose Create new specification > Vega > Empty.
-4. Paste only the JSON below.
-5. Select Apply.
+3. Use Date, not Date hierarchy.
+4. For numeric fields, choose Don't summarize.
+5. Choose Create new specification.
+6. Choose Vega, not Vega-Lite.
+7. Choose Empty.
+8. Paste only the JSON below.
+9. Select Apply.
+
+FORMULA RULES USED INSIDE DENEB
+- PR_ONLY: Product Return = max(Index Return * PR, FloorRate)
+- CAP_FLOOR: Product Return = min(max(Index Return * PR, FloorRate), CapRate)
+- ABS_PR: Product Return = min(max(abs(Index Return) * PR, FloorRate), CapRate)
+
+Use normal Power BI slicers for Company, ProductName, and CohortNo.
+The boxes inside Deneb are display-only and show the active Power BI filter context.
 
 ================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "MTL index-linked product dashboard using formula-aware PowerBI_Data.",
-  "background": "#071120",
+  "description": "MTL formula-aware dashboard with a clean light style and red primary accent.",
+  "background": "#F4F8FB",
   "width": 1500,
   "height": 900,
   "padding": 0,
@@ -61,13 +72,33 @@ SETUP
       "transform": [
         {
           "type": "formula",
-          "expr": "toNumber(datum.IndexNormalized)",
-          "as": "DisplayIndex"
+          "expr": "toNumber(datum.Price)",
+          "as": "NumericPrice"
         },
         {
           "type": "formula",
-          "expr": "toNumber(datum.ProductValue)",
-          "as": "DisplayProduct"
+          "expr": "toNumber(datum.IndexBaseValue)",
+          "as": "NumericBase"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.PR) > 1 ? toNumber(datum.PR) / 100 : toNumber(datum.PR)",
+          "as": "NumericPR"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)",
+          "as": "NumericFloor"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)",
+          "as": "NumericCap"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.Principal) > 0 ? toNumber(datum.Principal) : 100",
+          "as": "NumericPrincipal"
         },
         {
           "type": "formula",
@@ -76,7 +107,32 @@ SETUP
         },
         {
           "type": "filter",
-          "expr": "isFinite(datum.DisplayIndex) && isFinite(datum.DisplayProduct)"
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.NumericPrice / datum.NumericBase * 100",
+          "as": "DisplayIndex"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DisplayIndex / 100 - 1",
+          "as": "IndexReturnCalc"
+        },
+        {
+          "type": "formula",
+          "expr": "upper(toString(datum.FormulaType || 'PR_ONLY'))",
+          "as": "FormulaKey"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericCap) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericCap) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
+          "as": "ProductReturnCalc"
+        },
+        {
+          "type": "formula",
+          "expr": "100 * (1 + datum.ProductReturnCalc)",
+          "as": "DisplayProduct"
         },
         {
           "type": "collect",
@@ -135,10 +191,10 @@ SETUP
             "min"
           ],
           "fields": [
-            "IndexNormalized",
-            "IndexNormalized",
-            "ProductValue",
-            "ProductValue"
+            "DisplayIndex",
+            "DisplayIndex",
+            "DisplayProduct",
+            "DisplayProduct"
           ],
           "as": [
             "MaxIndex",
@@ -184,28 +240,28 @@ SETUP
       "scale": "x",
       "position": 830,
       "labels": false,
-      "labelColor": "#8EACDF",
+      "labelColor": "#6B7890",
       "labelFontSize": 11,
       "labelPadding": 10,
-      "tickColor": "#51617B",
-      "domainColor": "#51617B",
+      "tickColor": "#E6EEF5",
+      "domainColor": "#E6EEF5",
       "grid": false
     },
     {
       "orient": "left",
       "scale": "y",
       "position": 260,
-      "labelColor": "#8EACDF",
+      "labelColor": "#6B7890",
       "labelFontSize": 11,
       "labelPadding": 8,
-      "tickColor": "#51617B",
-      "domainColor": "#51617B",
+      "tickColor": "#E6EEF5",
+      "domainColor": "#E6EEF5",
       "grid": true,
-      "gridColor": "#2A3A55",
-      "gridOpacity": 0.55,
+      "gridColor": "#E6EEF5",
+      "gridOpacity": 1,
       "gridDash": [
-        3,
-        4
+        2,
+        5
       ]
     }
   ],
@@ -227,10 +283,10 @@ SETUP
             "value": 70
           },
           "fill": {
-            "value": "#08111F"
+            "value": "#FFFFFF"
           },
           "stroke": {
-            "value": "#26344B"
+            "value": "#E3EBF3"
           }
         }
       }
@@ -255,7 +311,7 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#ED1B2F"
+            "value": "#D31145"
           }
         }
       }
@@ -271,7 +327,7 @@ SETUP
             "value": 37
           },
           "text": {
-            "value": "A"
+            "value": "M"
           },
           "align": {
             "value": "center"
@@ -280,7 +336,7 @@ SETUP
             "value": "middle"
           },
           "fill": {
-            "value": "white"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 17
@@ -308,7 +364,7 @@ SETUP
             "value": "middle"
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 16
@@ -336,7 +392,7 @@ SETUP
             "value": "middle"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 13
@@ -361,10 +417,10 @@ SETUP
             "value": 126
           },
           "fill": {
-            "value": "#091425"
+            "value": "#FFFFFF"
           },
           "stroke": {
-            "value": "#26344B"
+            "value": "#E3EBF3"
           }
         }
       }
@@ -386,7 +442,7 @@ SETUP
             "value": "middle"
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#D31145"
           },
           "fontSize": {
             "value": 14
@@ -414,7 +470,7 @@ SETUP
             "value": "middle"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 14
@@ -439,7 +495,7 @@ SETUP
             "value": "middle"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 14
@@ -461,7 +517,7 @@ SETUP
             "value": 125
           },
           "stroke": {
-            "value": "#ED1B2F"
+            "value": "#D31145"
           },
           "strokeWidth": {
             "value": 3
@@ -489,10 +545,10 @@ SETUP
             "value": 6
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#FFFFFF"
           },
           "stroke": {
-            "value": "#3A4D6D"
+            "value": "#E3EBF3"
           }
         }
       }
@@ -517,10 +573,10 @@ SETUP
             "value": 6
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#FFFFFF"
           },
           "stroke": {
-            "value": "#3A4D6D"
+            "value": "#E3EBF3"
           }
         }
       }
@@ -545,10 +601,10 @@ SETUP
             "value": 6
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#FFFFFF"
           },
           "stroke": {
-            "value": "#3A4D6D"
+            "value": "#E3EBF3"
           }
         }
       }
@@ -564,7 +620,7 @@ SETUP
             "value": 181
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 15
@@ -594,7 +650,7 @@ SETUP
             "value": 181
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 15
@@ -627,7 +683,7 @@ SETUP
             "value": 181
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 15
@@ -666,10 +722,10 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#FFFFFF"
           },
           "stroke": {
-            "value": "#ED1B2F"
+            "value": "#D31145"
           },
           "strokeWidth": {
             "value": 2
@@ -694,7 +750,7 @@ SETUP
             "value": "Index"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 12
@@ -721,7 +777,7 @@ SETUP
             "value": 278
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 16
@@ -754,7 +810,7 @@ SETUP
             "value": "PR"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 12
@@ -776,7 +832,7 @@ SETUP
             "value": 278
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 16
@@ -787,7 +843,7 @@ SETUP
         },
         "update": {
           "text": {
-            "signal": "format(datum.PR, '.0%')"
+            "signal": "format(datum.NumericPR, '.0%')"
           }
         }
       }
@@ -809,7 +865,7 @@ SETUP
             "value": "Cap Rate"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 12
@@ -831,7 +887,7 @@ SETUP
             "value": 278
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 16
@@ -842,7 +898,7 @@ SETUP
         },
         "update": {
           "text": {
-            "signal": "format(datum.CapRate, '.0%')"
+            "signal": "format(datum.NumericCap, '.0%')"
           }
         }
       }
@@ -864,7 +920,7 @@ SETUP
             "value": "Floor"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 12
@@ -886,7 +942,7 @@ SETUP
             "value": 278
           },
           "fill": {
-            "value": "#FFFFFF"
+            "value": "#172033"
           },
           "fontSize": {
             "value": 16
@@ -897,7 +953,7 @@ SETUP
         },
         "update": {
           "text": {
-            "signal": "format(datum.FloorRate, '.0%')"
+            "signal": "format(datum.NumericFloor, '.0%')"
           }
         }
       }
@@ -922,7 +978,10 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#59C7F2"
+          },
+          "stroke": {
+            "value": "#BCEEFF"
           }
         }
       }
@@ -947,7 +1006,10 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#47DDB1"
+          },
+          "stroke": {
+            "value": "#BFF6E8"
           }
         }
       }
@@ -972,7 +1034,10 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#7B61FF"
+          },
+          "stroke": {
+            "value": "#D8D1FF"
           }
         }
       }
@@ -997,7 +1062,10 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#FFD166"
+          },
+          "stroke": {
+            "value": "#FFE8A6"
           }
         }
       }
@@ -1022,7 +1090,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 12
@@ -1052,7 +1120,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#00D26A"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 27
@@ -1088,7 +1156,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 12
@@ -1113,7 +1181,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#00D26A"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 27
@@ -1149,7 +1217,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 12
@@ -1174,7 +1242,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#00D26A"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 27
@@ -1210,7 +1278,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 12
@@ -1235,7 +1303,7 @@ SETUP
             "value": "center"
           },
           "fill": {
-            "value": "#9CB4DB"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 27
@@ -1271,7 +1339,10 @@ SETUP
             "value": 7
           },
           "fill": {
-            "value": "#22324D"
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
           }
         }
       }
@@ -1290,7 +1361,7 @@ SETUP
             "value": "Performance Movement (Normalized to 100)"
           },
           "fill": {
-            "value": "#8EACDF"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 14
@@ -1314,7 +1385,7 @@ SETUP
             "field": "DisplayIndex"
           },
           "stroke": {
-            "value": "#4DA3FF"
+            "value": "#59C7F2"
           },
           "strokeWidth": {
             "value": 2
@@ -1341,7 +1412,7 @@ SETUP
             "value": 18
           },
           "fill": {
-            "value": "#4DA3FF"
+            "value": "#59C7F2"
           }
         }
       }
@@ -1362,7 +1433,7 @@ SETUP
             "field": "DisplayProduct"
           },
           "stroke": {
-            "value": "#ED1B2F"
+            "value": "#D31145"
           },
           "strokeWidth": {
             "value": 2.5
@@ -1389,7 +1460,7 @@ SETUP
             "value": 18
           },
           "fill": {
-            "value": "#ED1B2F"
+            "value": "#D31145"
           }
         }
       }
@@ -1408,10 +1479,65 @@ SETUP
             "value": "Index (Normalized)"
           },
           "fill": {
-            "value": "#4DA3FF"
+            "value": "#59C7F2"
           },
           "fontSize": {
             "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 950
+          },
+          "y": {
+            "value": 252
+          },
+          "text": {
+            "value": "Formula"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latest"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 950
+          },
+          "y": {
+            "value": 278
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.FormulaKey"
           }
         }
       }
@@ -1430,7 +1556,7 @@ SETUP
             "value": "Product Value"
           },
           "fill": {
-            "value": "#ED1B2F"
+            "value": "#D31145"
           },
           "fontSize": {
             "value": 12
