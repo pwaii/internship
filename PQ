@@ -1,0 +1,168 @@
+let
+    Source = Excel.Workbook(
+        File.Contents("C:\Users\legion\Documents\IndexBasedInsurance\outputs\mtl_powerbi_template\MTL Index Products PowerBI Template.xlsx"),
+        null,
+        true
+    ),
+
+    ProductMasterRaw = Source{[Item="Product Master", Kind="Sheet"]}[Data],
+    ProductMasterHeaders = Table.PromoteHeaders(ProductMasterRaw, [PromoteAllScalars=true]),
+    ProductMaster = Table.TransformColumnTypes(
+        ProductMasterHeaders,
+        {
+            {"Company Name", type text},
+            {"Product Name", type text},
+            {"Index", type text},
+            {"Index Code", type text},
+            {"PR", type number},
+            {"FormulaType", type text},
+            {"Principal", type number},
+            {"FloorRate", type number},
+            {"CapRate", type number}
+        }
+    ),
+
+    CohortRaw = Source{[Item="Cohort Schedule", Kind="Sheet"]}[Data],
+    CohortHeaders = Table.PromoteHeaders(CohortRaw, [PromoteAllScalars=true]),
+    CohortSchedule = Table.TransformColumnTypes(
+        CohortHeaders,
+        {
+            {"Product Name", type text},
+            {"Cohort No.", Int64.Type},
+            {"Cohort Start Date", type date},
+            {"Cohort End Date", type date},
+            {"Index Base Value", type number}
+        }
+    ),
+
+    IndexRaw = Source{[Item="Index Price", Kind="Sheet"]}[Data],
+    IndexHeaders = Table.PromoteHeaders(IndexRaw, [PromoteAllScalars=true]),
+    IndexTyped = Table.TransformColumnTypes(IndexHeaders, {{"Date", type date}}),
+
+    IndexPriceLong = Table.UnpivotOtherColumns(
+        IndexTyped,
+        {"Date"},
+        "IndexCode",
+        "Price"
+    ),
+    IndexPriceTyped = Table.TransformColumnTypes(
+        IndexPriceLong,
+        {
+            {"IndexCode", type text},
+            {"Price", type number}
+        }
+    ),
+
+    FXRaw = Source{[Item="FX Rate", Kind="Sheet"]}[Data],
+    FXHeaders = Table.PromoteHeaders(FXRaw, [PromoteAllScalars=true]),
+    FXRenamed = Table.RenameColumns(FXHeaders, {{"เดือน", "Date"}, {"USD/THB", "FXRate"}}),
+    FXTyped = Table.TransformColumnTypes(
+        FXRenamed,
+        {
+            {"Date", type date},
+            {"FXRate", type number}
+        }
+    ),
+    FXWithPair = Table.AddColumn(FXTyped, "FXPair", each "USD/THB", type text),
+
+    MergeProduct = Table.NestedJoin(
+        CohortSchedule,
+        {"Product Name"},
+        ProductMaster,
+        {"Product Name"},
+        "Product",
+        JoinKind.LeftOuter
+    ),
+
+    ExpandProduct = Table.ExpandTableColumn(
+        MergeProduct,
+        "Product",
+        {"Company Name", "Index", "Index Code", "PR", "FormulaType", "Principal", "FloorRate", "CapRate"},
+        {"Company", "IndexName", "IndexCode", "PR", "FormulaType", "Principal", "FloorRate", "CapRate"}
+    ),
+
+    MergeIndex = Table.NestedJoin(
+        ExpandProduct,
+        {"IndexCode"},
+        IndexPriceTyped,
+        {"IndexCode"},
+        "IndexPrice",
+        JoinKind.LeftOuter
+    ),
+
+    ExpandIndex = Table.ExpandTableColumn(
+        MergeIndex,
+        "IndexPrice",
+        {"Date", "Price"},
+        {"Date", "Price"}
+    ),
+
+    FilterAfterStart = Table.SelectRows(
+        ExpandIndex,
+        each [Date] >= [Cohort Start Date]
+    ),
+
+    AddObservationEndDate = Table.AddColumn(
+        FilterAfterStart,
+        "ObservationEndDate",
+        each Date.AddYears([Cohort Start Date], 3),
+        type date
+    ),
+
+    FilterBeforeObservationEnd = Table.SelectRows(
+        AddObservationEndDate,
+        each [Date] <= [ObservationEndDate]
+    ),
+
+    MergeFX = Table.NestedJoin(
+        FilterBeforeObservationEnd,
+        {"Date"},
+        FXWithPair,
+        {"Date"},
+        "FX",
+        JoinKind.LeftOuter
+    ),
+
+    ExpandFX = Table.ExpandTableColumn(
+        MergeFX,
+        "FX",
+        {"FXPair", "FXRate"},
+        {"FXPair", "FXRate"}
+    ),
+
+    RenameColumns = Table.RenameColumns(
+        ExpandFX,
+        {
+            {"Product Name", "ProductName"},
+            {"Cohort No.", "CohortNo"},
+            {"Cohort Start Date", "CohortStartDate"},
+            {"Cohort End Date", "CohortEndDate"},
+            {"Index Base Value", "IndexBaseValue"}
+        }
+    ),
+
+    FinalColumns = Table.SelectColumns(
+        RenameColumns,
+        {
+            "Company",
+            "ProductName",
+            "IndexName",
+            "IndexCode",
+            "PR",
+            "FormulaType",
+            "Principal",
+            "FloorRate",
+            "CapRate",
+            "CohortNo",
+            "CohortStartDate",
+            "CohortEndDate",
+            "ObservationEndDate",
+            "IndexBaseValue",
+            "Date",
+            "Price",
+            "FXPair",
+            "FXRate"
+        }
+    )
+in
+    FinalColumns
