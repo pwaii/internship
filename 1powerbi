@@ -1,10 +1,10 @@
-POWER BI DENEB - MTL CLEAN RED DASHBOARD
+POWER BI DENEB - MTL CLEAN RED FINAL LABEL REMARKS DASHBOARD
 
 This is rebuilt from the working AIA file:
 C:/Users/legion/Documents/IndexBasedInsurance/PowerBI_Deneb_Vega_SingleCanvas_Dashboard.txt
 
-It keeps the same formula-aware Vega logic, but restyles the dashboard with
-a clean light UI, red as the main color, and baby blue/green/purple/yellow accents.
+It keeps the same formula-aware Vega logic and clean red style, with an
+interactive hover line, stable x-axis date labels, black manual axes, 10% y-axis ticks, a 100 baseline without text, KPI-box period returns, and a taller graph area.
 
 DATA SOURCE
 Import: MTL Index Products PowerBI Template.xlsx
@@ -46,13 +46,14 @@ FORMULA RULES USED INSIDE DENEB
 - CAP_FLOOR: Product Return = min(max(Index Return * PR, FloorRate), CapRate)
 - ABS_PR: Product Return = min(max(abs(Index Return) * PR, FloorRate), CapRate)
 
-Use normal Power BI slicers for Company, ProductName, and CohortNo.
+Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
+For Date, use a Between slicer so users can set the beginning and ending period.
 The boxes inside Deneb are display-only and show the active Power BI filter context.
 
 ================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "MTL formula-aware dashboard with a clean light style and red primary accent.",
+  "description": "MTL clean red dashboard with updated business labels and start-date remarks.",
   "background": "#F4F8FB",
   "width": 1500,
   "height": 900,
@@ -102,7 +103,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? datum.Date : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
         },
         {
@@ -204,6 +205,83 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           ]
         }
       ]
+    },
+    {
+      "name": "hoverPoint",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "hoverIndex != null && datum.RowIndex === hoverIndex"
+        }
+      ]
+    },
+    {
+      "name": "dateTicks",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.RowIndex === 1 || datum.RowIndex === length(data('chartData')) || datum.RowIndex % max(1, ceil(length(data('chartData')) / 7)) === 0"
+        }
+      ]
+    },
+    {
+      "name": "yTickData",
+      "values": [
+        {
+          "Value": 70,
+          "Label": "-30%"
+        },
+        {
+          "Value": 80,
+          "Label": "-20%"
+        },
+        {
+          "Value": 90,
+          "Label": "-10%"
+        },
+        {
+          "Value": 100,
+          "Label": "0%"
+        },
+        {
+          "Value": 110,
+          "Label": "+10%"
+        },
+        {
+          "Value": 120,
+          "Label": "+20%"
+        },
+        {
+          "Value": 130,
+          "Label": "+30%"
+        },
+        {
+          "Value": 140,
+          "Label": "+40%"
+        }
+      ]
+    },
+    {
+      "name": "periodStart",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.RowIndex === 1"
+        }
+      ]
+    },
+    {
+      "name": "periodEnd",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.RowIndex === length(data('chartData'))"
+        }
+      ]
     }
   ],
   "scales": [
@@ -227,10 +305,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         140
       ],
       "range": [
-        830,
-        570
+        840,
+        505
       ],
-      "nice": true,
+      "nice": false,
       "zero": false
     }
   ],
@@ -238,31 +316,37 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
     {
       "orient": "bottom",
       "scale": "x",
-      "position": 830,
+      "position": 840,
       "labels": false,
-      "labelColor": "#6B7890",
+      "labelColor": "#111111",
       "labelFontSize": 11,
-      "labelPadding": 10,
-      "tickColor": "#E6EEF5",
-      "domainColor": "#E6EEF5",
-      "grid": false
+      "labelPadding": 8,
+      "tickColor": "#111111",
+      "domainColor": "#111111",
+      "grid": false,
+      "titleColor": "#111111",
+      "ticks": false
     },
     {
       "orient": "left",
       "scale": "y",
       "position": 260,
-      "labelColor": "#6B7890",
-      "labelFontSize": 11,
-      "labelPadding": 8,
-      "tickColor": "#E6EEF5",
-      "domainColor": "#E6EEF5",
-      "grid": true,
-      "gridColor": "#E6EEF5",
+      "labelColor": "#111111",
+      "labelFontSize": 12,
+      "labelPadding": 10,
+      "tickColor": "#111111",
+      "domainColor": "#111111",
+      "grid": false,
+      "gridColor": "#D9E1EA",
       "gridOpacity": 1,
       "gridDash": [
-        2,
+        3,
         5
-      ]
+      ],
+      "titleColor": "#111111",
+      "tickCount": 7,
+      "labels": false,
+      "ticks": false
     }
   ],
   "marks": [
@@ -392,7 +476,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "middle"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 13
@@ -470,7 +554,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "middle"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 14
@@ -495,7 +579,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "middle"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 14
@@ -750,7 +834,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "Index"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 12
@@ -810,7 +894,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "PR"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 12
@@ -862,10 +946,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 252
           },
           "text": {
-            "value": "Cap Rate"
+            "value": "Volatility"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 12
@@ -917,10 +1001,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 252
           },
           "text": {
-            "value": "Floor"
+            "value": ""
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#FFFFFF"
           },
           "fontSize": {
             "value": 12
@@ -953,7 +1037,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "format(datum.NumericFloor, '.0%')"
+            "signal": "''"
           }
         }
       }
@@ -1084,7 +1168,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 355
           },
           "text": {
-            "value": "Index Return"
+            "value": "Index Growth"
           },
           "align": {
             "value": "center"
@@ -1106,7 +1190,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
     {
       "type": "text",
       "from": {
-        "data": "latest"
+        "data": "periodEnd"
       },
       "encode": {
         "enter": {
@@ -1131,7 +1215,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "format(datum.DisplayIndex / 100 - 1, '+.2%')"
+            "signal": "length(data('periodStart')) && data('periodStart')[0].DisplayIndex != 0 ? format(datum.DisplayIndex / data('periodStart')[0].DisplayIndex - 1, '+.2%') : ''"
           }
         }
       }
@@ -1150,7 +1234,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 355
           },
           "text": {
-            "value": "Product Return"
+            "value": "Product Growth"
           },
           "align": {
             "value": "center"
@@ -1167,7 +1251,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
     {
       "type": "text",
       "from": {
-        "data": "latest"
+        "data": "periodEnd"
       },
       "encode": {
         "enter": {
@@ -1192,7 +1276,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "format(datum.DisplayProduct / 100 - 1, '+.2%')"
+            "signal": "length(data('periodStart')) && data('periodStart')[0].DisplayProduct != 0 ? format(datum.DisplayProduct / data('periodStart')[0].DisplayProduct - 1, '+.2%') : ''"
           }
         }
       }
@@ -1327,13 +1411,13 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 180
           },
           "y": {
-            "value": 452
+            "value": 445
           },
           "x2": {
             "value": 1430
           },
           "y2": {
-            "value": 870
+            "value": 885
           },
           "cornerRadius": {
             "value": 7
@@ -1355,16 +1439,43 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 200
           },
           "y": {
-            "value": 485
+            "value": 475
           },
           "text": {
             "value": "Performance Movement (Normalized to 100)"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 14
+          }
+        }
+      }
+    },
+    {
+      "name": "baseline100",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 260
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y": {
+            "scale": "y",
+            "value": 100
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.25
+          },
+          "strokeOpacity": {
+            "value": 0.75
           }
         }
       }
@@ -1470,19 +1581,25 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       "encode": {
         "enter": {
           "x": {
-            "value": 660
+            "value": 1090
           },
           "y": {
-            "value": 865
+            "value": 475
           },
           "text": {
-            "value": "Index (Normalized)"
+            "value": "Index Growth"
           },
           "fill": {
             "value": "#59C7F2"
           },
           "fontSize": {
             "value": 12
+          },
+          "align": {
+            "value": "left"
+          },
+          "fontWeight": {
+            "value": "bold"
           }
         }
       }
@@ -1504,7 +1621,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "Formula"
           },
           "fill": {
-            "value": "#6B7890"
+            "value": "#111827"
           },
           "fontSize": {
             "value": 12
@@ -1547,22 +1664,673 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       "encode": {
         "enter": {
           "x": {
-            "value": 815
+            "value": 1250
           },
           "y": {
-            "value": 865
+            "value": 475
           },
           "text": {
-            "value": "Product Value"
+            "value": "Product Return"
           },
           "fill": {
             "value": "#D31145"
           },
           "fontSize": {
             "value": 12
+          },
+          "align": {
+            "value": "left"
+          },
+          "fontWeight": {
+            "value": "bold"
           }
         }
       }
+    },
+    {
+      "name": "hoverArea",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 260
+          },
+          "y": {
+            "value": 505
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 840
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fillOpacity": {
+            "value": 0
+          },
+          "cursor": {
+            "value": "crosshair"
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 505
+          },
+          "y2": {
+            "value": 840
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 2
+          },
+          "strokeDash": {
+            "value": [
+              4,
+              4
+            ]
+          },
+          "opacity": {
+            "value": 0.95
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "RowIndex"
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "size": {
+            "value": 95
+          },
+          "fill": {
+            "value": "#59C7F2"
+          },
+          "stroke": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 3
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "RowIndex"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayIndex"
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "size": {
+            "value": 95
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "stroke": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 3
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "RowIndex"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProduct"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 545
+          },
+          "width": {
+            "value": 225
+          },
+          "height": {
+            "value": 118
+          },
+          "cornerRadius": {
+            "value": 8
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          },
+          "strokeWidth": {
+            "value": 1.5
+          },
+          "shadowColor": {
+            "value": "#B9C4D3"
+          },
+          "shadowBlur": {
+            "value": 18
+          },
+          "shadowOffsetY": {
+            "value": 8
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.RowIndex) > 1180 ? scale('x', datum.RowIndex) - 245 : scale('x', datum.RowIndex) + 20"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 578
+          },
+          "fill": {
+            "value": "#111827"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.RowIndex) > 1180 ? scale('x', datum.RowIndex) - 225 : scale('x', datum.RowIndex) + 40"
+          },
+          "text": {
+            "signal": "'Date: ' + timeFormat(datum.DateKey, '%Y-%m-%d')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 610
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.RowIndex) > 1180 ? scale('x', datum.RowIndex) - 225 : scale('x', datum.RowIndex) + 40"
+          },
+          "text": {
+            "signal": "'Index: ' + format(datum.DisplayIndex, '.2f')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverPoint"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 638
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.RowIndex) > 1180 ? scale('x', datum.RowIndex) - 225 : scale('x', datum.RowIndex) + 40"
+          },
+          "text": {
+            "signal": "'Product: ' + format(datum.DisplayProduct, '.2f')"
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "from": {
+        "data": "dateTicks"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 840
+          },
+          "y2": {
+            "value": 846
+          },
+          "stroke": {
+            "value": "#111827"
+          },
+          "strokeWidth": {
+            "value": 1
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "RowIndex"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "dateTicks"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 858
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "top"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 11
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "RowIndex"
+          },
+          "text": {
+            "signal": "timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 845
+          },
+          "y": {
+            "value": 888
+          },
+          "text": {
+            "value": "Date"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 230
+          },
+          "y": {
+            "value": 675
+          },
+          "text": {
+            "value": "Value"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "angle": {
+            "value": -90
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 262
+          },
+          "y": {
+            "value": 498
+          },
+          "text": {
+            "value": "Normalized value"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "manualAxisLayer_1",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 260
+          },
+          "y": {
+            "value": 505
+          },
+          "y2": {
+            "value": 840
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.4
+          }
+        }
+      }
+    },
+    {
+      "name": "manualAxisLayer_2",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 260
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y": {
+            "value": 840
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.4
+          }
+        }
+      }
+    },
+    {
+      "name": "manualAxisLayer_3",
+      "type": "rule",
+      "from": {
+        "data": "yTickData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 254
+          },
+          "x2": {
+            "value": 260
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.2
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "name": "manualAxisLayer_4",
+      "type": "rule",
+      "from": {
+        "data": "yTickData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 260
+          },
+          "x2": {
+            "value": 1430
+          },
+          "stroke": {
+            "value": "#E1E7EF"
+          },
+          "strokeWidth": {
+            "value": 1
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "name": "manualAxisLayer_5",
+      "type": "text",
+      "from": {
+        "data": "yTickData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 246
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          },
+          "text": {
+            "field": "Label"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "periodStart"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 947
+          },
+          "y": {
+            "value": 420
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "'From ' + timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "periodStart"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1270
+          },
+          "y": {
+            "value": 420
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "'From ' + timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    }
+  ],
+  "signals": [
+    {
+      "name": "hoverX",
+      "value": null,
+      "on": [
+        {
+          "events": {
+            "type": "mousemove",
+            "markname": "hoverArea"
+          },
+          "update": "clamp(x(), 260, 1430)"
+        },
+        {
+          "events": {
+            "type": "mouseout",
+            "markname": "hoverArea"
+          },
+          "update": "null"
+        }
+      ]
+    },
+    {
+      "name": "hoverIndex",
+      "update": "hoverX == null || length(data('chartData')) == 0 ? null : clamp(round(invert('x', hoverX)), 1, length(data('chartData')))"
     }
   ]
 }
