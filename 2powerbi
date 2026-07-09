@@ -1,6 +1,6 @@
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "MTL multi-product comparison dashboard with time-series hover line and value tooltip.",
+  "description": "MTL product comparison dashboard with hover line and fitted 0.5-step y-axis. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
   "background": "#F4F8FB",
   "width": 1500,
   "height": 900,
@@ -98,6 +98,62 @@
       ]
     },
     {
+      "name": "productYDomain",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "min",
+            "max"
+          ],
+          "fields": [
+            "DisplayProduct",
+            "DisplayProduct"
+          ],
+          "as": [
+            "MinY",
+            "MaxY"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "max(1, datum.MaxY - datum.MinY)",
+          "as": "Spread"
+        },
+        {
+          "type": "formula",
+          "expr": "floor((datum.MinY - max(0.5, datum.Spread * 0.12)) * 2) / 2",
+          "as": "DomainMin"
+        },
+        {
+          "type": "formula",
+          "expr": "ceil((datum.MaxY + max(0.5, datum.Spread * 0.12)) * 2) / 2",
+          "as": "DomainMax"
+        }
+      ]
+    },
+    {
+      "name": "hundredTick",
+      "source": "productYDomain",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.DomainMin <= 100 && datum.DomainMax >= 100"
+        },
+        {
+          "type": "formula",
+          "expr": "100",
+          "as": "Value"
+        },
+        {
+          "type": "formula",
+          "expr": "'100'",
+          "as": "Label"
+        }
+      ]
+    },
+    {
       "name": "latestByProduct",
       "source": "chartData",
       "transform": [
@@ -164,34 +220,50 @@
     },
     {
       "name": "yTickData",
-      "values": [
+      "source": "productYDomain",
+      "transform": [
         {
-          "Value": 80,
-          "Label": "-20%"
+          "type": "formula",
+          "expr": "datum.DomainMax - datum.DomainMin",
+          "as": "AxisSpan"
         },
         {
-          "Value": 90,
-          "Label": "-10%"
+          "type": "formula",
+          "expr": "floor(datum.AxisSpan / 0.5) + 1",
+          "as": "HalfStepCount"
         },
         {
-          "Value": 100,
-          "Label": "0%"
+          "type": "formula",
+          "expr": "datum.HalfStepCount > 15 ? 1 : 0.5",
+          "as": "TickStep"
         },
         {
-          "Value": 110,
-          "Label": "+10%"
+          "type": "formula",
+          "expr": "ceil(datum.DomainMin / datum.TickStep) * datum.TickStep",
+          "as": "FirstTick"
         },
         {
-          "Value": 120,
-          "Label": "+20%"
+          "type": "formula",
+          "expr": "sequence(datum.FirstTick, datum.DomainMax + datum.TickStep * 0.5, datum.TickStep)",
+          "as": "TickArray"
         },
         {
-          "Value": 130,
-          "Label": "+30%"
+          "type": "flatten",
+          "fields": [
+            "TickArray"
+          ],
+          "as": [
+            "Value"
+          ]
         },
         {
-          "Value": 140,
-          "Label": "+40%"
+          "type": "filter",
+          "expr": "datum.Value >= datum.DomainMin && datum.Value <= datum.DomainMax"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.TickStep >= 1 ? format(datum.Value, '.0f') : format(datum.Value, '.1f')",
+          "as": "Label"
         }
       ]
     },
@@ -281,10 +353,13 @@
     {
       "name": "y",
       "type": "linear",
-      "domain": [
-        80,
-        140
-      ],
+      "domain": {
+        "data": "productYDomain",
+        "fields": [
+          "DomainMin",
+          "DomainMax"
+        ]
+      },
       "range": [
         800,
         290
@@ -331,6 +406,281 @@
   ],
   "marks": [
     {
+      "name": "sharedHeaderTop",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 70
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderLogo",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 28
+          },
+          "y": {
+            "value": 18
+          },
+          "width": {
+            "value": 36
+          },
+          "height": {
+            "value": 36
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#D31145"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderLogoText",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 46
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "M"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 17
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderTitle",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 78
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "Index Intelligence"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderByline",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 225
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "by MTL Product Dev"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 13
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNav",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 70
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 126
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNavProduct",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 48
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Product Viewer"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNavComparator",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 210
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Comparator"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNavIndex",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 350
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Index Dashboard"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderActiveRule",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 210
+          },
+          "x2": {
+            "value": 330
+          },
+          "y": {
+            "value": 125
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 3
+          }
+        }
+      }
+    },
+    {
       "type": "rect",
       "encode": {
         "enter": {
@@ -348,75 +698,6 @@
           },
           "fill": {
             "value": "#F4F8FB"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 38
-          },
-          "text": {
-            "value": "Product Comparator"
-          },
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 24
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 66
-          },
-          "text": {
-            "value": "Select two or more ProductName values in Power BI slicers. Each product is normalized to Day 1 = 100."
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 13
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 84
-          },
-          "text": {
-            "value": "Use the CohortNo slicer to select cohort; each selected card displays its cohort and start date."
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 12
           }
         }
       }
@@ -458,7 +739,7 @@
             "signal": "56 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "92 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "132 + floor((datum.CardNo - 1) / 3) * 102"
           },
           "stroke": {
             "scale": "color",
@@ -492,7 +773,7 @@
             "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "118 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "158 + floor((datum.CardNo - 1) / 3) * 102"
           },
           "text": {
             "signal": "datum.ProductName"
@@ -519,7 +800,7 @@
             "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "146 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "186 + floor((datum.CardNo - 1) / 3) * 102"
           },
           "text": {
             "signal": "'Index: ' + datum.IndexCode + '   PR: ' + format(datum.NumericPR, '.0%') + '   Volatility: ' + format(datum.NumericVolatility, '.0%')"
@@ -546,7 +827,7 @@
             "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "171 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "211 + floor((datum.CardNo - 1) / 3) * 102"
           },
           "fill": {
             "scale": "color",
@@ -772,6 +1053,76 @@
       }
     },
     {
+      "name": "forcedHundredGrid",
+      "type": "rule",
+      "from": {
+        "data": "hundredTick"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "x2": {
+            "value": 1430
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.35
+          },
+          "strokeOpacity": {
+            "value": 0.7
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "name": "forcedHundredLabel",
+      "type": "text",
+      "from": {
+        "data": "hundredTick"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 136
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          },
+          "text": {
+            "field": "Label"
+          }
+        }
+      }
+    },
+    {
       "type": "text",
       "encode": {
         "enter": {
@@ -810,7 +1161,7 @@
             "value": 790
           },
           "y": {
-            "value": 838
+            "value": 852
           },
           "text": {
             "value": "Date"
@@ -952,7 +1303,7 @@
             "value": 78
           },
           "y": {
-            "value": 832
+            "value": 862
           },
           "text": {
             "value": "Remark: FX rate references Bank of Thailand (BoT)."
@@ -961,7 +1312,7 @@
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 11
+            "value": 10
           },
           "fontStyle": {
             "value": "italic"
