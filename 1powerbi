@@ -1,6 +1,6 @@
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "MTL clean red dashboard with calendar x-axis labels derived from cohort start date and observation row.",
+  "description": "MTL clean red dashboard with calendar x-axis and dynamic y-axis padded by 5 percentage points.",
   "background": "#F4F8FB",
   "width": 1500,
   "height": 900,
@@ -111,6 +111,120 @@
       ]
     },
     {
+      "name": "dynamicYDomain",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "min",
+            "max",
+            "min",
+            "max"
+          ],
+          "fields": [
+            "DisplayIndex",
+            "DisplayIndex",
+            "DisplayProduct",
+            "DisplayProduct"
+          ],
+          "as": [
+            "MinIndex",
+            "MaxIndex",
+            "MinProduct",
+            "MaxProduct"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "min(datum.MinIndex, datum.MinProduct)",
+          "as": "ActualMin"
+        },
+        {
+          "type": "formula",
+          "expr": "max(datum.MaxIndex, datum.MaxProduct)",
+          "as": "ActualMax"
+        },
+        {
+          "type": "formula",
+          "expr": "floor((datum.ActualMin - 5) / 1) * 1",
+          "as": "DomainMin"
+        },
+        {
+          "type": "formula",
+          "expr": "ceil((datum.ActualMax + 5) / 1) * 1",
+          "as": "DomainMax"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMax - datum.DomainMin",
+          "as": "Span"
+        }
+      ]
+    },
+    {
+      "name": "yTickData",
+      "source": "dynamicYDomain",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "datum.DomainMin",
+          "as": "Tick0"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMin + datum.Span / 6",
+          "as": "Tick1"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMin + datum.Span * 2 / 6",
+          "as": "Tick2"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMin + datum.Span * 3 / 6",
+          "as": "Tick3"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMin + datum.Span * 4 / 6",
+          "as": "Tick4"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMin + datum.Span * 5 / 6",
+          "as": "Tick5"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DomainMax",
+          "as": "Tick6"
+        },
+        {
+          "type": "fold",
+          "fields": [
+            "Tick0",
+            "Tick1",
+            "Tick2",
+            "Tick3",
+            "Tick4",
+            "Tick5",
+            "Tick6"
+          ],
+          "as": [
+            "TickName",
+            "Value"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "format(datum.Value / 100 - 1, '+.0%')",
+          "as": "Label"
+        }
+      ]
+    },
+    {
       "name": "latest",
       "source": "chartData",
       "transform": [
@@ -184,43 +298,6 @@
       ]
     },
     {
-      "name": "yTickData",
-      "values": [
-        {
-          "Value": 70,
-          "Label": "-30%"
-        },
-        {
-          "Value": 80,
-          "Label": "-20%"
-        },
-        {
-          "Value": 90,
-          "Label": "-10%"
-        },
-        {
-          "Value": 100,
-          "Label": "0%"
-        },
-        {
-          "Value": 110,
-          "Label": "+10%"
-        },
-        {
-          "Value": 120,
-          "Label": "+20%"
-        },
-        {
-          "Value": 130,
-          "Label": "+30%"
-        },
-        {
-          "Value": 140,
-          "Label": "+40%"
-        }
-      ]
-    },
-    {
       "name": "periodStart",
       "source": "chartData",
       "transform": [
@@ -257,10 +334,13 @@
     {
       "name": "y",
       "type": "linear",
-      "domain": [
-        70,
-        140
-      ],
+      "domain": {
+        "data": "dynamicYDomain",
+        "fields": [
+          "DomainMin",
+          "DomainMax"
+        ]
+      },
       "range": [
         840,
         505
@@ -308,6 +388,7 @@
   ],
   "marks": [
     {
+      "name": "sharedHeaderTop",
       "type": "rect",
       "encode": {
         "enter": {
@@ -333,6 +414,7 @@
       }
     },
     {
+      "name": "sharedHeaderLogo",
       "type": "rect",
       "encode": {
         "enter": {
@@ -358,6 +440,7 @@
       }
     },
     {
+      "name": "sharedHeaderLogoText",
       "type": "text",
       "encode": {
         "enter": {
@@ -389,6 +472,7 @@
       }
     },
     {
+      "name": "sharedHeaderTitle",
       "type": "text",
       "encode": {
         "enter": {
@@ -417,6 +501,7 @@
       }
     },
     {
+      "name": "sharedHeaderByline",
       "type": "text",
       "encode": {
         "enter": {
@@ -433,7 +518,7 @@
             "value": "middle"
           },
           "fill": {
-            "value": "#111827"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 13
@@ -442,6 +527,7 @@
       }
     },
     {
+      "name": "sharedHeaderNav",
       "type": "rect",
       "encode": {
         "enter": {
@@ -467,6 +553,7 @@
       }
     },
     {
+      "name": "sharedHeaderNavProduct",
       "type": "text",
       "encode": {
         "enter": {
@@ -495,6 +582,7 @@
       }
     },
     {
+      "name": "sharedHeaderNavComparator",
       "type": "text",
       "encode": {
         "enter": {
@@ -511,15 +599,19 @@
             "value": "middle"
           },
           "fill": {
-            "value": "#111827"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
           }
         }
       }
     },
     {
+      "name": "sharedHeaderNavIndex",
       "type": "text",
       "encode": {
         "enter": {
@@ -536,23 +628,27 @@
             "value": "middle"
           },
           "fill": {
-            "value": "#111827"
+            "value": "#6B7890"
           },
           "fontSize": {
             "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
           }
         }
       }
     },
     {
+      "name": "sharedHeaderActiveRule",
       "type": "rule",
       "encode": {
         "enter": {
           "x": {
-            "value": 28
+            "value": 48
           },
           "x2": {
-            "value": 166
+            "value": 188
           },
           "y": {
             "value": 125
@@ -1423,7 +1519,7 @@
           },
           "y": {
             "scale": "y",
-            "value": 100
+            "value": 136
           },
           "stroke": {
             "value": "#111111"
@@ -1982,7 +2078,7 @@
             "value": 845
           },
           "y": {
-            "value": 888
+            "value": 895
           },
           "text": {
             "value": "Date"
@@ -2271,10 +2367,10 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 180
+            "value": 200
           },
           "y": {
-            "value": 882
+            "value": 872
           },
           "text": {
             "value": "FX rate references Bank of Thailand (BoT)."
