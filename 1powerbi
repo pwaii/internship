@@ -1,59 +1,6 @@
-POWER BI DENEB - MTL CLEAN RED FINAL LABEL REMARKS DASHBOARD
-
-This is rebuilt from the working AIA file:
-C:/Users/legion/Documents/IndexBasedInsurance/PowerBI_Deneb_Vega_SingleCanvas_Dashboard.txt
-
-It keeps the same formula-aware Vega logic and clean red style, with an
-interactive hover line, stable x-axis date labels, black manual axes, 10% y-axis ticks, a 100 baseline without text, KPI-box period returns, and a taller graph area.
-
-DATA SOURCE
-Import: MTL Index Products PowerBI Template.xlsx
-Select sheet/table: PowerBI_Data
-
-ADD THESE FIELDS TO DENEB VALUES
-- Company
-- ProductName
-- IndexName
-- IndexCode
-- PR
-- FormulaType
-- Principal
-- FloorRate
-- CapRate
-- CohortNo
-- CohortStartDate
-- CohortEndDate
-- ObservationEndDate
-- IndexBaseValue
-- Date
-- Price
-- FXPair
-- FXRate
-
-IMPORTANT DENEB SETUP
-1. Create a new Deneb visual.
-2. Add all 18 fields above.
-3. Use Date, not Date hierarchy.
-4. For numeric fields, choose Don't summarize.
-5. Choose Create new specification.
-6. Choose Vega, not Vega-Lite.
-7. Choose Empty.
-8. Paste only the JSON below.
-9. Select Apply.
-
-FORMULA RULES USED INSIDE DENEB
-- PR_ONLY: Product Return = max(Index Return * PR, FloorRate)
-- CAP_FLOOR: Product Return = min(max(Index Return * PR, FloorRate), CapRate)
-- ABS_PR: Product Return = min(max(abs(Index Return) * PR, FloorRate), CapRate)
-
-Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
-For Date, use a Between slicer so users can set the beginning and ending period.
-The boxes inside Deneb are display-only and show the active Power BI filter context.
-
-================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "MTL clean red dashboard with updated business labels and start-date remarks.",
+  "description": "MTL clean red dashboard with calendar x-axis labels derived from cohort start date and observation row.",
   "background": "#F4F8FB",
   "width": 1500,
   "height": 900,
@@ -150,6 +97,16 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "as": [
             "RowIndex"
           ]
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
+          "as": "CohortStartKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.CohortStartKey) ? datum.CohortStartKey + (datum.RowIndex - 1) * 7 * 86400000 : datum.DateKey",
+          "as": "AxisDateKey"
         }
       ]
     },
@@ -1887,7 +1844,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "signal": "scale('x', datum.RowIndex) > 1180 ? scale('x', datum.RowIndex) - 225 : scale('x', datum.RowIndex) + 40"
           },
           "text": {
-            "signal": "'Date: ' + timeFormat(datum.DateKey, '%Y-%m-%d')"
+            "signal": "'Date: ' + timeFormat(datum.AxisDateKey, '%d %b %Y')"
           }
         }
       }
@@ -2000,7 +1957,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "#111111"
           },
           "fontSize": {
-            "value": 11
+            "value": 10
+          },
+          "fontWeight": {
+            "value": "bold"
           }
         },
         "update": {
@@ -2009,7 +1969,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "field": "RowIndex"
           },
           "text": {
-            "signal": "timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "timeFormat(datum.AxisDateKey, '%d %b %Y')"
           }
         }
       }
@@ -2271,7 +2231,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "'From ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "'From ' + timeFormat(datum.AxisDateKey, '%d %b %Y')"
           }
         }
       }
@@ -2301,7 +2261,32 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "'From ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "'From ' + timeFormat(datum.AxisDateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 180
+          },
+          "y": {
+            "value": 882
+          },
+          "text": {
+            "value": "FX rate references Bank of Thailand (BoT)."
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 10
+          },
+          "fontStyle": {
+            "value": "italic"
           }
         }
       }
