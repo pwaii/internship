@@ -214,7 +214,7 @@
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.CardNo <= 6"
+          "expr": "datum.CardNo <= 12"
         }
       ]
     },
@@ -344,8 +344,8 @@
         "field": "DateKey"
       },
       "range": [
-        150,
-        1430
+        190,
+        1360
       ],
       "nice": true,
       "zero": false
@@ -361,8 +361,12 @@
         ]
       },
       "range": [
-        800,
-        290
+        {
+          "signal": "plotBottom"
+        },
+        {
+          "signal": "plotTop"
+        }
       ],
       "zero": false,
       "nice": false
@@ -390,7 +394,7 @@
     {
       "orient": "bottom",
       "scale": "x",
-      "position": 800,
+      "position": 780,
       "labels": false,
       "ticks": false,
       "domain": false
@@ -398,13 +402,36 @@
     {
       "orient": "left",
       "scale": "y",
-      "position": 150,
+      "position": 190,
       "labels": false,
       "ticks": false,
       "domain": false
     }
   ],
   "marks": [
+    {
+      "name": "pageBackground",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 900
+          },
+          "fill": {
+            "value": "#F6F8FB"
+          }
+        }
+      }
+    },
     {
       "name": "sharedHeaderTop",
       "type": "rect",
@@ -443,7 +470,7 @@
             "value": 18
           },
           "width": {
-            "value": 36
+            "value": 44
           },
           "height": {
             "value": 36
@@ -463,13 +490,13 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 46
+            "value": 50
           },
           "y": {
             "value": 37
           },
           "text": {
-            "value": "M"
+            "value": "AIA"
           },
           "align": {
             "value": "center"
@@ -481,7 +508,7 @@
             "value": "#FFFFFF"
           },
           "fontSize": {
-            "value": 17
+            "value": 18
           },
           "fontWeight": {
             "value": "bold"
@@ -495,13 +522,13 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 78
+            "value": 80
           },
           "y": {
             "value": 37
           },
           "text": {
-            "value": "Index Intelligence"
+            "value": "OneView"
           },
           "baseline": {
             "value": "middle"
@@ -510,7 +537,7 @@
             "value": "#172033"
           },
           "fontSize": {
-            "value": 16
+            "value": 18
           },
           "fontWeight": {
             "value": "bold"
@@ -524,13 +551,13 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 225
+            "value": 170
           },
           "y": {
             "value": 37
           },
           "text": {
-            "value": "by MTL Product Dev"
+            "value": "by G.8 Intern"
           },
           "baseline": {
             "value": "middle"
@@ -682,64 +709,45 @@
     },
     {
       "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 0
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 900
-          },
-          "fill": {
-            "value": "#F4F8FB"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
       "from": {
         "data": "visibleCards"
       },
       "encode": {
         "enter": {
           "width": {
-            "value": 440
+            "value": 330
           },
           "height": {
-            "value": 86
+            "value": 74
           },
           "cornerRadius": {
-            "value": 8
+            "value": 7
           },
           "fill": {
             "value": "#FFFFFF"
           },
           "strokeWidth": {
-            "value": 2
+            "value": 1.4
           },
           "shadowColor": {
-            "value": "#CBD5E1"
+            "value": "#D8E1EA"
           },
           "shadowBlur": {
-            "value": 12
+            "value": 6
           },
           "shadowOffsetY": {
-            "value": 5
+            "value": 3
+          },
+          "stroke": {
+            "value": "#E3EBF3"
           }
         },
         "update": {
           "x": {
-            "signal": "56 + ((datum.CardNo - 1) % 3) * 480"
+            "signal": "56 + ((datum.CardNo - 1) % 4) * 350"
           },
           "y": {
-            "signal": "132 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "220 + floor((datum.CardNo - 1) / 4) * 84"
           },
           "stroke": {
             "scale": "color",
@@ -759,21 +767,21 @@
             "value": "#172033"
           },
           "fontSize": {
-            "value": 14
+            "value": 12
           },
           "fontWeight": {
             "value": "bold"
           },
           "limit": {
-            "value": 370
+            "value": 280
           }
         },
         "update": {
           "x": {
-            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
           },
           "y": {
-            "signal": "158 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "242 + floor((datum.CardNo - 1) / 4) * 84"
           },
           "text": {
             "signal": "datum.ProductName"
@@ -792,15 +800,18 @@
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 11
+            "value": 9.5
+          },
+          "limit": {
+            "value": 295
           }
         },
         "update": {
           "x": {
-            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
           },
           "y": {
-            "signal": "186 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "266 + floor((datum.CardNo - 1) / 4) * 84"
           },
           "text": {
             "signal": "'Index: ' + datum.IndexCode + '   PR: ' + format(datum.NumericPR, '.0%') + '   Volatility: ' + format(datum.NumericVolatility, '.0%')"
@@ -816,18 +827,21 @@
       "encode": {
         "enter": {
           "fontSize": {
-            "value": 14
+            "value": 10.5
           },
           "fontWeight": {
             "value": "bold"
+          },
+          "limit": {
+            "value": 295
           }
         },
         "update": {
           "x": {
-            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
           },
           "y": {
-            "signal": "211 + floor((datum.CardNo - 1) / 3) * 102"
+            "signal": "289 + floor((datum.CardNo - 1) / 4) * 84"
           },
           "fill": {
             "scale": "color",
@@ -847,13 +861,13 @@
             "value": 56
           },
           "y": {
-            "value": 238
+            "signal": "chartPanelY"
           },
           "x2": {
-            "value": 1486
+            "value": 1430
           },
           "y2": {
-            "value": 858
+            "value": 878
           },
           "cornerRadius": {
             "value": 8
@@ -865,7 +879,7 @@
             "value": "#E3EBF3"
           },
           "strokeWidth": {
-            "value": 1.2
+            "value": 1.1
           }
         }
       }
@@ -875,10 +889,10 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 78
+            "value": 190
           },
           "y": {
-            "value": 270
+            "signal": "chartTitleY"
           },
           "text": {
             "value": "Normalized Product Comparison"
@@ -887,7 +901,7 @@
             "value": "#172033"
           },
           "fontSize": {
-            "value": 16
+            "value": 14
           },
           "fontWeight": {
             "value": "bold"
@@ -896,65 +910,17 @@
       }
     },
     {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 78
-          },
-          "y": {
-            "value": 292
-          },
-          "text": {
-            "value": "Day 1 = 100 for each product independently"
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
       "type": "rule",
       "encode": {
         "enter": {
           "x": {
-            "value": 150
-          },
-          "x2": {
-            "value": 1430
+            "value": 190
           },
           "y": {
-            "scale": "y",
-            "value": 100
-          },
-          "stroke": {
-            "value": "#111111"
-          },
-          "strokeWidth": {
-            "value": 1.2
-          },
-          "strokeOpacity": {
-            "value": 0.75
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "y": {
-            "value": 290
+            "signal": "plotTop"
           },
           "y2": {
-            "value": 800
+            "signal": "plotBottom"
           },
           "stroke": {
             "value": "#111111"
@@ -970,13 +936,13 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 190
           },
           "x2": {
-            "value": 1430
+            "value": 1360
           },
           "y": {
-            "value": 800
+            "signal": "plotBottom"
           },
           "stroke": {
             "value": "#111111"
@@ -995,10 +961,10 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 190
           },
           "x2": {
-            "value": 1430
+            "value": 1360
           },
           "stroke": {
             "value": "#E1E7EF"
@@ -1023,7 +989,7 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 136
+            "value": 176
           },
           "align": {
             "value": "right"
@@ -1035,7 +1001,7 @@
             "value": "#111111"
           },
           "fontSize": {
-            "value": 12
+            "value": 11
           },
           "fontWeight": {
             "value": "bold"
@@ -1061,10 +1027,10 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 190
           },
           "x2": {
-            "value": 1430
+            "value": 1360
           },
           "stroke": {
             "value": "#111111"
@@ -1085,52 +1051,14 @@
       }
     },
     {
-      "name": "forcedHundredLabel",
-      "type": "text",
-      "from": {
-        "data": "hundredTick"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 136
-          },
-          "align": {
-            "value": "right"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#D31145"
-          },
-          "fontSize": {
-            "value": 12
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "y": {
-            "scale": "y",
-            "field": "Value"
-          },
-          "text": {
-            "field": "Label"
-          }
-        }
-      }
-    },
-    {
       "type": "text",
       "encode": {
         "enter": {
           "x": {
-            "value": 100
+            "value": 132
           },
           "y": {
-            "value": 545
+            "signal": "(plotTop + plotBottom) / 2"
           },
           "text": {
             "value": "Growth"
@@ -1158,10 +1086,10 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 790
+            "value": 775
           },
           "y": {
-            "value": 852
+            "signal": "chartDateY"
           },
           "text": {
             "value": "Date"
@@ -1303,7 +1231,7 @@
             "value": 78
           },
           "y": {
-            "value": 862
+            "signal": "chartNoteY"
           },
           "text": {
             "value": "Remark: FX rate references Bank of Thailand (BoT)."
@@ -1312,7 +1240,7 @@
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 10
+            "value": 9
           },
           "fontStyle": {
             "value": "italic"
@@ -1328,7 +1256,7 @@
       "encode": {
         "enter": {
           "y": {
-            "value": 822
+            "signal": "dateTickY"
           },
           "align": {
             "value": "center"
@@ -1337,7 +1265,10 @@
             "value": "#111111"
           },
           "fontSize": {
-            "value": 10
+            "value": 9
+          },
+          "limit": {
+            "value": 82
           }
         },
         "update": {
@@ -1357,16 +1288,16 @@
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 190
           },
           "y": {
-            "value": 290
+            "signal": "plotTop"
           },
           "x2": {
-            "value": 1430
+            "value": 1360
           },
           "y2": {
-            "value": 800
+            "signal": "plotBottom"
           },
           "fill": {
             "value": "#FFFFFF"
@@ -1376,6 +1307,9 @@
           },
           "cursor": {
             "value": "crosshair"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
           }
         }
       }
@@ -1388,10 +1322,10 @@
       "encode": {
         "enter": {
           "y": {
-            "value": 290
+            "signal": "plotTop"
           },
           "y2": {
-            "value": 800
+            "signal": "plotBottom"
           },
           "stroke": {
             "value": "#D31145"
@@ -1476,18 +1410,18 @@
             "value": 1.2
           },
           "shadowColor": {
-            "value": "#CBD5E1"
+            "value": "#D8E1EA"
           },
           "shadowBlur": {
-            "value": 12
+            "value": 7
           },
           "shadowOffsetY": {
-            "value": 5
+            "value": 3
           }
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
           }
         }
       }
@@ -1514,7 +1448,7 @@
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
           },
           "text": {
             "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
@@ -1544,7 +1478,7 @@
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
           },
           "y": {
             "signal": "366 + datum.HoverRowNo * 28"
@@ -1574,7 +1508,7 @@
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1604,7 +1538,7 @@
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1622,6 +1556,38 @@
   ],
   "signals": [
     {
+      "name": "dateTickY",
+      "update": "plotBottom + 20"
+    },
+    {
+      "name": "chartDateY",
+      "update": "plotBottom + 44"
+    },
+    {
+      "name": "chartNoteY",
+      "update": "plotBottom + 62"
+    },
+    {
+      "name": "plotBottom",
+      "update": "780"
+    },
+    {
+      "name": "plotTop",
+      "update": "chartPanelY + 90"
+    },
+    {
+      "name": "chartTitleY",
+      "update": "chartPanelY + 30"
+    },
+    {
+      "name": "chartPanelY",
+      "update": "220 + cardRows * 84 + 24"
+    },
+    {
+      "name": "cardRows",
+      "update": "max(1, ceil(length(data('visibleCards')) / 4))"
+    },
+    {
       "name": "hoverX",
       "value": null,
       "on": [
@@ -1630,7 +1596,7 @@
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "clamp(x(), 150, 1430)"
+          "update": "clamp(x(), 190, 1360)"
         },
         {
           "events": {
