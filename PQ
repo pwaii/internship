@@ -1,4 +1,5 @@
 let
+    // These must match the query names already loaded in Power BI.
     ProductMasterSource = #"Product Master",
     CohortSource = #"Cohort Schedule",
     IndexSource = #"Index Price",
@@ -53,14 +54,14 @@ let
                 if Table.HasColumns(state, col) then state else Table.AddColumn(state, col, each null)
         ),
 
-    ProductMasterNormalized = NormalizeColumns(ProductMasterSource),
-    ProductMasterWithColumns = AddMissingColumns(
-        ProductMasterNormalized,
-        {"COMPANYNAME", "PRODUCTNAME", "INDEX", "INDEXNAME", "INDEXCODE", "PR", "FORMULATYPE", "FORMULA", "PRINCIPAL", "FLOORRATE", "CAPRATE", "VOLATILITY"}
+    ProductMasterRaw = NormalizeColumns(ProductMasterSource),
+    ProductMasterColumns = AddMissingColumns(
+        ProductMasterRaw,
+        {"COMPANYNAME", "PRODUCTNAME", "INDEX", "INDEXCODE", "PR", "FORMULA", "PRINCIPAL", "FLOORRATE", "CAPRATE", "VOLATILITY"}
     ),
     ProductMasterSelected = Table.SelectColumns(
-        ProductMasterWithColumns,
-        {"COMPANYNAME", "PRODUCTNAME", "INDEX", "INDEXNAME", "INDEXCODE", "PR", "FORMULATYPE", "FORMULA", "PRINCIPAL", "FLOORRATE", "CAPRATE", "VOLATILITY"}
+        ProductMasterColumns,
+        {"COMPANYNAME", "PRODUCTNAME", "INDEX", "INDEXCODE", "PR", "FORMULA", "PRINCIPAL", "FLOORRATE", "CAPRATE", "VOLATILITY"}
     ),
     ProductMasterTyped = Table.TransformColumns(
         ProductMasterSelected,
@@ -68,67 +69,81 @@ let
             {"COMPANYNAME", each CleanText(_), type text},
             {"PRODUCTNAME", each CleanText(_), type text},
             {"INDEX", each CleanText(_), type text},
-            {"INDEXNAME", each CleanText(_), type text},
             {"INDEXCODE", each CleanIndexCode(_), type text},
             {"PR", each ToRate(_), type number},
-            {"FORMULATYPE", each CleanText(_), type text},
-            {"FORMULA", each CleanText(_), type text},
+            {"FORMULA", each if _ = null or Text.Trim(Text.From(_)) = "" then "PR" else Text.Upper(Text.Replace(Text.Trim(Text.From(_)), " ", "_")), type text},
             {"PRINCIPAL", each ToNumber(_), type number},
             {"FLOORRATE", each ToRate(_), type number},
             {"CAPRATE", each ToRate(_), type number},
             {"VOLATILITY", each ToRate(_), type number}
         }
     ),
-    ProductMaster = Table.TransformColumns(
+    ProductMasterDefaults = Table.TransformColumns(
         Table.AddColumn(
             Table.AddColumn(
-                ProductMasterTyped,
-                "IndexNameFinal",
-                each if [INDEXNAME] <> null and [INDEXNAME] <> "" then [INDEXNAME] else [INDEX],
-                type text
+                Table.AddColumn(
+                    Table.AddColumn(
+                        ProductMasterTyped,
+                        "CompanyFinal",
+                        each if [COMPANYNAME] = null or [COMPANYNAME] = "" then "MTL" else [COMPANYNAME],
+                        type text
+                    ),
+                    "PrincipalFinal",
+                    each if [PRINCIPAL] = null then 100 else [PRINCIPAL],
+                    type number
+                ),
+                "CapRateFinal",
+                each if [CAPRATE] = null then [PR] else [CAPRATE],
+                type number
             ),
-            "FormulaTypeFinal",
-            each if [FORMULATYPE] <> null and [FORMULATYPE] <> "" then [FORMULATYPE] else if [FORMULA] <> null and [FORMULA] <> "" then [FORMULA] else "PR",
-            type text
+            "VolatilityFinal",
+            each if [VOLATILITY] = null then if [CAPRATE] = null then [PR] else [CAPRATE] else [VOLATILITY],
+            type number
         ),
-        {{"FormulaTypeFinal", each Text.Upper(Text.Replace(Text.From(_), " ", "_")), type text}}
+        {{"FLOORRATE", each if _ = null then 0 else _, type number}}
+    ),
+    ProductMaster = Table.RenameColumns(
+        Table.SelectColumns(
+            ProductMasterDefaults,
+            {"CompanyFinal", "PRODUCTNAME", "INDEX", "INDEXCODE", "PR", "FORMULA", "PrincipalFinal", "FLOORRATE", "CapRateFinal", "VolatilityFinal"}
+        ),
+        {
+            {"CompanyFinal", "Company"},
+            {"PRODUCTNAME", "ProductName"},
+            {"INDEX", "IndexName"},
+            {"INDEXCODE", "IndexCode"},
+            {"FORMULA", "FormulaType"},
+            {"PrincipalFinal", "Principal"},
+            {"FLOORRATE", "FloorRate"},
+            {"CapRateFinal", "CapRate"},
+            {"VolatilityFinal", "Volatility"}
+        }
     ),
 
-    CohortNormalized = NormalizeColumns(CohortSource),
-    CohortWithColumns = AddMissingColumns(
-        CohortNormalized,
-        {"PRODUCTNAME", "COHORTNO", "COHORTSTARTDATE", "COHORTENDDATE", "OBSERVATIONENDDATE", "INDEXBASEVALUE"}
+    CohortRaw = NormalizeColumns(CohortSource),
+    CohortColumns = AddMissingColumns(
+        CohortRaw,
+        {"PRODUCTNAME", "COHORTNO", "COHORTDURATION", "COHORTSTARTDATE", "COHORTENDDATE"}
     ),
     CohortSelected = Table.SelectColumns(
-        CohortWithColumns,
-        {"PRODUCTNAME", "COHORTNO", "COHORTSTARTDATE", "COHORTENDDATE", "OBSERVATIONENDDATE", "INDEXBASEVALUE"}
+        CohortColumns,
+        {"PRODUCTNAME", "COHORTNO", "COHORTDURATION", "COHORTSTARTDATE", "COHORTENDDATE"}
     ),
     CohortSchedule = Table.TransformColumns(
         CohortSelected,
         {
             {"PRODUCTNAME", each CleanText(_), type text},
             {"COHORTNO", each ToNumber(_), Int64.Type},
+            {"COHORTDURATION", each ToNumber(_), type number},
             {"COHORTSTARTDATE", each ToDate(_), type date},
-            {"COHORTENDDATE", each ToDate(_), type date},
-            {"OBSERVATIONENDDATE", each ToDate(_), type date},
-            {"INDEXBASEVALUE", each ToNumber(_), type number}
+            {"COHORTENDDATE", each ToDate(_), type date}
         }
     ),
 
-    IndexNormalized = NormalizeColumns(IndexSource),
-    IndexWithDate = AddMissingColumns(IndexNormalized, {"DATE"}),
-    IndexTyped = Table.TransformColumns(
-        IndexWithDate,
-        {{"DATE", each ToDate(_), type date}}
-    ),
-
-    IndexPriceLong = Table.UnpivotOtherColumns(
-        IndexTyped,
-        {"DATE"},
-        "IndexCode",
-        "Price"
-    ),
-
+    IndexRaw = NormalizeColumns(IndexSource),
+    IndexColumns = AddMissingColumns(IndexRaw, {"DATE"}),
+    IndexTyped = Table.TransformColumns(IndexColumns, {{"DATE", each ToDate(_), type date}}),
+    IndexPriceLong = Table.UnpivotOtherColumns(IndexTyped, {"DATE"}, "IndexCode", "Price"),
     IndexPriceTyped = Table.TransformColumns(
         IndexPriceLong,
         {
@@ -136,137 +151,77 @@ let
             {"Price", each ToNumber(_), type number}
         }
     ),
-
-    IndexPriceClean = Table.RenameColumns(
-        Table.SelectRows(
-            IndexPriceTyped,
-            each [DATE] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null and [Price] <> 0
-        ),
+    IndexPrice = Table.RenameColumns(
+        Table.SelectRows(IndexPriceTyped, each [DATE] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null and [Price] <> 0),
         {{"DATE", "Date"}}
     ),
 
-    FXNormalized = NormalizeColumns(FXSource),
-    FXWithColumns = AddMissingColumns(FXNormalized, {"DATE", "MONTH", "เดือน", "USDTHB", "USDTH"}),
+    FXRaw = NormalizeColumns(FXSource),
+    FXColumns = AddMissingColumns(FXRaw, {"DATE", "MONTH", "เดือน", "USDTHB", "USDTH"}),
     FXDateColumn =
-        if Table.HasColumns(FXWithColumns, "DATE") and List.NonNullCount(FXWithColumns[DATE]) > 0 then "DATE"
-        else if Table.HasColumns(FXWithColumns, "MONTH") and List.NonNullCount(FXWithColumns[MONTH]) > 0 then "MONTH"
-        else if Table.HasColumns(FXWithColumns, "เดือน") then "เดือน"
+        if Table.HasColumns(FXColumns, "DATE") and List.NonNullCount(FXColumns[DATE]) > 0 then "DATE"
+        else if Table.HasColumns(FXColumns, "MONTH") and List.NonNullCount(FXColumns[MONTH]) > 0 then "MONTH"
+        else if Table.HasColumns(FXColumns, "เดือน") then "เดือน"
         else "DATE",
-
     FXRateColumn =
-        if Table.HasColumns(FXWithColumns, "USDTHB") and List.NonNullCount(FXWithColumns[USDTHB]) > 0 then "USDTHB"
-        else if Table.HasColumns(FXWithColumns, "USDTH") and List.NonNullCount(FXWithColumns[USDTH]) > 0 then "USDTH"
+        if Table.HasColumns(FXColumns, "USDTHB") and List.NonNullCount(FXColumns[USDTHB]) > 0 then "USDTHB"
+        else if Table.HasColumns(FXColumns, "USDTH") and List.NonNullCount(FXColumns[USDTH]) > 0 then "USDTH"
         else "USDTHB",
-
-    FXSelected = Table.SelectColumns(FXWithColumns, {FXDateColumn, FXRateColumn}, MissingField.UseNull),
-    FXRenamed = Table.RenameColumns(
-        FXSelected,
-        {
-            {FXDateColumn, "Date"},
-            {FXRateColumn, "FXRate"}
-        },
-        MissingField.Ignore
-    ),
-
-    FXTyped = Table.TransformColumns(
-        FXRenamed,
-        {
-            {"Date", each ToDate(_), type date},
-            {"FXRate", each ToNumber(_), type number}
-        }
-    ),
-
-    FXWithPair = Table.AddColumn(
-        Table.SelectRows(FXTyped, each [Date] <> null),
-        "FXPair",
-        each "USD/THB",
-        type text
-    ),
+    FXSelected = Table.SelectColumns(FXColumns, {FXDateColumn, FXRateColumn}, MissingField.UseNull),
+    FXRenamed = Table.RenameColumns(FXSelected, {{FXDateColumn, "Date"}, {FXRateColumn, "FXRate"}}, MissingField.Ignore),
+    FXTyped = Table.TransformColumns(FXRenamed, {{"Date", each ToDate(_), type date}, {"FXRate", each ToNumber(_), type number}}),
+    FXWithPair = Table.AddColumn(Table.SelectRows(FXTyped, each [Date] <> null), "FXPair", each "USD/THB", type text),
 
     MergeProduct = Table.NestedJoin(
         CohortSchedule,
         {"PRODUCTNAME"},
         ProductMaster,
-        {"PRODUCTNAME"},
+        {"ProductName"},
         "Product",
         JoinKind.LeftOuter
     ),
-
     ExpandProduct = Table.ExpandTableColumn(
         MergeProduct,
         "Product",
-        {
-            "COMPANYNAME",
-            "IndexNameFinal",
-            "INDEXCODE",
-            "PR",
-            "FormulaTypeFinal",
-            "PRINCIPAL",
-            "FLOORRATE",
-            "CAPRATE",
-            "VOLATILITY"
-        },
-        {
-            "Company",
-            "IndexName",
-            "IndexCode",
-            "PR",
-            "FormulaType",
-            "Principal",
-            "FloorRate",
-            "CapRate",
-            "Volatility"
-        }
-    ),
-
-    MergeIndex = Table.NestedJoin(
-        ExpandProduct,
-        {"IndexCode"},
-        IndexPriceClean,
-        {"IndexCode"},
-        "IndexPrice",
-        JoinKind.LeftOuter
-    ),
-
-    ExpandIndex = Table.ExpandTableColumn(
-        MergeIndex,
-        "IndexPrice",
-        {"Date", "Price"},
-        {"Date", "Price"}
-    ),
-
-    FilterAfterStart = Table.SelectRows(
-        ExpandIndex,
-        each [Date] <> null and [COHORTSTARTDATE] <> null and [Date] >= [COHORTSTARTDATE]
+        {"Company", "IndexName", "IndexCode", "PR", "FormulaType", "Principal", "FloorRate", "CapRate", "Volatility"},
+        {"Company", "IndexName", "IndexCode", "PR", "FormulaType", "Principal", "FloorRate", "CapRate", "Volatility"}
     ),
 
     AddObservationEndDate = Table.AddColumn(
-        FilterAfterStart,
-        "ObservationEndDateFinal",
-        each if [OBSERVATIONENDDATE] <> null then [OBSERVATIONENDDATE] else Date.AddYears([COHORTSTARTDATE], 3),
+        ExpandProduct,
+        "ObservationEndDate",
+        each
+            if [COHORTENDDATE] <> null then [COHORTENDDATE]
+            else if [COHORTDURATION] <> null and [COHORTSTARTDATE] <> null then Date.AddMonths([COHORTSTARTDATE], Number.RoundDown([COHORTDURATION]))
+            else if [COHORTSTARTDATE] <> null then Date.AddYears([COHORTSTARTDATE], 3)
+            else null,
         type date
     ),
 
-    FilterBeforeObservationEnd = Table.SelectRows(
+    MergeIndex = Table.NestedJoin(
         AddObservationEndDate,
-        each [Date] <= [ObservationEndDateFinal]
-    ),
-
-    MergeFX = Table.NestedJoin(
-        FilterBeforeObservationEnd,
-        {"Date"},
-        FXWithPair,
-        {"Date"},
-        "FX",
+        {"IndexCode"},
+        IndexPrice,
+        {"IndexCode"},
+        "IndexPrice",
         JoinKind.LeftOuter
     ),
-
-    ExpandFX = Table.ExpandTableColumn(
-        MergeFX,
-        "FX",
-        {"FXPair", "FXRate"},
-        {"FXPair", "FXRate"}
+    ExpandIndex = Table.ExpandTableColumn(MergeIndex, "IndexPrice", {"Date", "Price"}, {"Date", "Price"}),
+    FilterPeriod = Table.SelectRows(
+        ExpandIndex,
+        each [Date] <> null and [COHORTSTARTDATE] <> null and [Date] >= [COHORTSTARTDATE] and ([ObservationEndDate] = null or [Date] <= [ObservationEndDate])
     ),
+
+    BaseValues = Table.Group(
+        FilterPeriod,
+        {"PRODUCTNAME", "COHORTNO"},
+        {{"IndexBaseValue", each try Table.Sort(_, {{"Date", Order.Ascending}}){0}[Price] otherwise null, type number}}
+    ),
+    MergeBase = Table.NestedJoin(FilterPeriod, {"PRODUCTNAME", "COHORTNO"}, BaseValues, {"PRODUCTNAME", "COHORTNO"}, "Base", JoinKind.LeftOuter),
+    ExpandBase = Table.ExpandTableColumn(MergeBase, "Base", {"IndexBaseValue"}, {"IndexBaseValue"}),
+
+    MergeFX = Table.NestedJoin(ExpandBase, {"Date"}, FXWithPair, {"Date"}, "FX", JoinKind.LeftOuter),
+    ExpandFX = Table.ExpandTableColumn(MergeFX, "FX", {"FXPair", "FXRate"}, {"FXPair", "FXRate"}),
 
     RenameColumns = Table.RenameColumns(
         ExpandFX,
@@ -274,19 +229,11 @@ let
             {"PRODUCTNAME", "ProductName"},
             {"COHORTNO", "CohortNo"},
             {"COHORTSTARTDATE", "CohortStartDate"},
-            {"COHORTENDDATE", "CohortEndDate"},
-            {"ObservationEndDateFinal", "ObservationEndDate"},
-            {"INDEXBASEVALUE", "IndexBaseValue"}
+            {"COHORTENDDATE", "CohortEndDate"}
         },
         MissingField.Ignore
     ),
-
-    WithCompanyName = Table.AddColumn(
-        RenameColumns,
-        "CompanyName",
-        each [Company],
-        type text
-    ),
+    WithCompanyName = Table.AddColumn(RenameColumns, "CompanyName", each [Company], type text),
 
     FinalColumns = Table.SelectColumns(
         WithCompanyName,
@@ -313,32 +260,6 @@ let
             "FXRate"
         },
         MissingField.UseNull
-    ),
-
-    FinalTyped = Table.TransformColumnTypes(
-        FinalColumns,
-        {
-            {"Company", type text},
-            {"CompanyName", type text},
-            {"ProductName", type text},
-            {"IndexName", type text},
-            {"IndexCode", type text},
-            {"PR", type number},
-            {"FormulaType", type text},
-            {"Principal", type number},
-            {"FloorRate", type number},
-            {"CapRate", type number},
-            {"Volatility", type number},
-            {"CohortNo", Int64.Type},
-            {"CohortStartDate", type date},
-            {"CohortEndDate", type date},
-            {"ObservationEndDate", type date},
-            {"IndexBaseValue", type number},
-            {"Date", type date},
-            {"Price", type number},
-            {"FXPair", type text},
-            {"FXRate", type number}
-        }
     )
 in
-    FinalTyped
+    FinalColumns
