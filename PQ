@@ -252,13 +252,16 @@ let
     AddObservationEndDate = Table.AddColumn(
         FilterAfterStart,
         "ObservationEndDate",
-        each [COHORTENDDATE],
+        each
+            if [COHORTENDDATE] <> null and [COHORTSTARTDATE] <> null and [COHORTENDDATE] >= [COHORTSTARTDATE]
+            then [COHORTENDDATE]
+            else null,
         type date
     ),
 
     FilterBeforeObservationEnd = Table.SelectRows(
         AddObservationEndDate,
-        each [ObservationEndDate] = null or [Date] <= [ObservationEndDate]
+        each [Date] <> null and ([ObservationEndDate] = null or [Date] <= [ObservationEndDate])
     ),
 
     BaseValues = Table.Group(
