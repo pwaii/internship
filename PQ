@@ -1,9 +1,7 @@
 let
-    // These must match the query names already loaded in Power BI.
     ProductMasterSource = #"Product Master",
     CohortSource = #"Cohort Schedule",
     IndexSource = #"Index Price",
-    FXSource = #"FX Rate",
 
     CleanColumnName = (name as text) as text =>
         Text.Upper(
@@ -31,16 +29,10 @@ let
         in
             n,
 
-    ToRate = (value as any) as nullable number =>
-        let
-            n = ToNumber(value)
-        in
-            if n = null then null else if n > 1 then n / 100 else n,
-
     ToDate = (value as any) as nullable date =>
         try Date.From(value)
-        otherwise try Date.FromText(Text.From(value), "en-US")
         otherwise try Date.FromText(Text.From(value), "en-GB")
+        otherwise try Date.FromText(Text.From(value), "en-US")
         otherwise null,
 
     NormalizeColumns = (tbl as table) as table =>
@@ -55,86 +47,23 @@ let
         ),
 
     ProductMasterRaw = NormalizeColumns(ProductMasterSource),
-    ProductMasterColumns = AddMissingColumns(
-        ProductMasterRaw,
-        {"COMPANYNAME", "PRODUCTNAME", "INDEX", "INDEXCODE", "PR", "FORMULA", "PRINCIPAL", "FLOORRATE", "CAPRATE", "VOLATILITY"}
-    ),
-    ProductMasterSelected = Table.SelectColumns(
-        ProductMasterColumns,
-        {"COMPANYNAME", "PRODUCTNAME", "INDEX", "INDEXCODE", "PR", "FORMULA", "PRINCIPAL", "FLOORRATE", "CAPRATE", "VOLATILITY"}
-    ),
-    ProductMasterTyped = Table.TransformColumns(
-        ProductMasterSelected,
+    ProductMasterColumns = AddMissingColumns(ProductMasterRaw, {"PRODUCTNAME", "INDEXCODE", "INDEX"}),
+    ProductMaster = Table.TransformColumns(
+        Table.SelectColumns(ProductMasterColumns, {"PRODUCTNAME", "INDEXCODE", "INDEX"}),
         {
-            {"COMPANYNAME", each CleanText(_), type text},
             {"PRODUCTNAME", each CleanText(_), type text},
-            {"INDEX", each CleanText(_), type text},
             {"INDEXCODE", each CleanIndexCode(_), type text},
-            {"PR", each ToRate(_), type number},
-            {"FORMULA", each if _ = null or Text.Trim(Text.From(_)) = "" then "PR" else Text.Upper(Text.Replace(Text.Trim(Text.From(_)), " ", "_")), type text},
-            {"PRINCIPAL", each ToNumber(_), type number},
-            {"FLOORRATE", each ToRate(_), type number},
-            {"CAPRATE", each ToRate(_), type number},
-            {"VOLATILITY", each ToRate(_), type number}
-        }
-    ),
-    ProductMasterDefaults = Table.TransformColumns(
-        Table.AddColumn(
-            Table.AddColumn(
-                Table.AddColumn(
-                    Table.AddColumn(
-                        ProductMasterTyped,
-                        "CompanyFinal",
-                        each if [COMPANYNAME] = null or [COMPANYNAME] = "" then "MTL" else [COMPANYNAME],
-                        type text
-                    ),
-                    "PrincipalFinal",
-                    each if [PRINCIPAL] = null then 100 else [PRINCIPAL],
-                    type number
-                ),
-                "CapRateFinal",
-                each if [CAPRATE] = null then [PR] else [CAPRATE],
-                type number
-            ),
-            "VolatilityFinal",
-            each if [VOLATILITY] = null then if [CAPRATE] = null then [PR] else [CAPRATE] else [VOLATILITY],
-            type number
-        ),
-        {{"FLOORRATE", each if _ = null then 0 else _, type number}}
-    ),
-    ProductMaster = Table.RenameColumns(
-        Table.SelectColumns(
-            ProductMasterDefaults,
-            {"CompanyFinal", "PRODUCTNAME", "INDEX", "INDEXCODE", "PR", "FORMULA", "PrincipalFinal", "FLOORRATE", "CapRateFinal", "VolatilityFinal"}
-        ),
-        {
-            {"CompanyFinal", "Company"},
-            {"PRODUCTNAME", "ProductName"},
-            {"INDEX", "IndexName"},
-            {"INDEXCODE", "IndexCode"},
-            {"FORMULA", "FormulaType"},
-            {"PrincipalFinal", "Principal"},
-            {"FLOORRATE", "FloorRate"},
-            {"CapRateFinal", "CapRate"},
-            {"VolatilityFinal", "Volatility"}
+            {"INDEX", each CleanText(_), type text}
         }
     ),
 
     CohortRaw = NormalizeColumns(CohortSource),
-    CohortColumns = AddMissingColumns(
-        CohortRaw,
-        {"PRODUCTNAME", "COHORTNO", "COHORTDURATION", "COHORTSTARTDATE", "COHORTENDDATE"}
-    ),
-    CohortSelected = Table.SelectColumns(
-        CohortColumns,
-        {"PRODUCTNAME", "COHORTNO", "COHORTDURATION", "COHORTSTARTDATE", "COHORTENDDATE"}
-    ),
+    CohortColumns = AddMissingColumns(CohortRaw, {"PRODUCTNAME", "COHORTNO", "COHORTSTARTDATE", "COHORTENDDATE"}),
     CohortSchedule = Table.TransformColumns(
-        CohortSelected,
+        Table.SelectColumns(CohortColumns, {"PRODUCTNAME", "COHORTNO", "COHORTSTARTDATE", "COHORTENDDATE"}),
         {
             {"PRODUCTNAME", each CleanText(_), type text},
             {"COHORTNO", each ToNumber(_), Int64.Type},
-            {"COHORTDURATION", each ToNumber(_), type number},
             {"COHORTSTARTDATE", each ToDate(_), type date},
             {"COHORTENDDATE", each ToDate(_), type date}
         }
@@ -144,119 +73,95 @@ let
     IndexColumns = AddMissingColumns(IndexRaw, {"DATE"}),
     IndexTyped = Table.TransformColumns(IndexColumns, {{"DATE", each ToDate(_), type date}}),
     IndexPriceLong = Table.UnpivotOtherColumns(IndexTyped, {"DATE"}, "IndexCode", "Price"),
-    IndexPriceTyped = Table.TransformColumns(
+    IndexPrice = Table.TransformColumns(
         IndexPriceLong,
         {
             {"IndexCode", each CleanIndexCode(_), type text},
             {"Price", each ToNumber(_), type number}
         }
     ),
-    IndexPrice = Table.RenameColumns(
-        Table.SelectRows(IndexPriceTyped, each [DATE] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null and [Price] <> 0),
+    IndexPriceClean = Table.RenameColumns(
+        Table.SelectRows(IndexPrice, each [DATE] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null and [Price] <> 0),
         {{"DATE", "Date"}}
     ),
-
-    FXRaw = NormalizeColumns(FXSource),
-    FXColumns = AddMissingColumns(FXRaw, {"DATE", "MONTH", "เดือน", "USDTHB", "USDTH"}),
-    FXDateColumn =
-        if Table.HasColumns(FXColumns, "DATE") and List.NonNullCount(FXColumns[DATE]) > 0 then "DATE"
-        else if Table.HasColumns(FXColumns, "MONTH") and List.NonNullCount(FXColumns[MONTH]) > 0 then "MONTH"
-        else if Table.HasColumns(FXColumns, "เดือน") then "เดือน"
-        else "DATE",
-    FXRateColumn =
-        if Table.HasColumns(FXColumns, "USDTHB") and List.NonNullCount(FXColumns[USDTHB]) > 0 then "USDTHB"
-        else if Table.HasColumns(FXColumns, "USDTH") and List.NonNullCount(FXColumns[USDTH]) > 0 then "USDTH"
-        else "USDTHB",
-    FXSelected = Table.SelectColumns(FXColumns, {FXDateColumn, FXRateColumn}, MissingField.UseNull),
-    FXRenamed = Table.RenameColumns(FXSelected, {{FXDateColumn, "Date"}, {FXRateColumn, "FXRate"}}, MissingField.Ignore),
-    FXTyped = Table.TransformColumns(FXRenamed, {{"Date", each ToDate(_), type date}, {"FXRate", each ToNumber(_), type number}}),
-    FXWithPair = Table.AddColumn(Table.SelectRows(FXTyped, each [Date] <> null), "FXPair", each "USD/THB", type text),
 
     MergeProduct = Table.NestedJoin(
         CohortSchedule,
         {"PRODUCTNAME"},
         ProductMaster,
-        {"ProductName"},
+        {"PRODUCTNAME"},
         "Product",
         JoinKind.LeftOuter
     ),
     ExpandProduct = Table.ExpandTableColumn(
         MergeProduct,
         "Product",
-        {"Company", "IndexName", "IndexCode", "PR", "FormulaType", "Principal", "FloorRate", "CapRate", "Volatility"},
-        {"Company", "IndexName", "IndexCode", "PR", "FormulaType", "Principal", "FloorRate", "CapRate", "Volatility"}
+        {"INDEXCODE", "INDEX"},
+        {"IndexCode", "IndexName"}
     ),
 
-    AddObservationEndDate = Table.AddColumn(
+    AddIndexRows = Table.AddColumn(
         ExpandProduct,
-        "ObservationEndDate",
+        "IndexRows",
         each
-            [COHORTENDDATE],
-        type date
+            let
+                thisIndex = [IndexCode]
+            in
+                if thisIndex = null then
+                    #table({"Date", "Price"}, {})
+                else
+                    Table.SelectRows(IndexPriceClean, each [IndexCode] = thisIndex),
+        type table
     ),
 
-    MergeIndex = Table.NestedJoin(
-        AddObservationEndDate,
-        {"IndexCode"},
-        IndexPrice,
-        {"IndexCode"},
-        "IndexPrice",
-        JoinKind.LeftOuter
+    AddIndexRowCount = Table.AddColumn(AddIndexRows, "IndexRowsMatched", each Table.RowCount([IndexRows]), Int64.Type),
+    AddIndexMinDate = Table.AddColumn(AddIndexRowCount, "IndexMinDate", each try List.Min([IndexRows][Date]) otherwise null, type date),
+    AddIndexMaxDate = Table.AddColumn(AddIndexMinDate, "IndexMaxDate", each try List.Max([IndexRows][Date]) otherwise null, type date),
+    AddRowsInPeriod = Table.AddColumn(
+        AddIndexMaxDate,
+        "RowsInsideCohortPeriod",
+        each
+            let
+                startDate = [COHORTSTARTDATE],
+                endDate = [COHORTENDDATE],
+                rows = [IndexRows],
+                filtered =
+                    if startDate = null or endDate = null then
+                        #table(Table.ColumnNames(rows), {})
+                    else
+                        Table.SelectRows(rows, each [Date] >= startDate and [Date] <= endDate)
+            in
+                Table.RowCount(filtered),
+        Int64.Type
     ),
-    ExpandIndex = Table.ExpandTableColumn(MergeIndex, "IndexPrice", {"Date", "Price"}, {"Date", "Price"}),
-    FilterPeriod = Table.SelectRows(
-        ExpandIndex,
-        each [Date] <> null and [COHORTSTARTDATE] <> null and [Date] >= [COHORTSTARTDATE] and ([ObservationEndDate] = null or [Date] <= [ObservationEndDate])
+    AddDiagnosis = Table.AddColumn(
+        AddRowsInPeriod,
+        "Diagnosis",
+        each
+            if [IndexCode] = null then "NO INDEXCODE FROM PRODUCT MASTER"
+            else if [COHORTSTARTDATE] = null then "COHORTSTARTDATE NOT PARSED"
+            else if [COHORTENDDATE] = null then "COHORTENDDATE NOT PARSED"
+            else if [IndexRowsMatched] = 0 then "INDEXCODE DOES NOT MATCH INDEX PRICE HEADER"
+            else if [IndexMaxDate] < [COHORTSTARTDATE] then "INDEX PRICE ENDS BEFORE COHORT START"
+            else if [IndexMinDate] > [COHORTENDDATE] then "INDEX PRICE STARTS AFTER COHORT END"
+            else if [RowsInsideCohortPeriod] = 0 then "NO INDEX PRICE DATE INSIDE COHORT PERIOD"
+            else "OK",
+        type text
     ),
-
-    BaseValues = Table.Group(
-        FilterPeriod,
-        {"PRODUCTNAME", "COHORTNO"},
-        {{"IndexBaseValue", each try Table.Sort(_, {{"Date", Order.Ascending}}){0}[Price] otherwise null, type number}}
-    ),
-    MergeBase = Table.NestedJoin(FilterPeriod, {"PRODUCTNAME", "COHORTNO"}, BaseValues, {"PRODUCTNAME", "COHORTNO"}, "Base", JoinKind.LeftOuter),
-    ExpandBase = Table.ExpandTableColumn(MergeBase, "Base", {"IndexBaseValue"}, {"IndexBaseValue"}),
-
-    MergeFX = Table.NestedJoin(ExpandBase, {"Date"}, FXWithPair, {"Date"}, "FX", JoinKind.LeftOuter),
-    ExpandFX = Table.ExpandTableColumn(MergeFX, "FX", {"FXPair", "FXRate"}, {"FXPair", "FXRate"}),
-
-    RenameColumns = Table.RenameColumns(
-        ExpandFX,
+    Final = Table.SelectColumns(
+        AddDiagnosis,
         {
-            {"PRODUCTNAME", "ProductName"},
-            {"COHORTNO", "CohortNo"},
-            {"COHORTSTARTDATE", "CohortStartDate"},
-            {"COHORTENDDATE", "CohortEndDate"}
-        },
-        MissingField.Ignore
-    ),
-    WithCompanyName = Table.AddColumn(RenameColumns, "CompanyName", each [Company], type text),
-
-    FinalColumns = Table.SelectColumns(
-        WithCompanyName,
-        {
-            "Company",
-            "CompanyName",
-            "ProductName",
-            "IndexName",
+            "PRODUCTNAME",
+            "COHORTNO",
             "IndexCode",
-            "PR",
-            "FormulaType",
-            "Principal",
-            "FloorRate",
-            "CapRate",
-            "Volatility",
-            "CohortNo",
-            "CohortStartDate",
-            "CohortEndDate",
-            "ObservationEndDate",
-            "IndexBaseValue",
-            "Date",
-            "Price",
-            "FXPair",
-            "FXRate"
-        },
-        MissingField.UseNull
+            "COHORTSTARTDATE",
+            "COHORTENDDATE",
+            "IndexRowsMatched",
+            "IndexMinDate",
+            "IndexMaxDate",
+            "RowsInsideCohortPeriod",
+            "Diagnosis"
+        }
     )
 in
-    FinalColumns
+    Final
