@@ -191,10 +191,7 @@ let
         ExpandProduct,
         "ObservationEndDate",
         each
-            if [COHORTENDDATE] <> null then [COHORTENDDATE]
-            else if [COHORTDURATION] <> null and [COHORTSTARTDATE] <> null then Date.AddMonths([COHORTSTARTDATE], Number.RoundDown([COHORTDURATION]))
-            else if [COHORTSTARTDATE] <> null then Date.AddYears([COHORTSTARTDATE], 3)
-            else null,
+            [COHORTENDDATE],
         type date
     ),
 
