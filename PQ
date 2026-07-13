@@ -11,9 +11,6 @@ let
             )
         ),
 
-    CleanText = (value as any) as nullable text =>
-        if value = null then null else Text.Trim(Text.From(value)),
-
     CleanIndexCode = (value as any) as nullable text =>
         let
             cleaned = if value = null then null else CleanColumnName(Text.From(value)),
@@ -21,147 +18,39 @@ let
         in
             withoutIndex,
 
-    ToNumber = (value as any) as nullable number =>
-        let
-            t = if value = null then null else Text.Trim(Text.From(value)),
-            removed = if t = null then null else Text.Replace(Text.Replace(Text.Replace(t, "%", ""), ",", ""), "~", ""),
-            n = try Number.From(value) otherwise try Number.FromText(removed) otherwise null
-        in
-            n,
-
-    ToDate = (value as any) as nullable date =>
-        try Date.From(value)
-        otherwise try Date.FromText(Text.From(value), "en-GB")
-        otherwise try Date.FromText(Text.From(value), "en-US")
-        otherwise null,
-
-    NormalizeColumns = (tbl as table) as table =>
-        Table.TransformColumnNames(tbl, each CleanColumnName(_)),
-
-    AddMissingColumns = (tbl as table, required as list) as table =>
-        List.Accumulate(
-            required,
-            tbl,
-            (state as table, col as text) =>
-                if Table.HasColumns(state, col) then state else Table.AddColumn(state, col, each null)
+    ProductMaster = Table.TransformColumnNames(ProductMasterSource, each CleanColumnName(_)),
+    ProductCodes =
+        Table.Distinct(
+            Table.TransformColumns(
+                Table.SelectColumns(ProductMaster, {"PRODUCTNAME", "INDEXCODE"}),
+                {
+                    {"PRODUCTNAME", each Text.From(_), type text},
+                    {"INDEXCODE", each CleanIndexCode(_), type text}
+                }
+            )
         ),
 
-    ProductMasterRaw = NormalizeColumns(ProductMasterSource),
-    ProductMasterColumns = AddMissingColumns(ProductMasterRaw, {"PRODUCTNAME", "INDEXCODE", "INDEX"}),
-    ProductMaster = Table.TransformColumns(
-        Table.SelectColumns(ProductMasterColumns, {"PRODUCTNAME", "INDEXCODE", "INDEX"}),
-        {
-            {"PRODUCTNAME", each CleanText(_), type text},
-            {"INDEXCODE", each CleanIndexCode(_), type text},
-            {"INDEX", each CleanText(_), type text}
-        }
-    ),
+    IndexTable = Table.TransformColumnNames(IndexSource, each CleanColumnName(_)),
+    IndexHeaders = List.RemoveItems(Table.ColumnNames(IndexTable), {"DATE"}),
+    IndexCodes = Table.FromList(IndexHeaders, Splitter.SplitByNothing(), {"INDEXCODE"}),
+    IndexCodesClean = Table.TransformColumns(IndexCodes, {{"INDEXCODE", each CleanIndexCode(_), type text}}),
 
-    CohortRaw = NormalizeColumns(CohortSource),
-    CohortColumns = AddMissingColumns(CohortRaw, {"PRODUCTNAME", "COHORTNO", "COHORTSTARTDATE", "COHORTENDDATE"}),
-    CohortSchedule = Table.TransformColumns(
-        Table.SelectColumns(CohortColumns, {"PRODUCTNAME", "COHORTNO", "COHORTSTARTDATE", "COHORTENDDATE"}),
-        {
-            {"PRODUCTNAME", each CleanText(_), type text},
-            {"COHORTNO", each ToNumber(_), Int64.Type},
-            {"COHORTSTARTDATE", each ToDate(_), type date},
-            {"COHORTENDDATE", each ToDate(_), type date}
-        }
-    ),
-
-    IndexRaw = NormalizeColumns(IndexSource),
-    IndexColumns = AddMissingColumns(IndexRaw, {"DATE"}),
-    IndexTyped = Table.TransformColumns(IndexColumns, {{"DATE", each ToDate(_), type date}}),
-    IndexPriceLong = Table.UnpivotOtherColumns(IndexTyped, {"DATE"}, "IndexCode", "Price"),
-    IndexPrice = Table.TransformColumns(
-        IndexPriceLong,
-        {
-            {"IndexCode", each CleanIndexCode(_), type text},
-            {"Price", each ToNumber(_), type number}
-        }
-    ),
-    IndexPriceClean = Table.RenameColumns(
-        Table.SelectRows(IndexPrice, each [DATE] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null and [Price] <> 0),
-        {{"DATE", "Date"}}
-    ),
-
-    MergeProduct = Table.NestedJoin(
-        CohortSchedule,
-        {"PRODUCTNAME"},
-        ProductMaster,
-        {"PRODUCTNAME"},
-        "Product",
+    Check = Table.NestedJoin(
+        ProductCodes,
+        {"INDEXCODE"},
+        IndexCodesClean,
+        {"INDEXCODE"},
+        "Matched",
         JoinKind.LeftOuter
     ),
-    ExpandProduct = Table.ExpandTableColumn(
-        MergeProduct,
-        "Product",
-        {"INDEXCODE", "INDEX"},
-        {"IndexCode", "IndexName"}
-    ),
 
-    AddIndexRows = Table.AddColumn(
-        ExpandProduct,
-        "IndexRows",
-        each
-            let
-                thisIndex = [IndexCode]
-            in
-                if thisIndex = null then
-                    #table({"Date", "Price"}, {})
-                else
-                    Table.SelectRows(IndexPriceClean, each [IndexCode] = thisIndex),
-        type table
-    ),
-
-    AddIndexRowCount = Table.AddColumn(AddIndexRows, "IndexRowsMatched", each Table.RowCount([IndexRows]), Int64.Type),
-    AddIndexMinDate = Table.AddColumn(AddIndexRowCount, "IndexMinDate", each try List.Min([IndexRows][Date]) otherwise null, type date),
-    AddIndexMaxDate = Table.AddColumn(AddIndexMinDate, "IndexMaxDate", each try List.Max([IndexRows][Date]) otherwise null, type date),
-    AddRowsInPeriod = Table.AddColumn(
-        AddIndexMaxDate,
-        "RowsInsideCohortPeriod",
-        each
-            let
-                startDate = [COHORTSTARTDATE],
-                endDate = [COHORTENDDATE],
-                rows = [IndexRows],
-                filtered =
-                    if startDate = null or endDate = null then
-                        #table(Table.ColumnNames(rows), {})
-                    else
-                        Table.SelectRows(rows, each [Date] >= startDate and [Date] <= endDate)
-            in
-                Table.RowCount(filtered),
-        Int64.Type
-    ),
-    AddDiagnosis = Table.AddColumn(
-        AddRowsInPeriod,
-        "Diagnosis",
-        each
-            if [IndexCode] = null then "NO INDEXCODE FROM PRODUCT MASTER"
-            else if [COHORTSTARTDATE] = null then "COHORTSTARTDATE NOT PARSED"
-            else if [COHORTENDDATE] = null then "COHORTENDDATE NOT PARSED"
-            else if [IndexRowsMatched] = 0 then "INDEXCODE DOES NOT MATCH INDEX PRICE HEADER"
-            else if [IndexMaxDate] < [COHORTSTARTDATE] then "INDEX PRICE ENDS BEFORE COHORT START"
-            else if [IndexMinDate] > [COHORTENDDATE] then "INDEX PRICE STARTS AFTER COHORT END"
-            else if [RowsInsideCohortPeriod] = 0 then "NO INDEX PRICE DATE INSIDE COHORT PERIOD"
-            else "OK",
+    Result = Table.AddColumn(
+        Check,
+        "MatchStatus",
+        each if Table.RowCount([Matched]) > 0 then "MATCH" else "NO MATCH",
         type text
     ),
-    Final = Table.SelectColumns(
-        AddDiagnosis,
-        {
-            "PRODUCTNAME",
-            "COHORTNO",
-            "IndexCode",
-            "COHORTSTARTDATE",
-            "COHORTENDDATE",
-            "IndexRowsMatched",
-            "IndexMinDate",
-            "IndexMaxDate",
-            "RowsInsideCohortPeriod",
-            "Diagnosis"
-        }
-    )
+
+    Final = Table.RemoveColumns(Result, {"Matched"})
 in
     Final
