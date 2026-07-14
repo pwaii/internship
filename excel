@@ -329,19 +329,11 @@ function setMixedDataByColumn(
         try {
           range.setFormulas(formulas);
         } catch {
-          for (let r = 0; r < chunk.length; r++) {
-            const value = chunk[r][0];
-            const cell = range.getCell(r, 0);
-            if (typeof value === "string" && value.startsWith("=")) {
-              try {
-                cell.setFormula(value);
-              } catch {
-                cell.setValue("'" + value);
-              }
-            } else {
-              cell.setValue(safeCellValue(value));
-            }
-          }
+          range.setValues(chunk.map(row => {
+            const value = row[0];
+            if (typeof value === "string" && value.startsWith("=")) return ["'" + value];
+            return [safeCellValue(value)];
+          }));
         }
       } else {
         range.setValues(chunk.map(row => [safeCellValue(row[0])]));
