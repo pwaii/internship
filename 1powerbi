@@ -1,3 +1,56 @@
+POWER BI DENEB - MTL PAGE 1 PRODUCT VIEWER FINAL COMPLETE
+
+This is rebuilt from the working AIA file:
+C:/Users/legion/Documents/IndexBasedInsurance/PowerBI_Deneb_Vega_SingleCanvas_Dashboard.txt
+
+It keeps the same formula-aware Vega logic and clean red style, with an
+interactive hover line, cohort-derived calendar x-axis labels, dynamic y-axis with 5 percentage-point padding, a 100 baseline without text, KPI-box period returns, and a taller graph area.
+
+DATA SOURCE
+Import: MTL Index Products PowerBI Template.xlsx
+Select sheet/table: PowerBI_Data
+
+ADD THESE FIELDS TO DENEB VALUES
+- Company
+- ProductName
+- IndexName
+- IndexCode
+- PR
+- FormulaType
+- Principal
+- FloorRate
+- CapRate
+- CohortNo
+- CohortStartDate
+- CohortEndDate
+- ObservationEndDate
+- IndexBaseValue
+- Date
+- Price
+- FXPair
+- FXRate
+
+IMPORTANT DENEB SETUP
+1. Create a new Deneb visual.
+2. Add all 18 fields above.
+3. Use Date, not Date hierarchy.
+4. For numeric fields, choose Don't summarize.
+5. Choose Create new specification.
+6. Choose Vega, not Vega-Lite.
+7. Choose Empty.
+8. Paste only the JSON below.
+9. Select Apply.
+
+FORMULA RULES USED INSIDE DENEB
+- PR_ONLY: Product Return = max(Index Return * PR, FloorRate)
+- CAP_FLOOR: Product Return = min(max(Index Return * PR, FloorRate), CapRate)
+- ABS_PR: Product Return = min(max(abs(Index Return) * PR, FloorRate), CapRate)
+
+Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
+For Date, use a Between slicer so users can set the beginning and ending period.
+The boxes inside Deneb are display-only and show the active Power BI filter context.
+
+================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "description": "MTL clean red dashboard with calendar x-axis and dynamic y-axis padded by 5 percentage points.",
