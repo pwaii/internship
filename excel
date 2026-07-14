@@ -110,6 +110,12 @@ function main(workbook: ExcelScript.Workbook) {
     const baseIndexExcelRow = periodRows[0].row + 1;
     const baseFxRow: number | undefined = findFxRowOnOrBefore(startSerial, fxDateRows);
     const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
+    const companyValue = pCompany === null ? "MTL" : text(productData[productRow][pCompany]);
+    const indexNameValue = text(productData[productRow][pIndex]);
+    const indexCodeValue = text(productData[productRow][pIndexCode]);
+    const cohortNoValue = cohortData[c][cCohortNo];
+    const prValue = normalizeRate(productData[productRow][pPR]);
+    const volatilityValue = pVolatility === null ? "" : normalizeRate(productData[productRow][pVolatility]);
 
     for (const item of periodRows) {
       const finalRow = rows.length + 2;
@@ -118,11 +124,11 @@ function main(workbook: ExcelScript.Workbook) {
       const baseFxExcelRow: number | undefined = baseFxRow ?? fxExcelRow;
 
       rows.push([
-        pCompany === null ? `="MTL"` : `=${ref(PRODUCT_SHEET, productExcelRow, pCompany + 1)}`,
-        `=${ref(PRODUCT_SHEET, productExcelRow, pProduct + 1)}`,
-        `=${ref(PRODUCT_SHEET, productExcelRow, pIndex + 1)}`,
-        `=${ref(PRODUCT_SHEET, productExcelRow, pIndexCode + 1)}`,
-        `=${ref(COHORT_SHEET, cohortExcelRow, cCohortNo + 1)}`,
+        companyValue,
+        productName,
+        indexNameValue,
+        indexCodeValue,
+        cohortNoValue,
         startSerial,
         endSerial,
         item.serial,
@@ -132,18 +138,19 @@ function main(workbook: ExcelScript.Workbook) {
         fxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
         baseFxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
         `=IFERROR(L${finalRow}/M${finalRow},"")`,
-        `=IFERROR(IF(${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}>1,${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}/100,${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}),"")`,
+        prValue,
         `=100`,
         makeProductReturnFormula(formulaText, finalRow),
         `=IFERROR(100*(1+Q${finalRow}),"")`,
-        pVolatility === null ? `=""` : `=IFERROR(IF(${ref(PRODUCT_SHEET, productExcelRow, pVolatility + 1)}>1,${ref(PRODUCT_SHEET, productExcelRow, pVolatility + 1)}/100,${ref(PRODUCT_SHEET, productExcelRow, pVolatility + 1)}),"")`,
-        `=${ref(PRODUCT_SHEET, productExcelRow, pFormula + 1)}`
+        volatilityValue,
+        formulaText
       ]);
     }
   }
 
   if (rows.length > 0) {
     setMixedDataByColumn(finalWs, 1, 0, rows, 100);
+    finalWs.getRange("F:H").setNumberFormat("dd-mmm-yyyy");
   }
 
   finalWs.getRange("U1").setValue(rows.length);
@@ -216,6 +223,12 @@ function toNumber(v: unknown): number | null {
   if (typeof v === "number" && isFinite(v)) return v;
   const n = Number(String(v ?? "").replace(/[%~,]/g, "").trim());
   return isFinite(n) ? n : null;
+}
+
+function normalizeRate(v: unknown): number | string {
+  const n = toNumber(v);
+  if (n === null) return "";
+  return n > 1 ? n / 100 : n;
 }
 
 function toExcelSerial(v: unknown): number | null {
@@ -323,18 +336,24 @@ function setMixedDataByColumn(
               try {
                 cell.setFormula(value);
               } catch {
-                cell.setValue(value);
+                cell.setValue("'" + value);
               }
             } else {
-              cell.setValue(value);
+              cell.setValue(safeCellValue(value));
             }
           }
         }
       } else {
-        range.setValues(chunk);
+        range.setValues(chunk.map(row => [safeCellValue(row[0])]));
       }
     }
   }
+}
+
+function safeCellValue(value: string | number | boolean): string | number | boolean {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? value : "";
+  return value;
 }
 
 function colLetter(col: number): string {
