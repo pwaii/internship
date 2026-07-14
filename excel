@@ -47,10 +47,11 @@ function main(workbook: ExcelScript.Workbook) {
   const fDate = firstHeader(fxHeaders, ["DATE", "MONTH"]) ?? 0;
   const fRate = firstHeader(fxHeaders, ["USDTHB", "USDTH"]) ?? 1;
 
-  let finalWs = workbook.getWorksheet(FINAL_SHEET);
-  if (!finalWs) finalWs = workbook.addWorksheet(FINAL_SHEET);
-  const old = finalWs.getUsedRange();
-  if (old) old.clear(ExcelScript.ClearApplyTo.all);
+  const existingFinalWs = workbook.getWorksheet(FINAL_SHEET);
+  if (existingFinalWs) {
+    existingFinalWs.delete();
+  }
+  const finalWs = workbook.addWorksheet(FINAL_SHEET);
 
   const headers = [
     "Company",
@@ -152,7 +153,7 @@ function main(workbook: ExcelScript.Workbook) {
   }
 
   if (rows.length > 0) {
-    setMixedDataByColumn(finalWs, 1, 0, rows, 150);
+    setMixedDataByColumn(finalWs, 1, 0, rows, 10);
     setColumnFormat(finalWs, 5, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 6, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 7, rows.length, "dd mmm yyyy");
@@ -163,8 +164,6 @@ function main(workbook: ExcelScript.Workbook) {
     setColumnFormat(finalWs, 18, rows.length, "0.00%");
   }
 
-  const used = finalWs.getUsedRange();
-  if (used) used.getFormat().autofitColumns();
   finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
 }
 
@@ -305,11 +304,14 @@ function ref(sheetName: string, row: number, col: number): string {
 }
 
 function setColumnFormat(ws: ExcelScript.Worksheet, zeroBasedCol: number, rows: number, format: string) {
-  for (let start = 0; start < rows; start += 200) {
-    const count = Math.min(200, rows - start);
+  for (let start = 0; start < rows; start += 50) {
+    const count = Math.min(50, rows - start);
+    const range = ws.getRangeByIndexes(1 + start, zeroBasedCol, count, 1);
     const formats: string[][] = [];
-    for (let i = 0; i < count; i++) formats.push([format]);
-    ws.getRangeByIndexes(1 + start, zeroBasedCol, count, 1).setNumberFormat(formats);
+    for (let i = 0; i < count; i++) {
+      formats.push([format]);
+    }
+    range.setNumberFormat(formats);
   }
 }
 
