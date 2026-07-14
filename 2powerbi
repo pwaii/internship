@@ -35,12 +35,12 @@
         },
         {
           "type": "formula",
-          "expr": "toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)",
+          "expr": "isFinite(toNumber(datum.FloorRate)) ? (toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)) : 0",
           "as": "NumericFloor"
         },
         {
           "type": "formula",
-          "expr": "toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)",
+          "expr": "isFinite(toNumber(datum.Volatility)) ? (toNumber(datum.Volatility) > 1 ? toNumber(datum.Volatility) / 100 : toNumber(datum.Volatility)) : (isFinite(toNumber(datum.CapRate)) ? (toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)) : 1)",
           "as": "NumericVolatility"
         },
         {
@@ -64,17 +64,17 @@
         },
         {
           "type": "formula",
-          "expr": "upper(toString(datum.FormulaType || 'PR_ONLY'))",
+          "expr": "upper(toString(datum.Formula || datum.FormulaType || 'PR_ONLY'))",
           "as": "FormulaKey"
         },
         {
           "type": "formula",
-          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
+          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
           "as": "ProductReturnCalc"
         },
         {
           "type": "formula",
-          "expr": "100 * (1 + datum.ProductReturnCalc)",
+          "expr": "isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : 100 * (1 + datum.ProductReturnCalc)",
           "as": "DisplayProduct"
         },
         {
