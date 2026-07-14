@@ -1,3 +1,31 @@
+POWER BI DENEB - MTL INDEX COMPARISON ASSIGNED THEME Y-AXIS ADAPTIVE TICKS
+
+This page compares indexes instead of products. It supports multi-select indexes and uses a non-zero y-axis range.
+
+DATA SOURCE
+Use the Excel-generated Final Data sheet/table.
+
+ADD THESE FIELDS TO DENEB VALUES
+- IndexName
+- IndexCode
+- Date
+- Price
+
+Optional but harmless if already present:
+- Company
+- ProductName
+- CohortNo
+- CohortStartDate
+- CohortEndDate
+
+IMPORTANT
+1. Choose Deneb > Create new specification > Vega > Empty.
+2. Use raw Date, not Date hierarchy.
+3. Set Price to Don't summarize.
+4. Use slicers for IndexCode or IndexName. Multi-select is supported.
+5. Product formula fields are not needed on this page.
+
+================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "description": "MTL index comparison dashboard with assigned theme, aligned y-axis, 0.5-step labels, and forced 100.0 tick. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
@@ -1244,7 +1272,7 @@
             "signal": "plotMidY"
           },
           "text": {
-            "value": "Index Value"
+            "value": "Index (Base 100)"
           },
           "angle": {
             "value": -90
