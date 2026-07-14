@@ -3,7 +3,7 @@
  * Fast formula-based Final Data builder.
  *
  * Input sheets:
- * - Product Master: Company, Product Name, Index, Index Code, PR, Formula
+ * - Product Master: Company, Product Name, Index, Index Code, PR, Formula, Volatility
  * - Cohort Schedule: Product Name, Cohort No., Cohort Start Date, Cohort End Date
  * - Index Price: Date + one column per Index Code
  * - FX Rate: Date/Month + USD/THB
@@ -36,6 +36,7 @@ function main(workbook: ExcelScript.Workbook) {
   const pIndexCode = requiredHeader(productHeaders, ["INDEXCODE"], PRODUCT_SHEET);
   const pPR = requiredHeader(productHeaders, ["PR"], PRODUCT_SHEET);
   const pFormula = requiredHeader(productHeaders, ["FORMULA"], PRODUCT_SHEET);
+  const pVolatility = firstHeader(productHeaders, ["VOLATILITY"]);
 
   const cProduct = requiredHeader(cohortHeaders, ["PRODUCTNAME"], COHORT_SHEET);
   const cCohortNo = requiredHeader(cohortHeaders, ["COHORTNO"], COHORT_SHEET);
@@ -135,11 +136,11 @@ function main(workbook: ExcelScript.Workbook) {
         fxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
         baseFxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
         `=IFERROR(L${finalRow}/M${finalRow},"")`,
-        `=${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}`,
+        `=IFERROR(IF(${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}>1,${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}/100,${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}),"")`,
         `=100`,
         makeProductReturnFormula(formulaText, finalRow),
         `=IFERROR(100*(1+Q${finalRow}),"")`,
-        "",
+        pVolatility === null ? `=""` : `=IFERROR(IF(${ref(PRODUCT_SHEET, productExcelRow, pVolatility + 1)}>1,${ref(PRODUCT_SHEET, productExcelRow, pVolatility + 1)}/100,${ref(PRODUCT_SHEET, productExcelRow, pVolatility + 1)}),"")`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pFormula + 1)}`
       ]);
     }
@@ -151,12 +152,6 @@ function main(workbook: ExcelScript.Workbook) {
   }
 
   if (rows.length > 0) {
-    for (const range of cohortOutputRanges) {
-      for (let row = range.startRow; row <= range.endRow; row++) {
-        rows[row - 2][18] = `=IFERROR(STDEV.S(K${range.startRow}:K${range.endRow})*SQRT(252),"")`;
-      }
-    }
-
     setMixedDataByColumn(finalWs, 1, 0, rows, 150);
     setColumnFormat(finalWs, 5, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 6, rows.length, "dd mmm yyyy");
