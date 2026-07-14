@@ -1,3 +1,47 @@
+POWER BI DENEB - MTL MULTI-PRODUCT COMPARISON TIME-SERIES HOVER ADAPTIVE Y-AXIS
+
+This is for the next report page: product comparison.
+It supports more than 2 products, uses the same DateKey time-series method as the working product viewer page, adds a hover line with values, and fits the y-axis to selected products.
+
+DATA SOURCE
+Use the same final query/table used by the product viewer page, for example:
+MTL_Deneb_Data
+
+ADD THESE FIELDS TO DENEB VALUES
+- Company
+- ProductName
+- IndexName
+- IndexCode
+- PR
+- FormulaType
+- Principal
+- FloorRate
+- CapRate
+- CohortNo
+- CohortStartDate
+- CohortEndDate
+- ObservationEndDate
+- IndexBaseValue
+- Date
+- Price
+- FXPair
+- FXRate
+
+SETUP
+1. Add a new Deneb visual on the comparison page.
+2. Add all fields above from the same table/query.
+3. Use raw Date, not Date hierarchy.
+4. Set numeric fields to Don't summarize.
+5. Choose Create new specification > Vega > Empty.
+6. Paste only the JSON below.
+
+SLICERS RECOMMENDED
+- ProductName: allow multi-select.
+- CohortNo: single select or filter to the cohort you want to compare; selected cards display cohort and start date.
+- Company: optional.
+- Date: optional Between slicer.
+
+================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "description": "MTL product comparison dashboard with hover line and fitted 0.5-step y-axis. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
