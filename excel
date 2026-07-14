@@ -47,11 +47,12 @@ function main(workbook: ExcelScript.Workbook) {
   const fDate = firstHeader(fxHeaders, ["DATE", "MONTH"]) ?? 0;
   const fRate = firstHeader(fxHeaders, ["USDTHB", "USDTH"]) ?? 1;
 
-  const existingFinalWs = workbook.getWorksheet(FINAL_SHEET);
-  if (existingFinalWs) {
-    existingFinalWs.delete();
+  let finalWs = workbook.getWorksheet(FINAL_SHEET);
+  if (!finalWs) {
+    finalWs = workbook.addWorksheet(FINAL_SHEET);
+  } else {
+    clearFinalDataArea(finalWs);
   }
-  const finalWs = workbook.addWorksheet(FINAL_SHEET);
 
   const headers = [
     "Company",
@@ -177,6 +178,15 @@ function getUsedValues(ws: ExcelScript.Worksheet): (string | number | boolean)[]
   const range = ws.getUsedRange();
   if (!range) throw new Error(`Sheet has no data: ${ws.getName()}`);
   return range.getValues() as (string | number | boolean)[][];
+}
+
+function clearFinalDataArea(ws: ExcelScript.Worksheet) {
+  const used = ws.getUsedRange();
+  const rowCount = used ? Math.max(used.getRowCount(), 1) : 1;
+  for (let start = 0; start < rowCount; start += 200) {
+    const count = Math.min(200, rowCount - start);
+    ws.getRangeByIndexes(start, 0, count, 20).clear(ExcelScript.ClearApplyTo.contents);
+  }
 }
 
 function headerMap(row: (string | number | boolean)[]): Map<string, number> {
