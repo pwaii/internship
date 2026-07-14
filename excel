@@ -1,12 +1,12 @@
 /**
  * Excel Office Script
- * Creates/refreshes a formula-based "Final Data" sheet from:
- * - Product Master
- * - Cohort Schedule
- * - Index Price
- * - FX Rate
+ * Fast formula-based Final Data builder.
  *
- * Paste this into Excel > Automate > New Script.
+ * Input sheets:
+ * - Product Master: Company, Product Name, Index, Index Code, PR, Formula
+ * - Cohort Schedule: Product Name, Cohort No., Cohort Start Date, Cohort End Date
+ * - Index Price: Date + one column per Index Code
+ * - FX Rate: Date/Month + USD/THB
  */
 function main(workbook: ExcelScript.Workbook) {
   const PRODUCT_SHEET = "Product Master";
@@ -73,13 +73,15 @@ function main(workbook: ExcelScript.Workbook) {
     "Volatility",
     "Formula"
   ];
-
   finalWs.getRangeByIndexes(0, 0, 1, headers.length).setValues([headers]);
 
   const productRows = buildProductRows(productData, pProduct);
   const indexHeaderCodes = indexData[0].map(v => cleanIndexCode(v));
+  const indexDateRows = buildDateRows(indexData, iDate);
   const fxDateToRow = buildDateToRowMap(fxData, fDate);
-  const outputFormulas: string[][] = [];
+
+  const rows: string[][] = [];
+  const cohortOutputRanges: { startRow: number; endRow: number }[] = [];
 
   for (let c = 1; c < cohortData.length; c++) {
     const productName = text(cohortData[c][cProduct]);
@@ -92,79 +94,81 @@ function main(workbook: ExcelScript.Workbook) {
     const endSerial = toExcelSerial(cohortData[c][cEnd]);
     if (startSerial === null || endSerial === null || endSerial < startSerial) continue;
 
-    const indexCodeRaw = productData[productRow][pIndexCode];
-    const indexCode = cleanIndexCode(indexCodeRaw);
+    const indexCode = cleanIndexCode(productData[productRow][pIndexCode]);
     const indexCol = indexHeaderCodes.findIndex(code => code === indexCode);
     if (indexCol < 0) continue;
 
-    let firstIndexRowInPeriod: number | null = null;
-    let firstFxRowInPeriod: number | null = null;
+    const periodRows = indexDateRows.filter(d => {
+      if (d.serial < startSerial || d.serial > endSerial) return false;
+      const price = toNumber(indexData[d.row][indexCol]);
+      return price !== null;
+    });
+    if (periodRows.length === 0) continue;
 
-    for (let r = 1; r < indexData.length; r++) {
-      const d = toExcelSerial(indexData[r][iDate]);
-      const price = toNumber(indexData[r][indexCol]);
-      if (d === null || price === null || d < startSerial || d > endSerial) continue;
+    const productExcelRow = productRow + 1;
+    const cohortExcelRow = c + 1;
+    const baseIndexExcelRow = periodRows[0].row + 1;
+    const firstFxRow = findFirstFxRow(periodRows, fxDateToRow);
+    const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
 
-      if (firstIndexRowInPeriod === null) firstIndexRowInPeriod = r;
-      if (firstFxRowInPeriod === null) {
-        const fxRowCandidate = fxDateToRow.get(String(Math.round(d)));
-        if (fxRowCandidate !== undefined) firstFxRowInPeriod = fxRowCandidate;
-      }
+    const outputStartRow = rows.length + 2;
 
-      const finalRowNumber = outputFormulas.length + 2;
-      const productExcelRow = productRow + 1;
-      const cohortExcelRow = c + 1;
-      const indexExcelRow = r + 1;
-      const baseIndexExcelRow = (firstIndexRowInPeriod ?? r) + 1;
-      const fxExcelRow = fxDateToRow.get(String(Math.round(d)));
-      const baseFxExcelRow = firstFxRowInPeriod ?? fxExcelRow;
+    for (const item of periodRows) {
+      const finalRow = rows.length + 2;
+      const indexExcelRow = item.row + 1;
+      const fxExcelRow = fxDateToRow.get(String(Math.round(item.serial)));
+      const baseFxExcelRow = firstFxRow ?? fxExcelRow;
 
-      const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
-      const productReturnFormula = makeProductReturnFormula(formulaText, finalRowNumber);
-
-      outputFormulas.push([
+      rows.push([
         pCompany === null ? `="MTL"` : `=${ref(PRODUCT_SHEET, productExcelRow, pCompany + 1)}`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pProduct + 1)}`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pIndex + 1)}`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pIndexCode + 1)}`,
         `=${ref(COHORT_SHEET, cohortExcelRow, cCohortNo + 1)}`,
-        dateFormula(COHORT_SHEET, cohortExcelRow, cStart + 1),
-        dateFormula(COHORT_SHEET, cohortExcelRow, cEnd + 1),
-        dateFormula(INDEX_SHEET, indexExcelRow, iDate + 1),
+        dateCoerceFormula(COHORT_SHEET, cohortExcelRow, cStart + 1),
+        dateCoerceFormula(COHORT_SHEET, cohortExcelRow, cEnd + 1),
+        dateCoerceFormula(INDEX_SHEET, indexExcelRow, iDate + 1),
         `=${ref(INDEX_SHEET, indexExcelRow, indexCol + 1)}`,
         `=${ref(INDEX_SHEET, baseIndexExcelRow, indexCol + 1)}`,
-        `=IFERROR(I${finalRowNumber}/J${finalRowNumber}-1,"")`,
-        fxExcelRow === undefined ? `=IFERROR(XLOOKUP(H${finalRowNumber},'${FX_SHEET}'!A:A,'${FX_SHEET}'!B:B),"")` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
-        baseFxExcelRow === undefined ? `=IFERROR(XLOOKUP(F${finalRowNumber},'${FX_SHEET}'!A:A,'${FX_SHEET}'!B:B),"")` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
-        `=IFERROR(L${finalRowNumber}/M${finalRowNumber},"")`,
+        `=IFERROR(I${finalRow}/J${finalRow}-1,"")`,
+        fxExcelRow === undefined ? `=IFERROR(XLOOKUP(H${finalRow},'${FX_SHEET}'!${colLetter(fDate + 1)}:${colLetter(fDate + 1)},'${FX_SHEET}'!${colLetter(fRate + 1)}:${colLetter(fRate + 1)}),"")` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
+        baseFxExcelRow === undefined ? `=IFERROR(XLOOKUP(F${finalRow},'${FX_SHEET}'!${colLetter(fDate + 1)}:${colLetter(fDate + 1)},'${FX_SHEET}'!${colLetter(fRate + 1)}:${colLetter(fRate + 1)}),"")` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
+        `=IFERROR(L${finalRow}/M${finalRow},"")`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}`,
         `=100`,
-        productReturnFormula,
-        `=IFERROR(100*(1+Q${finalRowNumber}),"")`,
-        `=IFERROR(STDEV.S(FILTER($K:$K,($B:$B=B${finalRowNumber})*($E:$E=E${finalRowNumber})))*SQRT(252),"")`,
+        makeProductReturnFormula(formulaText, finalRow),
+        `=IFERROR(100*(1+Q${finalRow}),"")`,
+        "",
         `=${ref(PRODUCT_SHEET, productExcelRow, pFormula + 1)}`
       ]);
     }
+
+    cohortOutputRanges.push({
+      startRow: outputStartRow,
+      endRow: rows.length + 1
+    });
   }
 
-  if (outputFormulas.length > 0) {
-    finalWs.getRangeByIndexes(1, 0, outputFormulas.length, headers.length).setFormulas(outputFormulas);
-    setColumnFormat(finalWs, 5, outputFormulas.length, "dd mmm yyyy");
-    setColumnFormat(finalWs, 6, outputFormulas.length, "dd mmm yyyy");
-    setColumnFormat(finalWs, 7, outputFormulas.length, "dd mmm yyyy");
-    setColumnFormat(finalWs, 10, outputFormulas.length, "0.00%");
-    setColumnFormat(finalWs, 13, outputFormulas.length, "0.0000");
-    setColumnFormat(finalWs, 14, outputFormulas.length, "0.00%");
-    setColumnFormat(finalWs, 16, outputFormulas.length, "0.00%");
-    setColumnFormat(finalWs, 18, outputFormulas.length, "0.00%");
+  if (rows.length > 0) {
+    for (const range of cohortOutputRanges) {
+      for (let row = range.startRow; row <= range.endRow; row++) {
+        rows[row - 2][18] = `=IFERROR(STDEV.S(K${range.startRow}:K${range.endRow})*SQRT(252),"")`;
+      }
+    }
+
+    finalWs.getRangeByIndexes(1, 0, rows.length, headers.length).setFormulas(rows);
+    setColumnFormat(finalWs, 5, rows.length, "dd mmm yyyy");
+    setColumnFormat(finalWs, 6, rows.length, "dd mmm yyyy");
+    setColumnFormat(finalWs, 7, rows.length, "dd mmm yyyy");
+    setColumnFormat(finalWs, 10, rows.length, "0.00%");
+    setColumnFormat(finalWs, 13, rows.length, "0.0000");
+    setColumnFormat(finalWs, 14, rows.length, "0.00%");
+    setColumnFormat(finalWs, 16, rows.length, "0.00%");
+    setColumnFormat(finalWs, 18, rows.length, "0.00%");
   }
 
   const used = finalWs.getUsedRange();
-  if (used) {
-    used.getFormat().autofitColumns();
-    used.getFormat().autofitRows();
-  }
-
+  if (used) used.getFormat().autofitColumns();
   finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
 }
 
@@ -201,10 +205,7 @@ function firstHeader(map: Map<string, number>, names: string[]): number | null {
 }
 
 function cleanHeader(v: unknown): string {
-  return String(v ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[\s._\-()/#: '"\u00A0]/g, "");
+  return String(v ?? "").trim().toUpperCase().replace(/[\s._\-()/#: '"\u00A0]/g, "");
 }
 
 function cleanKey(v: unknown): string {
@@ -231,9 +232,7 @@ function toExcelSerial(v: unknown): number | null {
   if (typeof v === "number" && isFinite(v)) return v;
   const raw = String(v ?? "").trim();
   const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  const d = parts
-    ? new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1]))
-    : new Date(raw);
+  const d = parts ? new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1])) : new Date(raw);
   if (isNaN(d.getTime())) return null;
   return d.getTime() / 86400000 + 25569;
 }
@@ -247,6 +246,16 @@ function buildProductRows(data: (string | number | boolean)[][], productCol: num
   return m;
 }
 
+function buildDateRows(data: (string | number | boolean)[][], dateCol: number): { row: number; serial: number }[] {
+  const rows: { row: number; serial: number }[] = [];
+  for (let r = 1; r < data.length; r++) {
+    const serial = toExcelSerial(data[r][dateCol]);
+    if (serial !== null) rows.push({ row: r, serial });
+  }
+  rows.sort((a, b) => a.serial - b.serial);
+  return rows;
+}
+
 function buildDateToRowMap(data: (string | number | boolean)[][], dateCol: number): Map<string, number> {
   const m = new Map<string, number>();
   for (let r = 1; r < data.length; r++) {
@@ -254,6 +263,14 @@ function buildDateToRowMap(data: (string | number | boolean)[][], dateCol: numbe
     if (serial !== null) m.set(String(Math.round(serial)), r);
   }
   return m;
+}
+
+function findFirstFxRow(periodRows: { row: number; serial: number }[], fxDateToRow: Map<string, number>): number | undefined {
+  for (const item of periodRows) {
+    const fxRow = fxDateToRow.get(String(Math.round(item.serial)));
+    if (fxRow !== undefined) return fxRow;
+  }
+  return undefined;
 }
 
 function makeProductReturnFormula(rawFormula: string, row: number): string {
@@ -275,15 +292,14 @@ function makeProductReturnFormula(rawFormula: string, row: number): string {
   return hasPrincipal ? `=IFERROR((${expr})/P${row},"")` : `=IFERROR(${expr},"")`;
 }
 
-function dateFormula(sheetName: string, row: number, col: number): string {
+function dateCoerceFormula(sheetName: string, row: number, col: number): string {
   const cell = ref(sheetName, row, col);
-  return `=IFERROR(IF(ISNUMBER(${cell}),${cell},DATEVALUE(${cell})),"")`;
+  return `=IFERROR(IF(ISNUMBER(${cell}),${cell},DATE(RIGHT(${cell},4),MID(${cell},FIND("/",${cell})+1,FIND("/",${cell},FIND("/",${cell})+1)-FIND("/",${cell})-1),LEFT(${cell},FIND("/",${cell})-1))),"")`;
 }
 
 function ref(sheetName: string, row: number, col: number): string {
   return `'${sheetName}'!${colLetter(col)}${row}`;
 }
-
 
 function setColumnFormat(ws: ExcelScript.Worksheet, zeroBasedCol: number, rows: number, format: string) {
   const formats: string[][] = [];
