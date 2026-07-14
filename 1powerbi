@@ -7,8 +7,7 @@ It keeps the same formula-aware Vega logic and clean red style, with an
 interactive hover line, cohort-derived calendar x-axis labels, dynamic y-axis with 5 percentage-point padding, a 100 baseline without text, KPI-box period returns, and a taller graph area.
 
 DATA SOURCE
-Import: MTL Index Products PowerBI Template.xlsx
-Select sheet/table: PowerBI_Data
+Use the Excel-generated Final Data sheet/table.
 
 ADD THESE FIELDS TO DENEB VALUES
 - Company
@@ -16,23 +15,24 @@ ADD THESE FIELDS TO DENEB VALUES
 - IndexName
 - IndexCode
 - PR
-- FormulaType
 - Principal
-- FloorRate
-- CapRate
+- ProductReturn
+- ProductValue
+- Volatility
+- Formula
 - CohortNo
 - CohortStartDate
 - CohortEndDate
-- ObservationEndDate
 - IndexBaseValue
 - Date
 - Price
-- FXPair
 - FXRate
+- FXBaseRate
+- FXGrowth
 
 IMPORTANT DENEB SETUP
 1. Create a new Deneb visual.
-2. Add all 18 fields above.
+2. Add all fields above.
 3. Use Date, not Date hierarchy.
 4. For numeric fields, choose Don't summarize.
 5. Choose Create new specification.
@@ -41,10 +41,9 @@ IMPORTANT DENEB SETUP
 8. Paste only the JSON below.
 9. Select Apply.
 
-FORMULA RULES USED INSIDE DENEB
-- PR_ONLY: Product Return = max(Index Return * PR, FloorRate)
-- CAP_FLOOR: Product Return = min(max(Index Return * PR, FloorRate), CapRate)
-- ABS_PR: Product Return = min(max(abs(Index Return) * PR, FloorRate), CapRate)
+CALCULATION SOURCE
+ProductReturn, ProductValue, and Volatility now come from the Excel-generated Final Data sheet.
+Deneb uses those fields directly and only falls back to old formula-code logic if those fields are missing.
 
 Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
 For Date, use a Between slicer so users can set the beginning and ending period.
