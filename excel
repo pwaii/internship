@@ -81,11 +81,9 @@ function main(workbook: ExcelScript.Workbook) {
   const productRows = buildProductRows(productData, pProduct);
   const indexHeaderCodes = indexData[0].map(v => cleanIndexCode(v));
   const indexDateRows = buildDateRows(indexData, iDate);
-  const fxDateToRow = buildDateToRowMap(fxData, fDate);
   const fxDateRows = buildDateRows(fxData, fDate);
 
   const rows: (string | number | boolean)[][] = [];
-  const cohortOutputRanges: { startRow: number; endRow: number }[] = [];
 
   for (let c = 1; c < cohortData.length; c++) {
     const productName = text(cohortData[c][cProduct]);
@@ -112,16 +110,14 @@ function main(workbook: ExcelScript.Workbook) {
     const productExcelRow = productRow + 1;
     const cohortExcelRow = c + 1;
     const baseIndexExcelRow = periodRows[0].row + 1;
-    const firstFxRow: number | undefined = findFirstFxRow(periodRows, fxDateRows);
+    const baseFxRow: number | undefined = findFxRowOnOrBefore(startSerial, fxDateRows);
     const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
-
-    const outputStartRow = rows.length + 2;
 
     for (const item of periodRows) {
       const finalRow = rows.length + 2;
       const indexExcelRow = item.row + 1;
       const fxExcelRow: number | undefined = findFxRowOnOrBefore(item.serial, fxDateRows);
-      const baseFxExcelRow: number | undefined = firstFxRow ?? fxExcelRow;
+      const baseFxExcelRow: number | undefined = baseFxRow ?? fxExcelRow;
 
       rows.push([
         pCompany === null ? `="MTL"` : `=${ref(PRODUCT_SHEET, productExcelRow, pCompany + 1)}`,
@@ -146,23 +142,10 @@ function main(workbook: ExcelScript.Workbook) {
         `=${ref(PRODUCT_SHEET, productExcelRow, pFormula + 1)}`
       ]);
     }
-
-    cohortOutputRanges.push({
-      startRow: outputStartRow,
-      endRow: rows.length + 1
-    });
   }
 
   if (rows.length > 0) {
     setMixedDataByColumn(finalWs, 1, 0, rows, 10);
-    setColumnFormat(finalWs, 5, rows.length, "dd mmm yyyy");
-    setColumnFormat(finalWs, 6, rows.length, "dd mmm yyyy");
-    setColumnFormat(finalWs, 7, rows.length, "dd mmm yyyy");
-    setColumnFormat(finalWs, 10, rows.length, "0.00%");
-    setColumnFormat(finalWs, 13, rows.length, "0.0000");
-    setColumnFormat(finalWs, 14, rows.length, "0.00%");
-    setColumnFormat(finalWs, 16, rows.length, "0.00%");
-    setColumnFormat(finalWs, 18, rows.length, "0.00%");
   }
 
   finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
@@ -183,8 +166,8 @@ function getUsedValues(ws: ExcelScript.Worksheet): (string | number | boolean)[]
 function clearFinalDataArea(ws: ExcelScript.Worksheet) {
   const used = ws.getUsedRange();
   const rowCount = used ? Math.max(used.getRowCount(), 1) : 1;
-  for (let start = 0; start < rowCount; start += 200) {
-    const count = Math.min(200, rowCount - start);
+  for (let start = 0; start < rowCount; start += 50) {
+    const count = Math.min(50, rowCount - start);
     ws.getRangeByIndexes(start, 0, count, 20).clear(ExcelScript.ClearApplyTo.contents);
   }
 }
@@ -261,23 +244,6 @@ function buildDateRows(data: (string | number | boolean)[][], dateCol: number): 
   return rows;
 }
 
-function buildDateToRowMap(data: (string | number | boolean)[][], dateCol: number): Map<string, number> {
-  const m = new Map<string, number>();
-  for (let r = 1; r < data.length; r++) {
-    const serial = toExcelSerial(data[r][dateCol]);
-    if (serial !== null) m.set(String(Math.round(serial)), r);
-  }
-  return m;
-}
-
-function findFirstFxRow(periodRows: { row: number; serial: number }[], fxDateRows: { row: number; serial: number }[]): number | undefined {
-  for (const item of periodRows) {
-    const fxRow = findFxRowOnOrBefore(item.serial, fxDateRows);
-    if (fxRow !== undefined) return fxRow;
-  }
-  return undefined;
-}
-
 function findFxRowOnOrBefore(serial: number, fxDateRows: { row: number; serial: number }[]): number | undefined {
   let best: number | undefined = undefined;
   for (const item of fxDateRows) {
@@ -311,18 +277,6 @@ function makeProductReturnFormula(rawFormula: string, row: number): string {
 
 function ref(sheetName: string, row: number, col: number): string {
   return `'${sheetName}'!${colLetter(col)}${row}`;
-}
-
-function setColumnFormat(ws: ExcelScript.Worksheet, zeroBasedCol: number, rows: number, format: string) {
-  for (let start = 0; start < rows; start += 50) {
-    const count = Math.min(50, rows - start);
-    const range = ws.getRangeByIndexes(1 + start, zeroBasedCol, count, 1);
-    const formats: string[][] = [];
-    for (let i = 0; i < count; i++) {
-      formats.push([format]);
-    }
-    range.setNumberFormat(formats);
-  }
 }
 
 function setMixedDataByColumn(
