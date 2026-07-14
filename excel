@@ -1,0 +1,282 @@
+/**
+ * Excel Office Script
+ * Creates/refreshes a formula-based "Final Data" sheet from:
+ * - Product Master
+ * - Cohort Schedule
+ * - Index Price
+ * - FX Rate
+ *
+ * Paste this into Excel > Automate > New Script.
+ */
+function main(workbook: ExcelScript.Workbook) {
+    const PRODUCT_SHEET = "Product Master";
+    const COHORT_SHEET = "Cohort Schedule";
+    const INDEX_SHEET = "Index Price";
+    const FX_SHEET = "FX Rate";
+    const FINAL_SHEET = "Final Data";
+
+    const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
+    const cohortWs = mustGetSheet(workbook, COHORT_SHEET);
+    const indexWs = mustGetSheet(workbook, INDEX_SHEET);
+    const fxWs = mustGetSheet(workbook, FX_SHEET);
+
+    const productData = getUsedValues(productWs);
+    const cohortData = getUsedValues(cohortWs);
+    const indexData = getUsedValues(indexWs);
+    const fxData = getUsedValues(fxWs);
+
+    const productHeaders = headerMap(productData[0]);
+    const cohortHeaders = headerMap(cohortData[0]);
+    const indexHeaders = headerMap(indexData[0]);
+    const fxHeaders = headerMap(fxData[0]);
+
+    const pCompany = firstHeader(productHeaders, ["COMPANY", "COMPANYNAME"]);
+    const pProduct = requiredHeader(productHeaders, ["PRODUCTNAME"], PRODUCT_SHEET);
+    const pIndex = requiredHeader(productHeaders, ["INDEX"], PRODUCT_SHEET);
+    const pIndexCode = requiredHeader(productHeaders, ["INDEXCODE"], PRODUCT_SHEET);
+    const pPR = requiredHeader(productHeaders, ["PR"], PRODUCT_SHEET);
+    const pFormula = requiredHeader(productHeaders, ["FORMULA"], PRODUCT_SHEET);
+
+    const cProduct = requiredHeader(cohortHeaders, ["PRODUCTNAME"], COHORT_SHEET);
+    const cCohortNo = requiredHeader(cohortHeaders, ["COHORTNO"], COHORT_SHEET);
+    const cStart = requiredHeader(cohortHeaders, ["COHORTSTARTDATE"], COHORT_SHEET);
+    const cEnd = requiredHeader(cohortHeaders, ["COHORTENDDATE"], COHORT_SHEET);
+
+    const iDate = requiredHeader(indexHeaders, ["DATE"], INDEX_SHEET);
+    const fDate = firstHeader(fxHeaders, ["DATE", "MONTH"]) ?? 0;
+    const fRate = firstHeader(fxHeaders, ["USDTHB", "USDTH"]) ?? 1;
+
+    let finalWs = workbook.getWorksheet(FINAL_SHEET);
+    if (!finalWs) finalWs = workbook.addWorksheet(FINAL_SHEET);
+    const old = finalWs.getUsedRange();
+    if (old) old.clear(ExcelScript.ClearApplyTo.all);
+
+    const headers = [
+        "Company",
+        "ProductName",
+        "IndexName",
+        "IndexCode",
+        "CohortNo",
+        "CohortStartDate",
+        "CohortEndDate",
+        "Date",
+        "Price",
+        "IndexBaseValue",
+        "IndexGrowth",
+        "FXRate",
+        "FXBaseRate",
+        "FXGrowth",
+        "PR",
+        "Principal",
+        "ProductReturn",
+        "ProductValue",
+        "Volatility",
+        "Formula"
+    ];
+
+    finalWs.getRangeByIndexes(0, 0, 1, headers.length).setValues([headers]);
+
+    const productRows = buildProductRows(productData, pProduct);
+    const indexHeaderCodes = indexData[0].map(v => cleanIndexCode(v));
+    const fxDateToRow = buildDateToRowMap(fxData, fDate);
+    const outputFormulas: string[][] = [];
+
+    for (let c = 1; c < cohortData.length; c++) {
+        const productName = text(cohortData[c][cProduct]);
+        if (!productName) continue;
+
+        const productRow = productRows.get(cleanKey(productName));
+        if (productRow === undefined) continue;
+
+        const startSerial = toExcelSerial(cohortData[c][cStart]);
+        const endSerial = toExcelSerial(cohortData[c][cEnd]);
+        if (startSerial === null || endSerial === null || endSerial < startSerial) continue;
+
+        const indexCodeRaw = productData[productRow][pIndexCode];
+        const indexCode = cleanIndexCode(indexCodeRaw);
+        const indexCol = indexHeaderCodes.findIndex(code => code === indexCode);
+        if (indexCol < 0) continue;
+
+        let firstIndexRowInPeriod: number | null = null;
+        let firstFxRowInPeriod: number | null = null;
+
+        for (let r = 1; r < indexData.length; r++) {
+            const d = toExcelSerial(indexData[r][iDate]);
+            const price = toNumber(indexData[r][indexCol]);
+            if (d === null || price === null || d < startSerial || d > endSerial) continue;
+
+            if (firstIndexRowInPeriod === null) firstIndexRowInPeriod = r;
+            if (firstFxRowInPeriod === null) {
+                const fxRowCandidate = fxDateToRow.get(String(Math.round(d)));
+                if (fxRowCandidate !== undefined) firstFxRowInPeriod = fxRowCandidate;
+            }
+
+            const finalRowNumber = outputFormulas.length + 2;
+            const productExcelRow = productRow + 1;
+            const cohortExcelRow = c + 1;
+            const indexExcelRow = r + 1;
+            const baseIndexExcelRow = (firstIndexRowInPeriod ?? r) + 1;
+            const fxExcelRow = fxDateToRow.get(String(Math.round(d)));
+            const baseFxExcelRow = firstFxRowInPeriod ?? fxExcelRow;
+
+            const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
+            const productReturnFormula = makeProductReturnFormula(formulaText, finalRowNumber);
+
+            outputFormulas.push([
+                pCompany === null ? `="MTL"` : `=${ref(PRODUCT_SHEET, productExcelRow, pCompany + 1)}`,
+                `=${ref(PRODUCT_SHEET, productExcelRow, pProduct + 1)}`,
+                `=${ref(PRODUCT_SHEET, productExcelRow, pIndex + 1)}`,
+                `=${ref(PRODUCT_SHEET, productExcelRow, pIndexCode + 1)}`,
+                `=${ref(COHORT_SHEET, cohortExcelRow, cCohortNo + 1)}`,
+                `=${ref(COHORT_SHEET, cohortExcelRow, cStart + 1)}`,
+                `=${ref(COHORT_SHEET, cohortExcelRow, cEnd + 1)}`,
+                `=${ref(INDEX_SHEET, indexExcelRow, iDate + 1)}`,
+                `=${ref(INDEX_SHEET, indexExcelRow, indexCol + 1)}`,
+                `=${ref(INDEX_SHEET, baseIndexExcelRow, indexCol + 1)}`,
+                `=IFERROR(I${finalRowNumber}/J${finalRowNumber}-1,"")`,
+                fxExcelRow === undefined ? `=IFERROR(XLOOKUP(H${finalRowNumber},'${FX_SHEET}'!A:A,'${FX_SHEET}'!B:B),"")` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
+                baseFxExcelRow === undefined ? `=IFERROR(XLOOKUP(F${finalRowNumber},'${FX_SHEET}'!A:A,'${FX_SHEET}'!B:B),"")` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
+                `=IFERROR(L${finalRowNumber}/M${finalRowNumber},"")`,
+                `=${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}`,
+                `=100`,
+                productReturnFormula,
+                `=IFERROR(100*(1+Q${finalRowNumber}),"")`,
+                `=IFERROR(STDEV.S(FILTER($K:$K,($B:$B=B${finalRowNumber})*($E:$E=E${finalRowNumber})))*SQRT(252),"")`,
+                `=${ref(PRODUCT_SHEET, productExcelRow, pFormula + 1)}`
+            ]);
+        }
+    }
+
+    if (outputFormulas.length > 0) {
+        finalWs.getRangeByIndexes(1, 0, outputFormulas.length, headers.length).setFormulas(outputFormulas);
+    }
+
+    const used = finalWs.getUsedRange();
+    if (used) {
+        used.getFormat().autofitColumns();
+        used.getFormat().autofitRows();
+    }
+
+    finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
+}
+
+function mustGetSheet(workbook: ExcelScript.Workbook, name: string): ExcelScript.Worksheet {
+    const ws = workbook.getWorksheet(name);
+    if (!ws) throw new Error(`Missing sheet: ${name}`);
+    return ws;
+}
+
+function getUsedValues(ws: ExcelScript.Worksheet): (string | number | boolean)[][] {
+    const range = ws.getUsedRange();
+    if (!range) throw new Error(`Sheet has no data: ${ws.getName()}`);
+    return range.getValues() as (string | number | boolean)[][];
+}
+
+function headerMap(row: (string | number | boolean)[]): Map<string, number> {
+    const m = new Map<string, number>();
+    row.forEach((v, i) => m.set(cleanHeader(v), i));
+    return m;
+}
+
+function requiredHeader(map: Map<string, number>, names: string[], sheetName: string): number {
+    const found = firstHeader(map, names);
+    if (found === null) throw new Error(`Missing required header on ${sheetName}: ${names.join(" / ")}`);
+    return found;
+}
+
+function firstHeader(map: Map<string, number>, names: string[]): number | null {
+    for (const n of names) {
+        const v = map.get(cleanHeader(n));
+        if (v !== undefined) return v;
+    }
+    return null;
+}
+
+function cleanHeader(v: unknown): string {
+    return String(v ?? "")
+        .trim()
+        .toUpperCase()
+        .replace(/[\s._\-()/#: '"\u00A0]/g, "");
+}
+
+function cleanKey(v: unknown): string {
+    return String(v ?? "").trim().toUpperCase();
+}
+
+function cleanIndexCode(v: unknown): string {
+    let s = cleanHeader(v);
+    if (s.endsWith("INDEX")) s = s.substring(0, s.length - 5);
+    return s;
+}
+
+function text(v: unknown): string {
+    return String(v ?? "").trim();
+}
+
+function toNumber(v: unknown): number | null {
+    if (typeof v === "number" && isFinite(v)) return v;
+    const n = Number(String(v ?? "").replace(/[%~,]/g, "").trim());
+    return isFinite(n) ? n : null;
+}
+
+function toExcelSerial(v: unknown): number | null {
+    if (typeof v === "number" && isFinite(v)) return v;
+    const raw = String(v ?? "").trim();
+    const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    const d = parts
+        ? new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1]))
+        : new Date(raw);
+    if (isNaN(d.getTime())) return null;
+    return d.getTime() / 86400000 + 25569;
+}
+
+function buildProductRows(data: (string | number | boolean)[][], productCol: number): Map<string, number> {
+    const m = new Map<string, number>();
+    for (let r = 1; r < data.length; r++) {
+        const key = cleanKey(data[r][productCol]);
+        if (key && !m.has(key)) m.set(key, r);
+    }
+    return m;
+}
+
+function buildDateToRowMap(data: (string | number | boolean)[][], dateCol: number): Map<string, number> {
+    const m = new Map<string, number>();
+    for (let r = 1; r < data.length; r++) {
+        const serial = toExcelSerial(data[r][dateCol]);
+        if (serial !== null) m.set(String(Math.round(serial)), r);
+    }
+    return m;
+}
+
+function makeProductReturnFormula(rawFormula: string, row: number): string {
+    let expr = rawFormula.trim();
+    if (expr.includes("=")) expr = expr.substring(expr.indexOf("=") + 1);
+    if (!expr) expr = "FXGrowth * PR * MAX(0, IndexGrowth)";
+
+    expr = expr
+        .replace(/\bPrincipal\b/gi, `P${row}`)
+        .replace(/\bFXGrowth\b/gi, `N${row}`)
+        .replace(/\bPR\b/gi, `O${row}`)
+        .replace(/\bIndexGrowth\b/gi, `K${row}`)
+        .replace(/\bPrice\b/gi, `I${row}`)
+        .replace(/\bIndexBaseValue\b/gi, `J${row}`)
+        .replace(/\bFXRate\b/gi, `L${row}`)
+        .replace(/\bFXBaseRate\b/gi, `M${row}`);
+
+    const hasPrincipal = /P\d+/.test(expr);
+    return hasPrincipal ? `=IFERROR((${expr})/P${row},"")` : `=IFERROR(${expr},"")`;
+}
+
+function ref(sheetName: string, row: number, col: number): string {
+    return `'${sheetName}'!${colLetter(col)}${row}`;
+}
+
+function colLetter(col: number): string {
+    let s = "";
+    while (col > 0) {
+        const mod = (col - 1) % 26;
+        s = String.fromCharCode(65 + mod) + s;
+        col = Math.floor((col - mod) / 26);
+    }
+    return s;
+}
