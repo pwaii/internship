@@ -81,7 +81,7 @@ function main(workbook: ExcelScript.Workbook) {
   const fxDateToRow = buildDateToRowMap(fxData, fDate);
   const fxDateRows = buildDateRows(fxData, fDate);
 
-  const rows: string[][] = [];
+  const rows: (string | number | boolean)[][] = [];
   const cohortOutputRanges: { startRow: number; endRow: number }[] = [];
 
   for (let c = 1; c < cohortData.length; c++) {
@@ -126,9 +126,9 @@ function main(workbook: ExcelScript.Workbook) {
         `=${ref(PRODUCT_SHEET, productExcelRow, pIndex + 1)}`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pIndexCode + 1)}`,
         `=${ref(COHORT_SHEET, cohortExcelRow, cCohortNo + 1)}`,
-        dateCoerceFormula(COHORT_SHEET, cohortExcelRow, cStart + 1),
-        dateCoerceFormula(COHORT_SHEET, cohortExcelRow, cEnd + 1),
-        dateCoerceFormula(INDEX_SHEET, indexExcelRow, iDate + 1),
+        startSerial,
+        endSerial,
+        item.serial,
         `=${ref(INDEX_SHEET, indexExcelRow, indexCol + 1)}`,
         `=${ref(INDEX_SHEET, baseIndexExcelRow, indexCol + 1)}`,
         `=IFERROR(I${finalRow}/J${finalRow}-1,"")`,
@@ -157,7 +157,7 @@ function main(workbook: ExcelScript.Workbook) {
       }
     }
 
-    setFormulasInChunks(finalWs, 1, 0, rows, 300);
+    setMixedDataByColumn(finalWs, 1, 0, rows, 150);
     setColumnFormat(finalWs, 5, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 6, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 7, rows.length, "dd mmm yyyy");
@@ -305,34 +305,46 @@ function makeProductReturnFormula(rawFormula: string, row: number): string {
   return hasPrincipal ? `=IFERROR((${expr})/P${row},"")` : `=IFERROR(${expr},"")`;
 }
 
-function dateCoerceFormula(sheetName: string, row: number, col: number): string {
-  const cell = ref(sheetName, row, col);
-  return `=IFERROR(IF(ISNUMBER(${cell}),${cell},DATE(RIGHT(${cell},4),MID(${cell},FIND("/",${cell})+1,FIND("/",${cell},FIND("/",${cell})+1)-FIND("/",${cell})-1),LEFT(${cell},FIND("/",${cell})-1))),"")`;
-}
-
 function ref(sheetName: string, row: number, col: number): string {
   return `'${sheetName}'!${colLetter(col)}${row}`;
 }
 
 function setColumnFormat(ws: ExcelScript.Worksheet, zeroBasedCol: number, rows: number, format: string) {
-  for (let start = 0; start < rows; start += 1000) {
-    const count = Math.min(1000, rows - start);
+  for (let start = 0; start < rows; start += 200) {
+    const count = Math.min(200, rows - start);
     const formats: string[][] = [];
     for (let i = 0; i < count; i++) formats.push([format]);
     ws.getRangeByIndexes(1 + start, zeroBasedCol, count, 1).setNumberFormat(formats);
   }
 }
 
-function setFormulasInChunks(
+function setMixedDataByColumn(
   ws: ExcelScript.Worksheet,
   startRow: number,
   startCol: number,
-  formulas: string[][],
+  data: (string | number | boolean)[][],
   chunkSize: number
 ) {
-  for (let start = 0; start < formulas.length; start += chunkSize) {
-    const chunk = formulas.slice(start, start + chunkSize);
-    ws.getRangeByIndexes(startRow + start, startCol, chunk.length, chunk[0].length).setFormulas(chunk);
+  if (data.length === 0) return;
+  const colCount = data[0].length;
+
+  for (let col = 0; col < colCount; col++) {
+    for (let start = 0; start < data.length; start += chunkSize) {
+      const chunk = data.slice(start, start + chunkSize).map(row => [row[col]]);
+      const hasFormula = chunk.some(row => typeof row[0] === "string" && String(row[0]).startsWith("="));
+      const range = ws.getRangeByIndexes(startRow + start, startCol + col, chunk.length, 1);
+
+      if (hasFormula) {
+        range.setFormulas(chunk.map(row => {
+          const value = row[0];
+          if (typeof value === "string" && value.startsWith("=")) return [value];
+          if (typeof value === "number" || typeof value === "boolean") return [`=${value}`];
+          return [`="${String(value ?? "").replace(/"/g, "\"\"")}"`];
+        }));
+      } else {
+        range.setValues(chunk);
+      }
+    }
   }
 }
 
