@@ -79,6 +79,7 @@ function main(workbook: ExcelScript.Workbook) {
   const indexHeaderCodes = indexData[0].map(v => cleanIndexCode(v));
   const indexDateRows = buildDateRows(indexData, iDate);
   const fxDateToRow = buildDateToRowMap(fxData, fDate);
+  const fxDateRows = buildDateRows(fxData, fDate);
 
   const rows: string[][] = [];
   const cohortOutputRanges: { startRow: number; endRow: number }[] = [];
@@ -108,7 +109,7 @@ function main(workbook: ExcelScript.Workbook) {
     const productExcelRow = productRow + 1;
     const cohortExcelRow = c + 1;
     const baseIndexExcelRow = periodRows[0].row + 1;
-    const firstFxRow = findFirstFxRow(periodRows, fxDateToRow);
+    const firstFxRow = findFirstFxRow(periodRows, fxDateRows);
     const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
 
     const outputStartRow = rows.length + 2;
@@ -116,7 +117,7 @@ function main(workbook: ExcelScript.Workbook) {
     for (const item of periodRows) {
       const finalRow = rows.length + 2;
       const indexExcelRow = item.row + 1;
-      const fxExcelRow = fxDateToRow.get(String(Math.round(item.serial)));
+      const fxExcelRow = findFxRowOnOrBefore(item.serial, fxDateRows);
       const baseFxExcelRow = firstFxRow ?? fxExcelRow;
 
       rows.push([
@@ -131,8 +132,8 @@ function main(workbook: ExcelScript.Workbook) {
         `=${ref(INDEX_SHEET, indexExcelRow, indexCol + 1)}`,
         `=${ref(INDEX_SHEET, baseIndexExcelRow, indexCol + 1)}`,
         `=IFERROR(I${finalRow}/J${finalRow}-1,"")`,
-        fxExcelRow === undefined ? `=IFERROR(XLOOKUP(H${finalRow},'${FX_SHEET}'!${colLetter(fDate + 1)}:${colLetter(fDate + 1)},'${FX_SHEET}'!${colLetter(fRate + 1)}:${colLetter(fRate + 1)}),"")` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
-        baseFxExcelRow === undefined ? `=IFERROR(XLOOKUP(F${finalRow},'${FX_SHEET}'!${colLetter(fDate + 1)}:${colLetter(fDate + 1)},'${FX_SHEET}'!${colLetter(fRate + 1)}:${colLetter(fRate + 1)}),"")` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
+        fxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
+        baseFxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
         `=IFERROR(L${finalRow}/M${finalRow},"")`,
         `=${ref(PRODUCT_SHEET, productExcelRow, pPR + 1)}`,
         `=100`,
@@ -156,7 +157,7 @@ function main(workbook: ExcelScript.Workbook) {
       }
     }
 
-    finalWs.getRangeByIndexes(1, 0, rows.length, headers.length).setFormulas(rows);
+    setFormulasInChunks(finalWs, 1, 0, rows, 300);
     setColumnFormat(finalWs, 5, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 6, rows.length, "dd mmm yyyy");
     setColumnFormat(finalWs, 7, rows.length, "dd mmm yyyy");
@@ -302,9 +303,25 @@ function ref(sheetName: string, row: number, col: number): string {
 }
 
 function setColumnFormat(ws: ExcelScript.Worksheet, zeroBasedCol: number, rows: number, format: string) {
-  const formats: string[][] = [];
-  for (let i = 0; i < rows; i++) formats.push([format]);
-  ws.getRangeByIndexes(1, zeroBasedCol, rows, 1).setNumberFormat(formats);
+  for (let start = 0; start < rows; start += 1000) {
+    const count = Math.min(1000, rows - start);
+    const formats: string[][] = [];
+    for (let i = 0; i < count; i++) formats.push([format]);
+    ws.getRangeByIndexes(1 + start, zeroBasedCol, count, 1).setNumberFormat(formats);
+  }
+}
+
+function setFormulasInChunks(
+  ws: ExcelScript.Worksheet,
+  startRow: number,
+  startCol: number,
+  formulas: string[][],
+  chunkSize: number
+) {
+  for (let start = 0; start < formulas.length; start += chunkSize) {
+    const chunk = formulas.slice(start, start + chunkSize);
+    ws.getRangeByIndexes(startRow + start, startCol, chunk.length, chunk[0].length).setFormulas(chunk);
+  }
 }
 
 function colLetter(col: number): string {
