@@ -4,8 +4,7 @@ This is for the next report page: product comparison.
 It supports more than 2 products, uses the same DateKey time-series method as the working product viewer page, adds a hover line with values, and fits the y-axis to selected products.
 
 DATA SOURCE
-Use the same final query/table used by the product viewer page, for example:
-MTL_Deneb_Data
+Use the Excel-generated Final Data sheet/table.
 
 ADD THESE FIELDS TO DENEB VALUES
 - Company
@@ -13,23 +12,24 @@ ADD THESE FIELDS TO DENEB VALUES
 - IndexName
 - IndexCode
 - PR
-- FormulaType
 - Principal
-- FloorRate
-- CapRate
+- ProductReturn
+- ProductValue
+- Volatility
+- Formula
 - CohortNo
 - CohortStartDate
 - CohortEndDate
-- ObservationEndDate
 - IndexBaseValue
 - Date
 - Price
-- FXPair
 - FXRate
+- FXBaseRate
+- FXGrowth
 
 SETUP
 1. Add a new Deneb visual on the comparison page.
-2. Add all fields above from the same table/query.
+2. Add all fields above from Final Data.
 3. Use raw Date, not Date hierarchy.
 4. Set numeric fields to Don't summarize.
 5. Choose Create new specification > Vega > Empty.
