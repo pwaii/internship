@@ -109,7 +109,7 @@ function main(workbook: ExcelScript.Workbook) {
     const productExcelRow = productRow + 1;
     const cohortExcelRow = c + 1;
     const baseIndexExcelRow = periodRows[0].row + 1;
-    const firstFxRow = findFirstFxRow(periodRows, fxDateRows);
+    const firstFxRow: number | undefined = findFirstFxRow(periodRows, fxDateRows);
     const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
 
     const outputStartRow = rows.length + 2;
@@ -117,8 +117,8 @@ function main(workbook: ExcelScript.Workbook) {
     for (const item of periodRows) {
       const finalRow = rows.length + 2;
       const indexExcelRow = item.row + 1;
-      const fxExcelRow = findFxRowOnOrBefore(item.serial, fxDateRows);
-      const baseFxExcelRow = firstFxRow ?? fxExcelRow;
+      const fxExcelRow: number | undefined = findFxRowOnOrBefore(item.serial, fxDateRows);
+      const baseFxExcelRow: number | undefined = firstFxRow ?? fxExcelRow;
 
       rows.push([
         pCompany === null ? `="MTL"` : `=${ref(PRODUCT_SHEET, productExcelRow, pCompany + 1)}`,
@@ -266,12 +266,24 @@ function buildDateToRowMap(data: (string | number | boolean)[][], dateCol: numbe
   return m;
 }
 
-function findFirstFxRow(periodRows: { row: number; serial: number }[], fxDateToRow: Map<string, number>): number | undefined {
+function findFirstFxRow(periodRows: { row: number; serial: number }[], fxDateRows: { row: number; serial: number }[]): number | undefined {
   for (const item of periodRows) {
-    const fxRow = fxDateToRow.get(String(Math.round(item.serial)));
+    const fxRow = findFxRowOnOrBefore(item.serial, fxDateRows);
     if (fxRow !== undefined) return fxRow;
   }
   return undefined;
+}
+
+function findFxRowOnOrBefore(serial: number, fxDateRows: { row: number; serial: number }[]): number | undefined {
+  let best: number | undefined = undefined;
+  for (const item of fxDateRows) {
+    if (item.serial <= serial) {
+      best = item.row;
+    } else {
+      break;
+    }
+  }
+  return best;
 }
 
 function makeProductReturnFormula(rawFormula: string, row: number): string {
