@@ -47,12 +47,11 @@ function main(workbook: ExcelScript.Workbook) {
   const fDate = firstHeader(fxHeaders, ["DATE", "MONTH"]) ?? 0;
   const fRate = firstHeader(fxHeaders, ["USDTHB", "USDTH"]) ?? 1;
 
-  let finalWs = workbook.getWorksheet(FINAL_SHEET);
+  const finalWs = workbook.getWorksheet(FINAL_SHEET);
   if (!finalWs) {
-    finalWs = workbook.addWorksheet(FINAL_SHEET);
-  } else {
-    clearFinalDataArea(finalWs);
+    throw new Error(`Missing sheet: ${FINAL_SHEET}. Please create a blank sheet named "${FINAL_SHEET}" before running this script.`);
   }
+  clearFinalDataArea(finalWs);
 
   const headers = [
     "Company",
@@ -100,8 +99,7 @@ function main(workbook: ExcelScript.Workbook) {
     const indexCol = indexHeaderCodes.findIndex(code => code === indexCode);
     if (indexCol < 0) continue;
 
-    const periodRows = indexDateRows.filter(d => {
-      if (d.serial < startSerial || d.serial > endSerial) return false;
+    const periodRows = getDateRowsInPeriod(indexDateRows, startSerial, endSerial).filter(d => {
       const price = toNumber(indexData[d.row][indexCol]);
       return price !== null;
     });
@@ -145,9 +143,10 @@ function main(workbook: ExcelScript.Workbook) {
   }
 
   if (rows.length > 0) {
-    setMixedDataByColumn(finalWs, 1, 0, rows, 10);
+    setMixedDataByColumn(finalWs, 1, 0, rows, 100);
   }
 
+  finalWs.getRange("U1").setValue(rows.length);
   finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
 }
 
@@ -158,16 +157,19 @@ function mustGetSheet(workbook: ExcelScript.Workbook, name: string): ExcelScript
 }
 
 function getUsedValues(ws: ExcelScript.Worksheet): (string | number | boolean)[][] {
-  const range = ws.getUsedRange();
+  const range = ws.getUsedRange(true);
   if (!range) throw new Error(`Sheet has no data: ${ws.getName()}`);
   return range.getValues() as (string | number | boolean)[][];
 }
 
 function clearFinalDataArea(ws: ExcelScript.Worksheet) {
-  const used = ws.getUsedRange();
-  const rowCount = used ? Math.max(used.getRowCount(), 1) : 1;
-  for (let start = 0; start < rowCount; start += 50) {
-    const count = Math.min(50, rowCount - start);
+  const marker = Number(ws.getRange("U1").getValue());
+  const used = ws.getUsedRange(true);
+  const fallbackRows = used ? Math.min(Math.max(used.getRowCount(), 1), 2000) : 1;
+  const rowCount = Number.isFinite(marker) && marker > 0 ? marker + 1 : fallbackRows;
+
+  for (let start = 0; start < rowCount; start += 10) {
+    const count = Math.min(10, rowCount - start);
     ws.getRangeByIndexes(start, 0, count, 20).clear(ExcelScript.ClearApplyTo.contents);
   }
 }
@@ -244,6 +246,20 @@ function buildDateRows(data: (string | number | boolean)[][], dateCol: number): 
   return rows;
 }
 
+function getDateRowsInPeriod(
+  rows: { row: number; serial: number }[],
+  startSerial: number,
+  endSerial: number
+): { row: number; serial: number }[] {
+  const result: { row: number; serial: number }[] = [];
+  for (const item of rows) {
+    if (item.serial < startSerial) continue;
+    if (item.serial > endSerial) break;
+    result.push(item);
+  }
+  return result;
+}
+
 function findFxRowOnOrBefore(serial: number, fxDateRows: { row: number; serial: number }[]): number | undefined {
   let best: number | undefined = undefined;
   for (const item of fxDateRows) {
@@ -296,12 +312,24 @@ function setMixedDataByColumn(
       const range = ws.getRangeByIndexes(startRow + start, startCol + col, chunk.length, 1);
 
       if (hasFormula) {
-        range.setFormulas(chunk.map(row => {
-          const value = row[0];
-          if (typeof value === "string" && value.startsWith("=")) return [value];
-          if (typeof value === "number" || typeof value === "boolean") return [`=${value}`];
-          return [`="${String(value ?? "").replace(/"/g, "\"\"")}"`];
-        }));
+        const formulas = chunk.map(row => [String(row[0] ?? "")]);
+        try {
+          range.setFormulas(formulas);
+        } catch {
+          for (let r = 0; r < chunk.length; r++) {
+            const value = chunk[r][0];
+            const cell = range.getCell(r, 0);
+            if (typeof value === "string" && value.startsWith("=")) {
+              try {
+                cell.setFormula(value);
+              } catch {
+                cell.setValue(value);
+              }
+            } else {
+              cell.setValue(value);
+            }
+          }
+        }
       } else {
         range.setValues(chunk);
       }
