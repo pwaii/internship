@@ -15,7 +15,8 @@ function main(workbook: ExcelScript.Workbook): string {
   const FX_SHEET = "FX Rate";
   const FINAL_SHEET = "Final Data";
   const MAX_ROWS_PER_RUN = 8000;
-  const WRITE_CHUNK_ROWS = 500;
+  const WRITE_CHUNK_ROWS = 200;
+  const EXCEL_MAX_ROWS = 1048576;
 
   const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
   const cohortWs = mustGetSheet(workbook, COHORT_SHEET);
@@ -189,7 +190,10 @@ function main(workbook: ExcelScript.Workbook): string {
   }
 
   if (rows.length > 0) {
-    setMixedDataByColumn(finalWs, existingRows + 1, 0, rows, WRITE_CHUNK_ROWS);
+    if (existingRows + rows.length + 1 > EXCEL_MAX_ROWS) {
+      throw new Error(`Final Data would exceed Excel row limit. Existing rows: ${existingRows}, new rows: ${rows.length}.`);
+    }
+    setFinalDataByBlocks(finalWs, existingRows + 1, rows, WRITE_CHUNK_ROWS);
   }
 
   const totalRows = existingRows + rows.length;
@@ -220,10 +224,11 @@ function clearFinalDataArea(ws: ExcelScript.Worksheet) {
   const marker = Number(ws.getRange("U1").getValue());
   const used = ws.getUsedRange(true);
   const fallbackRows = used ? Math.min(Math.max(used.getRowCount(), 1), 2000) : 1;
-  const rowCount = Number.isFinite(marker) && marker > 0 ? marker + 1 : fallbackRows;
+  const rowCount = Math.min(Number.isFinite(marker) && marker > 0 ? marker + 1 : fallbackRows, 1048576);
 
   for (let start = 0; start < rowCount; start += 500) {
     const count = Math.min(500, rowCount - start);
+    if (count <= 0) break;
     ws.getRangeByIndexes(start, 0, count, 20).clear(ExcelScript.ClearApplyTo.contents);
   }
 }
@@ -370,30 +375,52 @@ function ref(sheetName: string, row: number, col: number): string {
   return `'${sheetName}'!${colLetter(col)}${row}`;
 }
 
-function setMixedDataByColumn(
+function setFinalDataByBlocks(
   ws: ExcelScript.Worksheet,
   startRow: number,
-  startCol: number,
   data: (string | number | boolean)[][],
   chunkSize: number
 ) {
   if (data.length === 0) return;
-  const colCount = data[0].length;
+  const maxRows = 1048576;
 
-  for (let col = 0; col < colCount; col++) {
-    for (let start = 0; start < data.length; start += chunkSize) {
-      const chunk = data.slice(start, start + chunkSize).map(row => [row[col]]);
-      const hasFormula = chunk.some(row => typeof row[0] === "string" && String(row[0]).startsWith("="));
-      const range = ws.getRangeByIndexes(startRow + start, startCol + col, chunk.length, 1);
-
-      if (hasFormula) {
-        const formulas = chunk.map(row => [String(row[0] ?? "")]);
-        range.setFormulas(formulas);
-      } else {
-        range.setValues(chunk.map(row => [safeCellValue(row[0])]));
-      }
+  for (let start = 0; start < data.length; start += chunkSize) {
+    const chunk = data.slice(start, start + chunkSize);
+    const targetRow = startRow + start;
+    if (targetRow < 0 || targetRow + chunk.length > maxRows) {
+      throw new Error(`Invalid write range at row ${targetRow + 1}, rows ${chunk.length}.`);
     }
+
+    setValueBlock(ws, targetRow, 0, chunk, 0, 8);
+    setFormulaBlock(ws, targetRow, 8, chunk, 8, 6);
+    setValueBlock(ws, targetRow, 14, chunk, 14, 2);
+    setFormulaBlock(ws, targetRow, 16, chunk, 16, 2);
+    setValueBlock(ws, targetRow, 18, chunk, 18, 2);
   }
+}
+
+function setValueBlock(
+  ws: ExcelScript.Worksheet,
+  targetRow: number,
+  targetCol: number,
+  rows: (string | number | boolean)[][],
+  sourceCol: number,
+  colCount: number
+) {
+  const values = rows.map(row => row.slice(sourceCol, sourceCol + colCount).map(value => safeCellValue(value)));
+  ws.getRangeByIndexes(targetRow, targetCol, rows.length, colCount).setValues(values);
+}
+
+function setFormulaBlock(
+  ws: ExcelScript.Worksheet,
+  targetRow: number,
+  targetCol: number,
+  rows: (string | number | boolean)[][],
+  sourceCol: number,
+  colCount: number
+) {
+  const formulas = rows.map(row => row.slice(sourceCol, sourceCol + colCount).map(value => String(value ?? "")));
+  ws.getRangeByIndexes(targetRow, targetCol, rows.length, colCount).setFormulas(formulas);
 }
 
 function safeCellValue(value: string | number | boolean): string | number | boolean {
