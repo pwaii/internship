@@ -14,7 +14,8 @@ function main(workbook: ExcelScript.Workbook): string {
   const INDEX_SHEET = "Index Price";
   const FX_SHEET = "FX Rate";
   const FINAL_SHEET = "Final Data";
-  const MAX_ROWS_PER_RUN = 1200;
+  const MAX_ROWS_PER_RUN = 8000;
+  const WRITE_CHUNK_ROWS = 500;
 
   const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
   const cohortWs = mustGetSheet(workbook, COHORT_SHEET);
@@ -188,7 +189,7 @@ function main(workbook: ExcelScript.Workbook): string {
   }
 
   if (rows.length > 0) {
-    setMixedDataByColumn(finalWs, existingRows + 1, 0, rows, 100);
+    setMixedDataByColumn(finalWs, existingRows + 1, 0, rows, WRITE_CHUNK_ROWS);
   }
 
   const totalRows = existingRows + rows.length;
