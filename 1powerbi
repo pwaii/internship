@@ -102,7 +102,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
         },
         {
@@ -152,7 +152,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
+          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortStartDate)) ? (toNumber(datum.CohortStartDate) > 1000000000 ? toNumber(datum.CohortStartDate) : (toNumber(datum.CohortStartDate) - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
           "as": "CohortStartKey"
         },
         {
@@ -1557,6 +1557,14 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       },
       "encode": {
         "enter": {
+          "stroke": {
+            "value": "#59C7F2"
+          },
+          "strokeWidth": {
+            "value": 2
+          }
+        },
+        "update": {
           "x": {
             "scale": "x",
             "field": "RowIndex"
@@ -1564,12 +1572,6 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "y": {
             "scale": "y",
             "field": "DisplayIndex"
-          },
-          "stroke": {
-            "value": "#59C7F2"
-          },
-          "strokeWidth": {
-            "value": 2
           }
         }
       }
@@ -1581,6 +1583,14 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       },
       "encode": {
         "enter": {
+          "size": {
+            "value": 18
+          },
+          "fill": {
+            "value": "#59C7F2"
+          }
+        },
+        "update": {
           "x": {
             "scale": "x",
             "field": "RowIndex"
@@ -1588,12 +1598,6 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "y": {
             "scale": "y",
             "field": "DisplayIndex"
-          },
-          "size": {
-            "value": 18
-          },
-          "fill": {
-            "value": "#59C7F2"
           }
         }
       }
@@ -1605,6 +1609,14 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       },
       "encode": {
         "enter": {
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 2.5
+          }
+        },
+        "update": {
           "x": {
             "scale": "x",
             "field": "RowIndex"
@@ -1612,12 +1624,6 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "y": {
             "scale": "y",
             "field": "DisplayProduct"
-          },
-          "stroke": {
-            "value": "#D31145"
-          },
-          "strokeWidth": {
-            "value": 2.5
           }
         }
       }
@@ -1629,6 +1635,14 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       },
       "encode": {
         "enter": {
+          "size": {
+            "value": 18
+          },
+          "fill": {
+            "value": "#D31145"
+          }
+        },
+        "update": {
           "x": {
             "scale": "x",
             "field": "RowIndex"
@@ -1636,12 +1650,6 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "y": {
             "scale": "y",
             "field": "DisplayProduct"
-          },
-          "size": {
-            "value": 18
-          },
-          "fill": {
-            "value": "#D31145"
           }
         }
       }
