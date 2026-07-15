@@ -8,12 +8,13 @@
  * - Index Price: Date + one column per Index Code
  * - FX Rate: Date/Month + USD/THB
  */
-function main(workbook: ExcelScript.Workbook) {
+function main(workbook: ExcelScript.Workbook): string {
   const PRODUCT_SHEET = "Product Master";
   const COHORT_SHEET = "Cohort Schedule";
   const INDEX_SHEET = "Index Price";
   const FX_SHEET = "FX Rate";
   const FINAL_SHEET = "Final Data";
+  const MAX_ROWS_PER_RUN = 1200;
 
   const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
   const cohortWs = mustGetSheet(workbook, COHORT_SHEET);
@@ -51,7 +52,6 @@ function main(workbook: ExcelScript.Workbook) {
   if (!finalWs) {
     throw new Error(`Missing sheet: ${FINAL_SHEET}. Please create a blank sheet named "${FINAL_SHEET}" before running this script.`);
   }
-  clearFinalDataArea(finalWs);
 
   const headers = [
     "Company",
@@ -75,7 +75,27 @@ function main(workbook: ExcelScript.Workbook) {
     "Volatility",
     "Formula"
   ];
-  finalWs.getRangeByIndexes(0, 0, 1, headers.length).setValues([headers]);
+
+  const resetRequested = cleanKey(finalWs.getRange("U4").getValue()) === "RESET";
+  const statusValue = cleanKey(finalWs.getRange("U2").getValue());
+  if (statusValue === "DONE" && !resetRequested) {
+    return "Final Data is already complete. Type RESET in Final Data!U4 if you want to rebuild from scratch.";
+  }
+
+  const savedRowCount = toNumber(finalWs.getRange("U1").getValue()) ?? 0;
+  const savedCohortRow = toNumber(finalWs.getRange("U2").getValue());
+  const savedDateOffset = toNumber(finalWs.getRange("U3").getValue()) ?? 0;
+  const isResume = !resetRequested && savedRowCount > 0 && savedCohortRow !== null && savedCohortRow >= 1;
+
+  let existingRows = isResume ? Math.floor(savedRowCount) : 0;
+  let startCohortRow = isResume ? Math.floor(savedCohortRow) : 1;
+  let startDateOffset = isResume ? Math.floor(savedDateOffset) : 0;
+
+  if (!isResume) {
+    clearFinalDataArea(finalWs);
+    finalWs.getRangeByIndexes(0, 0, 1, headers.length).setValues([headers]);
+    finalWs.getRange("U1:U4").clear(ExcelScript.ClearApplyTo.contents);
+  }
 
   const productRows = buildProductRows(productData, pProduct);
   const indexHeaderCodes = indexData[0].map(v => cleanIndexCode(v));
@@ -83,8 +103,11 @@ function main(workbook: ExcelScript.Workbook) {
   const fxDateRows = buildDateRows(fxData, fDate);
 
   const rows: (string | number | boolean)[][] = [];
+  let nextCohortRow: number | string = "DONE";
+  let nextDateOffset = 0;
+  let reachedLimit = false;
 
-  for (let c = 1; c < cohortData.length; c++) {
+  for (let c = startCohortRow; c < cohortData.length; c++) {
     const productName = text(cohortData[c][cProduct]);
     if (!productName) continue;
 
@@ -99,7 +122,7 @@ function main(workbook: ExcelScript.Workbook) {
     const indexCol = indexHeaderCodes.findIndex(code => code === indexCode);
     if (indexCol < 0) continue;
 
-    const periodRows = getDateRowsInPeriod(indexDateRows, startSerial, endSerial).filter(d => {
+    const periodRows = getDateRowsFromStart(indexDateRows, startSerial).filter(d => {
       const price = toNumber(indexData[d.row][indexCol]);
       return price !== null;
     });
@@ -117,8 +140,10 @@ function main(workbook: ExcelScript.Workbook) {
     const prValue = normalizeRate(productData[productRow][pPR]);
     const volatilityValue = pVolatility === null ? "" : normalizeRate(productData[productRow][pVolatility]);
 
-    for (const item of periodRows) {
-      const finalRow = rows.length + 2;
+    const dateStart = c === startCohortRow ? startDateOffset : 0;
+    for (let d = dateStart; d < periodRows.length; d++) {
+      const item = periodRows[d];
+      const finalRow = existingRows + rows.length + 2;
       const indexExcelRow = item.row + 1;
       const fxExcelRow: number | undefined = findFxRowOnOrBefore(item.serial, fxDateRows);
       const baseFxExcelRow: number | undefined = baseFxRow ?? fxExcelRow;
@@ -129,9 +154,9 @@ function main(workbook: ExcelScript.Workbook) {
         indexNameValue,
         indexCodeValue,
         cohortNoValue,
-        startSerial,
-        endSerial,
-        item.serial,
+        excelSerialToIsoDate(startSerial),
+        excelSerialToIsoDate(endSerial),
+        excelSerialToIsoDate(item.serial),
         `=${ref(INDEX_SHEET, indexExcelRow, indexCol + 1)}`,
         `=${ref(INDEX_SHEET, baseIndexExcelRow, indexCol + 1)}`,
         `=IFERROR(I${finalRow}/J${finalRow}-1,"")`,
@@ -145,16 +170,37 @@ function main(workbook: ExcelScript.Workbook) {
         volatilityValue,
         formulaText
       ]);
+
+      if (rows.length >= MAX_ROWS_PER_RUN) {
+        nextCohortRow = c;
+        nextDateOffset = d + 1;
+        reachedLimit = true;
+        break;
+      }
     }
+
+    if (reachedLimit) break;
+  }
+
+  if (reachedLimit === false) {
+    nextCohortRow = "DONE";
+    nextDateOffset = 0;
   }
 
   if (rows.length > 0) {
-    setMixedDataByColumn(finalWs, 1, 0, rows, 100);
-    finalWs.getRange("F:H").setNumberFormat("dd-mmm-yyyy");
+    setMixedDataByColumn(finalWs, existingRows + 1, 0, rows, 100);
   }
 
-  finalWs.getRange("U1").setValue(rows.length);
+  const totalRows = existingRows + rows.length;
+  finalWs.getRange("U1").setValue(totalRows);
+  finalWs.getRange("U2").setValue(nextCohortRow);
+  finalWs.getRange("U3").setValue(nextDateOffset);
+  finalWs.getRange("U4").setValue(nextCohortRow === "DONE" ? "COMPLETE" : "RUN AGAIN");
   finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
+
+  return nextCohortRow === "DONE"
+    ? `Complete. Final Data rows: ${totalRows}.`
+    : `Paused safely. Added ${rows.length} rows. Total rows: ${totalRows}. Run the script again to continue from cohort sheet row ${nextCohortRow}, date offset ${nextDateOffset}.`;
 }
 
 function mustGetSheet(workbook: ExcelScript.Workbook, name: string): ExcelScript.Worksheet {
@@ -175,8 +221,8 @@ function clearFinalDataArea(ws: ExcelScript.Worksheet) {
   const fallbackRows = used ? Math.min(Math.max(used.getRowCount(), 1), 2000) : 1;
   const rowCount = Number.isFinite(marker) && marker > 0 ? marker + 1 : fallbackRows;
 
-  for (let start = 0; start < rowCount; start += 10) {
-    const count = Math.min(10, rowCount - start);
+  for (let start = 0; start < rowCount; start += 500) {
+    const count = Math.min(500, rowCount - start);
     ws.getRangeByIndexes(start, 0, count, 20).clear(ExcelScript.ClearApplyTo.contents);
   }
 }
@@ -240,6 +286,15 @@ function toExcelSerial(v: unknown): number | null {
   return d.getTime() / 86400000 + 25569;
 }
 
+function excelSerialToIsoDate(serial: number): string {
+  const utcMs = Math.round((serial - 25569) * 86400000);
+  const d = new Date(utcMs);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function buildProductRows(data: (string | number | boolean)[][], productCol: number): Map<string, number> {
   const m = new Map<string, number>();
   for (let r = 1; r < data.length; r++) {
@@ -259,15 +314,13 @@ function buildDateRows(data: (string | number | boolean)[][], dateCol: number): 
   return rows;
 }
 
-function getDateRowsInPeriod(
+function getDateRowsFromStart(
   rows: { row: number; serial: number }[],
-  startSerial: number,
-  endSerial: number
+  startSerial: number
 ): { row: number; serial: number }[] {
   const result: { row: number; serial: number }[] = [];
   for (const item of rows) {
     if (item.serial < startSerial) continue;
-    if (item.serial > endSerial) break;
     result.push(item);
   }
   return result;
@@ -289,6 +342,14 @@ function makeProductReturnFormula(rawFormula: string, row: number): string {
   let expr = rawFormula.trim();
   if (expr.includes("=")) expr = expr.substring(expr.indexOf("=") + 1);
   if (!expr) expr = "FXGrowth * PR * MAX(0, IndexGrowth)";
+
+  // In Final Data, IndexGrowth is already Price / IndexBaseValue - 1.
+  // If a product formula says IndexGrowth - 1, it is usually describing
+  // IndexRatio - 1, so normalize that wording back to IndexGrowth.
+  expr = expr
+    .replace(/\bIndexGrowth\b\s*-\s*1/gi, "IndexGrowth")
+    .replace(/\bIndexGrowth\b\s*-\s*100%/gi, "IndexGrowth")
+    .replace(/\bIndexReturn\b/gi, "IndexGrowth");
 
   expr = expr
     .replace(/\bPrincipal\b/gi, `P${row}`)
@@ -326,15 +387,7 @@ function setMixedDataByColumn(
 
       if (hasFormula) {
         const formulas = chunk.map(row => [String(row[0] ?? "")]);
-        try {
-          range.setFormulas(formulas);
-        } catch {
-          range.setValues(chunk.map(row => {
-            const value = row[0];
-            if (typeof value === "string" && value.startsWith("=")) return ["'" + value];
-            return [safeCellValue(value)];
-          }));
-        }
+        range.setFormulas(formulas);
       } else {
         range.setValues(chunk.map(row => [safeCellValue(row[0])]));
       }
