@@ -426,9 +426,9 @@ function samplePeriodRows(
   rows: { row: number; serial: number }[],
   cohortAge: number
 ): { row: number; serial: number }[] {
-  if (rows.length <= 2 || cohortAge <= 6) return rows;
+  if (rows.length <= 2 || cohortAge < 6) return rows;
 
-  if (cohortAge > 30) {
+  if (cohortAge >= 30) {
     return firstRowPerMonthPlusLatest(rows);
   }
 
@@ -479,7 +479,7 @@ function monthlySamplingKey(serial: number, cohortAge: number): number {
   const day = date.getUTCDate();
   const monthKey = year * 100 + month;
 
-  if (cohortAge > 12) {
+  if (cohortAge >= 12) {
     const half = day <= 15 ? 1 : 2;
     return monthKey * 10 + half;
   }
