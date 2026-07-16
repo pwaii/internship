@@ -1543,6 +1543,38 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       }
     },
     {
+      "name": "hoverBand",
+      "type": "rect",
+      "from": {
+        "data": "dateTickSource"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "scale('x', datum.RowIndex) - max(8, (1360 - 190) / max(1, data('rowIndexRange')[0].MaxRowIndex) / 2)"
+          },
+          "x2": {
+            "signal": "scale('x', datum.RowIndex) + max(8, (1360 - 190) / max(1, data('rowIndexRange')[0].MaxRowIndex) / 2)"
+          },
+          "y": {
+            "signal": "plotTop"
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fillOpacity": {
+            "value": 0.001
+          },
+          "cursor": {
+            "value": "crosshair"
+          }
+        }
+      }
+    },
+    {
       "type": "rule",
       "from": {
         "data": "hoverDate"
@@ -1854,7 +1886,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "clamp(event.x, 190, 1360)"
+          "update": "clamp(x(), 190, 1360)"
         },
         {
           "events": {
@@ -1867,7 +1899,23 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
     },
     {
       "name": "hoverIndex",
-      "update": "hoverX == null || length(data('rowIndexRange')) == 0 ? null : clamp(round(invert('x', hoverX)), 1, data('rowIndexRange')[0].MaxRowIndex)"
+      "value": null,
+      "on": [
+        {
+          "events": {
+            "type": "mousemove",
+            "markname": "hoverBand"
+          },
+          "update": "datum.RowIndex"
+        },
+        {
+          "events": {
+            "type": "mouseout",
+            "markname": "hoverArea"
+          },
+          "update": "null"
+        }
+      ]
     }
   ]
 }
