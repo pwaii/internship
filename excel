@@ -8,6 +8,8 @@
  * - Index Price: Date + one column per Index Code
  * - FX Rate: Date/Month + USD/THB
  */
+const DATE_TEXT_ORDER = "MDY";
+
 function main(workbook: ExcelScript.Workbook): string {
   const PRODUCT_SHEET = "Product Master";
   const COHORT_SHEET = "Cohort Schedule";
@@ -79,7 +81,7 @@ function main(workbook: ExcelScript.Workbook): string {
   ];
 
   const resetRequested = cleanKey(finalWs.getRange("U4").getValue()) === "RESET";
-  const statusValue = cleanKey(finalWs.getRange("U2").getValue());
+  const statusValue = cleanKey(finalWs.getRange("U4").getValue());
   if (statusValue === "DONE" && !resetRequested) {
     return "Final Data is already complete. Type RESET in Final Data!U4 if you want to rebuild from scratch.";
   }
@@ -242,12 +244,12 @@ function saveProgress(
   nextDateOffset: number,
   status: string
 ) {
-  ws.getRange("U1:U4").setValues([[
-    totalRows,
-    nextCohortRow,
-    nextDateOffset,
-    status
-  ]]);
+  ws.getRange("U1:U4").setValues([
+    [totalRows],
+    [nextCohortRow],
+    [nextDateOffset],
+    [status]
+  ]);
 }
 
 function clearFinalDataArea(ws: ExcelScript.Worksheet) {
@@ -316,10 +318,53 @@ function normalizeRate(v: unknown): number | string {
 function toExcelSerial(v: unknown): number | null {
   if (typeof v === "number" && isFinite(v)) return v;
   const raw = String(v ?? "").trim();
-  const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  const d = parts ? new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1])) : new Date(raw);
+
+  const iso = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (iso) {
+    return ymdToExcelSerial(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  }
+
+  const numericDate = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (numericDate) {
+    const first = Number(numericDate[1]);
+    const second = Number(numericDate[2]);
+    let year = Number(numericDate[3]);
+    if (year < 100) year += 2000;
+
+    let month: number;
+    let day: number;
+
+    if (first > 12) {
+      day = first;
+      month = second;
+    } else if (second > 12) {
+      month = first;
+      day = second;
+    } else if (DATE_TEXT_ORDER === "MDY") {
+      month = first;
+      day = second;
+    } else {
+      day = first;
+      month = second;
+    }
+
+    return ymdToExcelSerial(year, month, day);
+  }
+
+  const d = new Date(raw);
   if (isNaN(d.getTime())) return null;
-  return d.getTime() / 86400000 + 25569;
+  return ymdToExcelSerial(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+function ymdToExcelSerial(year: number, month: number, day: number): number | null {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const utcMs = Date.UTC(year, month - 1, day);
+  const d = new Date(utcMs);
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() + 1 !== month || d.getUTCDate() !== day) return null;
+
+  return utcMs / 86400000 + 25569;
 }
 
 function excelSerialToIsoDate(serial: number): string {
