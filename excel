@@ -14,7 +14,7 @@ function main(workbook: ExcelScript.Workbook): string {
   const INDEX_SHEET = "Index Price";
   const FX_SHEET = "FX Rate";
   const FINAL_SHEET = "Final Data";
-  const MAX_ROWS_PER_RUN = 3000;
+  const MAX_ROWS_PER_RUN = 5000;
   const WRITE_CHUNK_ROWS = 50;
   const EXCEL_MAX_ROWS = 1048576;
 
