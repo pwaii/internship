@@ -43,6 +43,7 @@ SLICERS RECOMMENDED
 
 ProductReturn drives the product comparison line. If Final Data contains dates after CohortEndDate, page 2 continues to the latest available Final Data date.
 Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at CohortEndDate, Power BI hides later calculated rows before Deneb receives them.
+The graph displays exactly the rows generated in Final Data, so cohort sampling is controlled by the Excel script: newest 6 daily, older than 6 four points/month + latest, older than 12 two points/month + latest, older than 30 one point/month + latest.
 
 ================ PASTE JSON BELOW ================
 {
@@ -128,6 +129,10 @@ Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at Cohort
           "type": "formula",
           "expr": "isFinite(datum.ProductReturnCalc) ? 100 * (1 + datum.ProductReturnCalc) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : null",
           "as": "DisplayProduct"
+        },
+        {
+          "type": "filter",
+          "expr": "isFinite(datum.ProductReturnCalc) && isFinite(datum.DisplayProduct)"
         },
         {
           "type": "formula",
@@ -333,7 +338,7 @@ Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at Cohort
         },
         {
           "type": "formula",
-          "expr": "datum.TickStep >= 1 ? format(datum.Value, '.0f') : format(datum.Value, '.1f')",
+          "expr": "abs(datum.Value - 100) < 0.0001 ? '0%' : datum.TickStep >= 1 ? format((datum.Value - 100) / 100, '+.0%') : format((datum.Value - 100) / 100, '+.1%')",
           "as": "Label"
         }
       ]
@@ -1296,7 +1301,7 @@ Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at Cohort
           "encode": {
             "enter": {
               "interpolate": {
-                "value": "monotone"
+                "value": "linear"
               },
               "strokeWidth": {
                 "value": 3
