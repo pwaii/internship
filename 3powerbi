@@ -3,7 +3,15 @@ POWER BI DENEB - MTL INDEX COMPARISON ASSIGNED THEME Y-AXIS ADAPTIVE TICKS
 This page compares indexes instead of products. It supports multi-select indexes and uses a non-zero y-axis range.
 
 DATA SOURCE
-Use the Excel-generated Final Data sheet/table.
+Use a daily long index table built from the Index Price sheet, not Final Data.
+Final Data is sampled by cohort for product pages, so it will not show every index day on page 3.
+
+Recommended Power BI table name: Index Daily
+Required shape:
+- Date
+- IndexCode
+- Price
+- IndexName optional; if missing, IndexCode is used as the display name.
 
 ADD THESE FIELDS TO DENEB VALUES
 - IndexName
@@ -24,6 +32,7 @@ IMPORTANT
 3. Set Price to Don't summarize.
 4. Use slicers for IndexCode or IndexName. Multi-select is supported.
 5. Product formula fields are not needed on this page.
+6. Do not use Final Data on page 3 if you want every day; use the unpivoted daily Index Price data.
 
 ================ PASTE JSON BELOW ================
 {
