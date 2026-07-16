@@ -42,6 +42,7 @@ SLICERS RECOMMENDED
 - Date: optional Between slicer.
 
 ProductReturn drives the product comparison line. If Final Data contains dates after CohortEndDate, page 2 continues to the latest available Final Data date.
+Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at CohortEndDate, Power BI hides later calculated rows before Deneb receives them.
 
 ================ PASTE JSON BELOW ================
 {
@@ -93,6 +94,11 @@ ProductReturn drives the product comparison line. If Final Data contains dates a
           "type": "formula",
           "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortStartDate)) ? (toNumber(datum.CohortStartDate) > 1000000000 ? toNumber(datum.CohortStartDate) : (toNumber(datum.CohortStartDate) - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
+          "as": "CohortStartKey"
         },
         {
           "type": "filter",
@@ -978,7 +984,7 @@ ProductReturn drives the product comparison line. If Final Data contains dates a
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "'Growth: ' + format(datum.DisplayProduct / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "'Growth: ' + format(datum.DisplayProduct / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-') + '   Latest: ' + timeFormat(datum.DateKey, '%d %b %Y')"
           }
         }
       }
