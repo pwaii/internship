@@ -151,6 +151,33 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
               "ascending"
             ]
           }
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          },
+          "ops": [
+            "row_number",
+            "first_value"
+          ],
+          "fields": [
+            null,
+            "DisplayProduct"
+          ],
+          "as": [
+            "RowIndex",
+            "StartDisplayProduct"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.StartDisplayProduct) && datum.StartDisplayProduct != 0 ? datum.DisplayProduct / datum.StartDisplayProduct * 100 : datum.DisplayProduct",
+          "as": "DisplayProductNormalized"
         }
       ]
     },
@@ -165,8 +192,8 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "max"
           ],
           "fields": [
-            "DisplayProduct",
-            "DisplayProduct"
+            "DisplayProductNormalized",
+            "DisplayProductNormalized"
           ],
           "as": [
             "MinY",
@@ -385,7 +412,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "transform": [
         {
           "type": "formula",
-          "expr": "hoverDateKey == null ? null : abs(datum.DateKey - hoverDateKey)",
+          "expr": "hoverIndex == null ? null : abs(datum.RowIndex - hoverIndex)",
           "as": "HoverDistance"
         },
         {
@@ -406,7 +433,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "filter",
-          "expr": "hoverDateKey != null && datum.HoverRank === 1"
+          "expr": "hoverIndex != null && datum.HoverRank === 1"
         }
       ]
     },
@@ -416,7 +443,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "transform": [
         {
           "type": "filter",
-          "expr": "length(data('hoverAnchor')) > 0 && datum.DateKey === data('hoverAnchor')[0].DateKey"
+          "expr": "length(data('hoverAnchor')) > 0 && datum.RowIndex === data('hoverAnchor')[0].RowIndex"
         },
         {
           "type": "collect",
@@ -482,7 +509,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "type": "linear",
       "domain": {
         "data": "chartData",
-        "field": "DateKey"
+        "field": "RowIndex"
       },
       "range": [
         190,
@@ -989,7 +1016,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "'Growth: ' + format(datum.DisplayProduct / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-') + '   Latest: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "'Growth: ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-') + '   Latest: ' + timeFormat(datum.DateKey, '%d %b %Y')"
           }
         }
       }
@@ -1310,11 +1337,11 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "update": {
               "x": {
                 "scale": "x",
-                "field": "DateKey"
+                "field": "RowIndex"
               },
               "y": {
                 "scale": "y",
-                "field": "DisplayProduct"
+                "field": "DisplayProductNormalized"
               },
               "stroke": {
                 "scale": "color",
@@ -1345,11 +1372,11 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         "update": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayProductNormalized"
           },
           "fill": {
             "scale": "color",
@@ -1381,18 +1408,18 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         "update": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayProductNormalized"
           },
           "fill": {
             "scale": "color",
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "format(datum.DisplayProduct / 100 - 1, '+.1%')"
+            "signal": "format(datum.DisplayProductNormalized / 100 - 1, '+.1%')"
           }
         }
       }
@@ -1454,7 +1481,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         "update": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "text": {
             "signal": "timeFormat(datum.DateKey, '%d %b %Y')"
@@ -1523,7 +1550,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         "update": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           }
         }
       }
@@ -1548,11 +1575,11 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         "update": {
           "x": {
             "scale": "x",
-            "field": "DateKey"
+            "field": "RowIndex"
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayProductNormalized"
           },
           "fill": {
             "scale": "color",
@@ -1601,7 +1628,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.RowIndex) > 1080 ? scale('x', datum.RowIndex) - 335 : scale('x', datum.RowIndex) + 20"
           }
         }
       }
@@ -1628,7 +1655,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
+            "signal": "scale('x', datum.RowIndex) > 1080 ? scale('x', datum.RowIndex) - 315 : scale('x', datum.RowIndex) + 40"
           },
           "text": {
             "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
@@ -1658,7 +1685,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.RowIndex) > 1080 ? scale('x', datum.RowIndex) - 335 : scale('x', datum.RowIndex) + 20"
           },
           "y": {
             "signal": "366 + datum.HoverRowNo * 28"
@@ -1688,7 +1715,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
+            "signal": "scale('x', datum.RowIndex) > 1080 ? scale('x', datum.RowIndex) - 318 : scale('x', datum.RowIndex) + 37"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1718,7 +1745,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
+            "signal": "scale('x', datum.RowIndex) > 1080 ? scale('x', datum.RowIndex) - 38 : scale('x', datum.RowIndex) + 302"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1728,7 +1755,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "format(datum.DisplayProduct, '.2f') + ' / ' + format(datum.DisplayProduct / 100 - 1, '+.2%')"
+            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1752,7 +1779,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "length(data('hoverDate')) && scale('x', data('hoverDate')[0].DateKey) > 1080 ? scale('x', data('hoverDate')[0].DateKey) - 318 : length(data('hoverDate')) ? scale('x', data('hoverDate')[0].DateKey) + 37 : 0"
+            "signal": "length(data('hoverDate')) && scale('x', data('hoverDate')[0].RowIndex) > 1080 ? scale('x', data('hoverDate')[0].RowIndex) - 318 : length(data('hoverDate')) ? scale('x', data('hoverDate')[0].RowIndex) + 37 : 0"
           },
           "y": {
             "value": 740
@@ -1818,8 +1845,8 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       ]
     },
     {
-      "name": "hoverDateKey",
-      "update": "hoverX == null || length(data('chartData')) == 0 ? null : invert('x', hoverX)"
+      "name": "hoverIndex",
+      "update": "hoverX == null || length(data('chartData')) == 0 ? null : clamp(round(invert('x', hoverX)), 1, length(data('dateTickSource')))"
     }
   ]
 }
