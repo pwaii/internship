@@ -45,6 +45,7 @@ CALCULATION SOURCE
 ProductReturn, ProductValue, and Volatility now come from the Excel-generated Final Data sheet.
 Deneb uses those fields directly and only falls back to old formula-code logic if those fields are missing.
 ProductReturn drives ProductValue in the visual, so the product line continues through the latest available Final Data date instead of stopping at CohortEndDate.
+The graph displays exactly the rows generated in Final Data, so cohort sampling is controlled by the Excel script: newest 6 daily, older than 6 four points/month + latest, older than 12 two points/month + latest, older than 30 one point/month + latest.
 
 Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
 For Date, use a Between slicer only if the selected range includes the latest available Final Data date. If the Date slicer ends at CohortEndDate, Power BI will hide later calculated rows before Deneb receives them.
@@ -134,6 +135,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "type": "formula",
           "expr": "isFinite(datum.ProductReturnCalc) ? 100 * (1 + datum.ProductReturnCalc) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : null",
           "as": "DisplayProduct"
+        },
+        {
+          "type": "filter",
+          "expr": "isFinite(datum.ProductReturnCalc) && isFinite(datum.DisplayProduct)"
         },
         {
           "type": "collect",
@@ -287,7 +292,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         {
           "type": "formula",
-          "expr": "datum.Value === 100 ? '0%' : format((datum.Value - 100) / 100, '+.0%')",
+          "expr": "abs(datum.Value - 100) < 0.0001 ? '0%' : format((datum.Value - 100) / 100, '+.0%')",
           "as": "Label"
         },
         {
@@ -1624,7 +1629,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayProduct"
           }
         }
       }
@@ -1650,7 +1655,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayProduct"
           }
         }
       }
@@ -2404,7 +2409,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": 662
           },
           "text": {
-            "value": "Value"
+            "value": "Growth"
           },
           "align": {
             "value": "center"
@@ -2693,7 +2698,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "clamp(x(), 260, 1430)"
+          "update": "clamp(x(), 300, 1360)"
         },
         {
           "events": {
