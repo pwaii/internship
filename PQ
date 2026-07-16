@@ -1,59 +1,54 @@
-FixThaiDate = (v as any) as nullable date =>
-    let
-        result =
-            if v is date then
-                v
-            else if v is datetime then
-                Date.From(v)
-            else if v is number then
-                Date.AddDays(#date(1899, 12, 30), Number.RoundDown(v))
-            else
-                let
-                    t0 = Text.Trim(Text.From(v)),
-                    t1 = Text.Replace(Text.Replace(t0, "/", "-"), ".", ""),
-                    t2 =
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(
-                        Text.Replace(t1,
-                            "มค", "01"),
-                            "กพ", "02"),
-                            "มีค", "03"),
-                            "เมย", "04"),
-                            "พค", "05"),
-                            "มิย", "06"),
-                            "กค", "07"),
-                            "สค", "08"),
-                            "กย", "09"),
-                            "ตค", "10"),
-                            "พย", "11"),
-                            "ธค", "12"),
-                    parts = Text.Split(t2, "-"),
-                    d = Number.FromText(parts{0}),
-                    m = Number.FromText(parts{1}),
-                    y = Number.FromText(parts{2}),
-                    fixedYear = if y > 2400 then y - 543 else y
-                in
-                    #date(fixedYear, m, d)
-    in
-        try result otherwise null,
+let
+    Source = #"Index Price",
+    PromotedHeaders =
+        if List.Contains(Table.ColumnNames(Source), "Date")
+        then Source
+        else Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
 
-#"Fixed Date Columns" =
-    Table.TransformColumns(
-        #"Previous Step",
-        {
-            {"Date", each FixThaiDate(_), type date},
-            {"CohortStartDate", each FixThaiDate(_), type date},
-            {"CohortEndDate", each FixThaiDate(_), type date}
-        },
+    FixDate = (v as any) as nullable date =>
+        if v is date then v
+        else if v is datetime then Date.From(v)
+        else if v is number then Date.AddDays(#date(1899, 12, 30), Number.RoundDown(v))
+        else
+            let
+                t = Text.Trim(Text.From(v)),
+                iso = try Date.FromText(t, "en-CA") otherwise null,
+                gb = try Date.FromText(t, "en-GB") otherwise null
+            in
+                if iso <> null then iso else gb,
+
+    TypedDate = Table.TransformColumns(
+        PromotedHeaders,
+        {{"Date", each FixDate(_), type date}},
         null,
         MissingField.Ignore
+    ),
+
+    Long = Table.UnpivotOtherColumns(
+        TypedDate,
+        {"Date"},
+        "IndexCode",
+        "Price"
+    ),
+
+    Typed = Table.TransformColumnTypes(
+        Long,
+        {
+            {"IndexCode", type text},
+            {"Price", type number}
+        }
+    ),
+
+    AddIndexName = Table.AddColumn(
+        Typed,
+        "IndexName",
+        each [IndexCode],
+        type text
+    ),
+
+    Final = Table.SelectRows(
+        AddIndexName,
+        each [Date] <> null and [Price] <> null
     )
+in
+    Final
