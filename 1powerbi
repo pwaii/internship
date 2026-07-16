@@ -47,7 +47,7 @@ Deneb uses those fields directly and only falls back to old formula-code logic i
 ProductReturn drives ProductValue in the visual, so the product line continues through the latest available Final Data date instead of stopping at CohortEndDate.
 
 Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
-For Date, use a Between slicer so users can set the beginning and ending period.
+For Date, use a Between slicer only if the selected range includes the latest available Final Data date. If the Date slicer ends at CohortEndDate, Power BI will hide later calculated rows before Deneb receives them.
 The boxes inside Deneb are display-only and show the active Power BI filter context.
 
 ================ PASTE JSON BELOW ================
