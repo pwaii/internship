@@ -1,54 +1,135 @@
 let
     Source = #"Index Price",
-    PromotedHeaders =
-        if List.Contains(Table.ColumnNames(Source), "Date")
-        then Source
-        else Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+
+    PromoteHeaders =
+        if List.Contains(Table.ColumnNames(Source), "Date") then
+            Source
+        else
+            Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+
+    CleanColumnNames =
+        Table.TransformColumnNames(
+            PromoteHeaders,
+            each Text.Trim(Text.Clean(Text.From(_)))
+        ),
+
+    DateColumnName =
+        List.First(
+            List.Select(
+                Table.ColumnNames(CleanColumnNames),
+                each Text.Upper(Text.Trim(_)) = "DATE"
+            )
+        ),
 
     FixDate = (v as any) as nullable date =>
-        if v is date then v
-        else if v is datetime then Date.From(v)
-        else if v is number then Date.AddDays(#date(1899, 12, 30), Number.RoundDown(v))
+        let
+            result =
+                if v is date then
+                    v
+                else if v is datetime then
+                    Date.From(v)
+                else if v is number then
+                    Date.AddDays(#date(1899, 12, 30), Number.RoundDown(v))
+                else
+                    let
+                        t0 = Text.Trim(Text.From(v)),
+                        t1 = Text.Replace(Text.Replace(Text.Replace(t0, "/", "-"), ".", "-"), " ", "-"),
+                        parts = Text.Split(t1, "-"),
+
+                        parsed =
+                            if List.Count(parts) = 3 then
+                                let
+                                    p1 = Number.FromText(parts{0}),
+                                    p2 = Number.FromText(parts{1}),
+                                    y0 = Number.FromText(parts{2}),
+                                    y = if y0 > 2400 then y0 - 543 else y0,
+
+                                    // MM-DD-YYYY rule:
+                                    // 01-02-2020 = 02 Jan 2020
+                                    m = p1,
+                                    d = p2
+                                in
+                                    #date(y, m, d)
+                            else
+                                try Date.FromText(t0, "en-US") otherwise null
+                    in
+                        parsed
+        in
+            try result otherwise null,
+
+    FixDateColumn =
+        Table.TransformColumns(
+            CleanColumnNames,
+            {
+                {DateColumnName, each FixDate(_), type date}
+            }
+        ),
+
+    RenameDate =
+        if DateColumnName = "Date" then
+            FixDateColumn
         else
-            let
-                t = Text.Trim(Text.From(v)),
-                iso = try Date.FromText(t, "en-CA") otherwise null,
-                gb = try Date.FromText(t, "en-GB") otherwise null
-            in
-                if iso <> null then iso else gb,
+            Table.RenameColumns(FixDateColumn, {{DateColumnName, "Date"}}),
 
-    TypedDate = Table.TransformColumns(
-        PromotedHeaders,
-        {{"Date", each FixDate(_), type date}},
-        null,
-        MissingField.Ignore
-    ),
+    UnpivotIndexColumns =
+        Table.UnpivotOtherColumns(
+            RenameDate,
+            {"Date"},
+            "IndexCode",
+            "Price"
+        ),
 
-    Long = Table.UnpivotOtherColumns(
-        TypedDate,
-        {"Date"},
-        "IndexCode",
-        "Price"
-    ),
+    CleanIndexCode =
+        Table.TransformColumns(
+            UnpivotIndexColumns,
+            {
+                {"IndexCode", each Text.Trim(Text.From(_)), type text}
+            }
+        ),
 
-    Typed = Table.TransformColumnTypes(
-        Long,
-        {
-            {"IndexCode", type text},
-            {"Price", type number}
-        }
-    ),
+    ConvertPrice =
+        Table.TransformColumns(
+            CleanIndexCode,
+            {
+                {
+                    "Price",
+                    each
+                        let
+                            n =
+                                if _ is number then
+                                    _
+                                else
+                                    try Number.FromText(Text.Replace(Text.From(_), ",", "")) otherwise null
+                        in
+                            n,
+                    type number
+                }
+            }
+        ),
 
-    AddIndexName = Table.AddColumn(
-        Typed,
-        "IndexName",
-        each [IndexCode],
-        type text
-    ),
+    RemoveInvalidRows =
+        Table.SelectRows(
+            ConvertPrice,
+            each [Date] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null
+        ),
 
-    Final = Table.SelectRows(
-        AddIndexName,
-        each [Date] <> null and [Price] <> null
-    )
+    AddIndexName =
+        Table.AddColumn(
+            RemoveInvalidRows,
+            "IndexName",
+            each [IndexCode],
+            type text
+        ),
+
+    ReorderColumns =
+        Table.SelectColumns(
+            AddIndexName,
+            {
+                "IndexName",
+                "IndexCode",
+                "Date",
+                "Price"
+            }
+        )
 in
-    Final
+    ReorderColumns
