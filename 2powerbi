@@ -1854,7 +1854,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "clamp(event.x, 190, 1360)"
+          "update": "clamp(x(), 190, 1360)"
         },
         {
           "events": {
