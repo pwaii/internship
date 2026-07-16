@@ -150,11 +150,22 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         {
           "type": "window",
           "ops": [
-            "row_number"
+            "row_number",
+            "first_value"
+          ],
+          "fields": [
+            null,
+            "DisplayProduct"
           ],
           "as": [
-            "RowIndex"
+            "RowIndex",
+            "StartDisplayProduct"
           ]
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.StartDisplayProduct) && datum.StartDisplayProduct != 0 ? datum.DisplayProduct / datum.StartDisplayProduct * 100 : datum.DisplayProduct",
+          "as": "DisplayProductNormalized"
         },
         {
           "type": "formula",
@@ -216,8 +227,8 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "fields": [
             "DisplayIndex",
             "DisplayIndex",
-            "DisplayProduct",
-            "DisplayProduct"
+            "DisplayProductNormalized",
+            "DisplayProductNormalized"
           ],
           "as": [
             "MinIndex",
@@ -1629,7 +1640,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayProductNormalized"
           }
         }
       }
@@ -1655,7 +1666,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayProductNormalized"
           }
         }
       }
@@ -1883,7 +1894,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayIndex"
           }
         }
       }
@@ -2125,7 +2136,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayProductNormalized"
           }
         }
       }
@@ -2291,7 +2302,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "signal": "scale('x', datum.RowIndex) > 1120 ? scale('x', datum.RowIndex) - 225 : scale('x', datum.RowIndex) + 40"
           },
           "text": {
-            "signal": "'Product: ' + format(datum.DisplayProduct, '.2f') + '  (' + (length(data('periodStart')) && data('periodStart')[0].DisplayProduct != 0 ? format(datum.DisplayProduct / data('periodStart')[0].DisplayProduct - 1, '+.2%') : '') + ')'"
+            "signal": "'Product: ' + format(datum.DisplayProductNormalized, '.2f') + '  (' + (length(data('periodStart')) && data('periodStart')[0].DisplayProductNormalized != 0 ? format(datum.DisplayProductNormalized / data('periodStart')[0].DisplayProductNormalized - 1, '+.2%') : '') + ')'"
           }
         }
       }
