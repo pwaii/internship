@@ -358,11 +358,26 @@ function samplePeriodRows(
 ): { row: number; serial: number }[] {
   if (rows.length <= 2 || cohortAge <= 6) return rows;
 
+  if (cohortAge > 30) {
+    return uniqueDateRows([
+      rows[0],
+      rows[rows.length - 1]
+    ]);
+  }
+
+  if (cohortAge > 12) {
+    return uniqueDateRows([
+      rows[0],
+      rows[Math.floor((rows.length - 1) / 2)],
+      rows[rows.length - 1]
+    ]);
+  }
+
   const selected: { row: number; serial: number }[] = [];
   const seen = new Set<number>();
 
   for (const item of rows) {
-    const key = monthlySamplingKey(item.serial, cohortAge);
+    const key = fourPointMonthlySamplingKey(item.serial);
     if (!seen.has(key)) {
       seen.add(key);
       selected.push(item);
@@ -377,22 +392,24 @@ function samplePeriodRows(
   return selected;
 }
 
-function monthlySamplingKey(serial: number, cohortAge: number): number {
+function uniqueDateRows(rows: { row: number; serial: number }[]): { row: number; serial: number }[] {
+  const selected: { row: number; serial: number }[] = [];
+  const seen = new Set<number>();
+  for (const item of rows) {
+    if (!seen.has(item.serial)) {
+      seen.add(item.serial);
+      selected.push(item);
+    }
+  }
+  return selected;
+}
+
+function fourPointMonthlySamplingKey(serial: number): number {
   const date = excelSerialToDate(serial);
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + 1;
   const day = date.getUTCDate();
   const monthKey = year * 100 + month;
-
-  if (cohortAge > 30) {
-    return monthKey;
-  }
-
-  if (cohortAge > 12) {
-    const half = day <= 15 ? 1 : 2;
-    return monthKey * 10 + half;
-  }
-
   const bucket = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
   return monthKey * 10 + bucket;
 }
