@@ -14,8 +14,8 @@ function main(workbook: ExcelScript.Workbook): string {
   const INDEX_SHEET = "Index Price";
   const FX_SHEET = "FX Rate";
   const FINAL_SHEET = "Final Data";
-  const MAX_ROWS_PER_RUN = 5000;
-  const WRITE_CHUNK_ROWS = 30;
+  const MAX_ROWS_PER_RUN = 1000;
+  const WRITE_CHUNK_ROWS = 20;
   const EXCEL_MAX_ROWS = 1048576;
 
   const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
@@ -105,7 +105,8 @@ function main(workbook: ExcelScript.Workbook): string {
   const indexDateRows = buildDateRows(indexData, iDate);
   const fxDateRows = buildDateRows(fxData, fDate);
 
-  const rows: (string | number | boolean)[][] = [];
+  let rows: (string | number | boolean)[][] = [];
+  let writtenThisRun = 0;
   let nextCohortRow: number | string = "DONE";
   let nextDateOffset = 0;
   let reachedLimit = false;
@@ -150,7 +151,7 @@ function main(workbook: ExcelScript.Workbook): string {
     const dateStart = c === startCohortRow ? startDateOffset : 0;
     for (let d = dateStart; d < periodRows.length; d++) {
       const item = periodRows[d];
-      const finalRow = existingRows + rows.length + 2;
+      const finalRow = existingRows + writtenThisRun + rows.length + 2;
       const indexExcelRow = item.row + 1;
       const fxExcelRow: number | undefined = findFxRowOnOrBefore(item.serial, fxDateRows);
       const baseFxExcelRow: number | undefined = baseFxRow ?? fxExcelRow;
@@ -178,7 +179,17 @@ function main(workbook: ExcelScript.Workbook): string {
         formulaText
       ]);
 
-      if (rows.length >= MAX_ROWS_PER_RUN) {
+      if (rows.length >= WRITE_CHUNK_ROWS) {
+        if (existingRows + writtenThisRun + rows.length + 1 > EXCEL_MAX_ROWS) {
+          throw new Error(`Final Data would exceed Excel row limit. Existing rows: ${existingRows}, written this run: ${writtenThisRun}, new rows: ${rows.length}.`);
+        }
+        setFinalDataByBlocks(finalWs, existingRows + writtenThisRun + 1, rows, WRITE_CHUNK_ROWS);
+        writtenThisRun += rows.length;
+        saveProgress(finalWs, existingRows + writtenThisRun, c, d + 1, "RUN AGAIN");
+        rows = [];
+      }
+
+      if (writtenThisRun >= MAX_ROWS_PER_RUN) {
         nextCohortRow = c;
         nextDateOffset = d + 1;
         reachedLimit = true;
@@ -195,22 +206,21 @@ function main(workbook: ExcelScript.Workbook): string {
   }
 
   if (rows.length > 0) {
-    if (existingRows + rows.length + 1 > EXCEL_MAX_ROWS) {
-      throw new Error(`Final Data would exceed Excel row limit. Existing rows: ${existingRows}, new rows: ${rows.length}.`);
+    if (existingRows + writtenThisRun + rows.length + 1 > EXCEL_MAX_ROWS) {
+      throw new Error(`Final Data would exceed Excel row limit. Existing rows: ${existingRows}, written this run: ${writtenThisRun}, new rows: ${rows.length}.`);
     }
-    setFinalDataByBlocks(finalWs, existingRows + 1, rows, WRITE_CHUNK_ROWS);
+    setFinalDataByBlocks(finalWs, existingRows + writtenThisRun + 1, rows, WRITE_CHUNK_ROWS);
+    writtenThisRun += rows.length;
+    rows = [];
   }
 
-  const totalRows = existingRows + rows.length;
-  finalWs.getRange("U1").setValue(totalRows);
-  finalWs.getRange("U2").setValue(nextCohortRow);
-  finalWs.getRange("U3").setValue(nextDateOffset);
-  finalWs.getRange("U4").setValue(nextCohortRow === "DONE" ? "COMPLETE" : "RUN AGAIN");
+  const totalRows = existingRows + writtenThisRun;
+  saveProgress(finalWs, totalRows, nextCohortRow, nextDateOffset, nextCohortRow === "DONE" ? "COMPLETE" : "RUN AGAIN");
   finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
 
   return nextCohortRow === "DONE"
     ? `Complete. Final Data rows: ${totalRows}.`
-    : `Paused safely. Added ${rows.length} rows. Total rows: ${totalRows}. Run the script again to continue from cohort sheet row ${nextCohortRow}, date offset ${nextDateOffset}.`;
+    : `Paused safely. Added ${writtenThisRun} rows. Total rows: ${totalRows}. Run the script again to continue from cohort sheet row ${nextCohortRow}, date offset ${nextDateOffset}.`;
 }
 
 function mustGetSheet(workbook: ExcelScript.Workbook, name: string): ExcelScript.Worksheet {
@@ -223,6 +233,21 @@ function getUsedValues(ws: ExcelScript.Worksheet): (string | number | boolean)[]
   const range = ws.getUsedRange(true);
   if (!range) throw new Error(`Sheet has no data: ${ws.getName()}`);
   return range.getValues() as (string | number | boolean)[][];
+}
+
+function saveProgress(
+  ws: ExcelScript.Worksheet,
+  totalRows: number,
+  nextCohortRow: number | string,
+  nextDateOffset: number,
+  status: string
+) {
+  ws.getRange("U1:U4").setValues([[
+    totalRows,
+    nextCohortRow,
+    nextDateOffset,
+    status
+  ]]);
 }
 
 function clearFinalDataArea(ws: ExcelScript.Worksheet) {
@@ -483,8 +508,12 @@ function setFinalDataByBlocks(
     }
 
     setValueBlock(ws, targetRow, 0, chunk, 0, 8);
-    setFormulaBlock(ws, targetRow, 8, chunk, 8, 3);
-    setFormulaBlock(ws, targetRow, 11, chunk, 11, 3);
+    setFormulaBlock(ws, targetRow, 8, chunk, 8, 1);
+    setFormulaBlock(ws, targetRow, 9, chunk, 9, 1);
+    setFormulaBlock(ws, targetRow, 10, chunk, 10, 1);
+    setFormulaBlock(ws, targetRow, 11, chunk, 11, 1);
+    setFormulaBlock(ws, targetRow, 12, chunk, 12, 1);
+    setFormulaBlock(ws, targetRow, 13, chunk, 13, 1);
     setValueBlock(ws, targetRow, 14, chunk, 14, 2);
     setFormulaBlock(ws, targetRow, 16, chunk, 16, 1);
     setFormulaBlock(ws, targetRow, 17, chunk, 17, 1);
