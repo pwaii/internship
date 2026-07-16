@@ -3,17 +3,19 @@ POWER BI DENEB - MTL INDEX COMPARISON ASSIGNED THEME Y-AXIS ADAPTIVE TICKS
 This page compares indexes instead of products. It supports multi-select indexes and uses a non-zero y-axis range.
 
 DATA SOURCE
-Use a daily long index table built from the Index Price sheet, not Final Data.
-Final Data is sampled by cohort for product pages, so it will not show every index day on page 3.
+Use Final Data.
+This page reads the index price columns from Final Data and compares the index movement for selected products/indexes.
 
-Recommended Power BI table name: Index Daily
+Recommended Power BI table name: Final Data
 Required shape:
-- Date
+- ProductName
+- IndexName
 - IndexCode
+- Date
 - Price
-- IndexName optional; if missing, IndexCode is used as the display name.
 
 ADD THESE FIELDS TO DENEB VALUES
+- ProductName
 - IndexName
 - IndexCode
 - Date
@@ -30,9 +32,9 @@ IMPORTANT
 1. Choose Deneb > Create new specification > Vega > Empty.
 2. Use raw Date, not Date hierarchy.
 3. Set Price to Don't summarize.
-4. Use slicers for IndexCode or IndexName. Multi-select is supported.
+4. Use slicers for Company, ProductName, IndexCode, or IndexName. Multi-select is supported.
 5. Product formula fields are not needed on this page.
-6. Do not use Final Data on page 3 if you want every day; use the unpivoted daily Index Price data.
+6. Set Date and Price to Don't summarize.
 
 ================ PASTE JSON BELOW ================
 {
@@ -133,12 +135,12 @@ IMPORTANT
         },
         {
           "type": "formula",
-          "expr": "toString(datum.IndexCode)",
+          "expr": "(datum.ProductName ? toString(datum.ProductName) : (datum.IndexName ? toString(datum.IndexName) : toString(datum.IndexCode))) + ' | ' + toString(datum.IndexCode)",
           "as": "SeriesKey"
         },
         {
           "type": "formula",
-          "expr": "datum.IndexName ? toString(datum.IndexName) : toString(datum.IndexCode)",
+          "expr": "datum.ProductName ? toString(datum.ProductName) : (datum.IndexName ? toString(datum.IndexName) : toString(datum.IndexCode))",
           "as": "SeriesName"
         }
       ]
