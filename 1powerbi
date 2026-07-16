@@ -44,6 +44,7 @@ IMPORTANT DENEB SETUP
 CALCULATION SOURCE
 ProductReturn, ProductValue, and Volatility now come from the Excel-generated Final Data sheet.
 Deneb uses those fields directly and only falls back to old formula-code logic if those fields are missing.
+ProductReturn drives ProductValue in the visual, so the product line continues through the latest available Final Data date instead of stopping at CohortEndDate.
 
 Use normal Power BI slicers for Company, ProductName, CohortNo, and Date.
 For Date, use a Between slicer so users can set the beginning and ending period.
@@ -131,7 +132,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : 100 * (1 + datum.ProductReturnCalc)",
+          "expr": "isFinite(datum.ProductReturnCalc) ? 100 * (1 + datum.ProductReturnCalc) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : null",
           "as": "DisplayProduct"
         },
         {
@@ -359,7 +360,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "type": "collect",
           "sort": {
             "field": [
-              "DisplayProduct",
+              "DisplayIndex",
               "DateKey"
             ],
             "order": [
@@ -431,7 +432,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.RowIndex === 1 || datum.RowIndex === length(data('chartData')) || datum.RowIndex % max(1, ceil(length(data('chartData')) / 7)) === 0"
+          "expr": "datum.RowIndex === 1 || datum.RowIndex === length(data('chartData')) || (datum.RowIndex - 1) % max(1, ceil(length(data('chartData')) / 4)) === 0"
         }
       ]
     },
@@ -1401,7 +1402,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "format(datum.MaxProduct / 100 - 1, '+.2%')"
+            "signal": "format(datum.MaxIndex / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1623,7 +1624,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayIndex"
           }
         }
       }
@@ -1649,7 +1650,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProduct"
+            "field": "DisplayIndex"
           }
         }
       }
@@ -1912,10 +1913,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "field": "RowIndex"
           },
           "y": {
-            "signal": "scale('y', datum.DisplayProduct) + -18"
+            "signal": "scale('y', datum.DisplayIndex) + -18"
           },
           "text": {
-            "signal": "'Max Upside ' + format(datum.DisplayProduct / 100 - 1, '+.2%')"
+            "signal": "'Max Upside ' + format(datum.DisplayIndex / 100 - 1, '+.2%')"
           }
         }
       }
@@ -2326,10 +2327,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
       "encode": {
         "enter": {
           "y": {
-            "value": 812
+            "value": 814
           },
           "align": {
-            "value": "center"
+            "value": "right"
           },
           "baseline": {
             "value": "top"
@@ -2338,13 +2339,16 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "value": "#111111"
           },
           "fontSize": {
-            "value": 9
+            "value": 8
           },
           "fontWeight": {
             "value": "bold"
           },
           "angle": {
-            "value": 0
+            "value": -25
+          },
+          "limit": {
+            "value": 95
           }
         },
         "update": {
@@ -2596,7 +2600,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
     {
       "type": "text",
       "from": {
-        "data": "periodStart"
+        "data": "maxUpsidePoint"
       },
       "encode": {
         "enter": {
@@ -2626,7 +2630,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
     {
       "type": "text",
       "from": {
-        "data": "periodStart"
+        "data": "maxDrawdownPoint"
       },
       "encode": {
         "enter": {
