@@ -151,16 +151,24 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "type": "window",
           "ops": [
             "row_number",
+            "first_value",
             "first_value"
           ],
           "fields": [
             null,
+            "DisplayIndex",
             "DisplayProduct"
           ],
           "as": [
             "RowIndex",
+            "StartDisplayIndex",
             "StartDisplayProduct"
           ]
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.StartDisplayIndex) && datum.StartDisplayIndex != 0 ? datum.DisplayIndex / datum.StartDisplayIndex * 100 : datum.DisplayIndex",
+          "as": "DisplayIndexNormalized"
         },
         {
           "type": "formula",
@@ -225,8 +233,8 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "max"
           ],
           "fields": [
-            "DisplayIndex",
-            "DisplayIndex",
+            "DisplayIndexNormalized",
+            "DisplayIndexNormalized",
             "DisplayProductNormalized",
             "DisplayProductNormalized"
           ],
@@ -354,8 +362,8 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "min"
           ],
           "fields": [
-            "DisplayIndex",
-            "DisplayIndex",
+            "DisplayIndexNormalized",
+            "DisplayIndexNormalized",
             "DisplayProduct",
             "DisplayProduct"
           ],
@@ -376,7 +384,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "type": "collect",
           "sort": {
             "field": [
-              "DisplayIndex",
+              "DisplayIndexNormalized",
               "DateKey"
             ],
             "order": [
@@ -408,7 +416,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           "type": "collect",
           "sort": {
             "field": [
-              "DisplayIndex",
+              "DisplayIndexNormalized",
               "DateKey"
             ],
             "order": [
@@ -1290,7 +1298,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
         },
         "update": {
           "text": {
-            "signal": "length(data('periodStart')) && data('periodStart')[0].DisplayIndex != 0 ? format(datum.DisplayIndex / data('periodStart')[0].DisplayIndex - 1, '+.2%') : ''"
+            "signal": "length(data('periodStart')) && data('periodStart')[0].DisplayIndexNormalized != 0 ? format(datum.DisplayIndexNormalized / data('periodStart')[0].DisplayIndexNormalized - 1, '+.2%') : ''"
           }
         }
       }
@@ -1588,7 +1596,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayIndexNormalized"
           }
         }
       }
@@ -1614,7 +1622,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayIndexNormalized"
           }
         }
       }
@@ -1894,7 +1902,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayIndexNormalized"
           }
         }
       }
@@ -1929,10 +1937,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "field": "RowIndex"
           },
           "y": {
-            "signal": "scale('y', datum.DisplayIndex) + -18"
+            "signal": "scale('y', datum.DisplayIndexNormalized) + -18"
           },
           "text": {
-            "signal": "'Max Upside ' + format(datum.DisplayIndex / 100 - 1, '+.2%')"
+            "signal": "'Max Upside ' + format(datum.DisplayIndexNormalized / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1965,7 +1973,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayIndexNormalized"
           }
         }
       }
@@ -2000,10 +2008,10 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "field": "RowIndex"
           },
           "y": {
-            "signal": "scale('y', datum.DisplayIndex) + 22"
+            "signal": "scale('y', datum.DisplayIndexNormalized) + 22"
           },
           "text": {
-            "signal": "'Max Drawdown ' + format(datum.DisplayIndex / 100 - 1, '+.2%')"
+            "signal": "'Max Drawdown ' + format(datum.DisplayIndexNormalized / 100 - 1, '+.2%')"
           }
         }
       }
@@ -2104,7 +2112,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
           },
           "y": {
             "scale": "y",
-            "field": "DisplayIndex"
+            "field": "DisplayIndexNormalized"
           }
         }
       }
@@ -2271,7 +2279,7 @@ The boxes inside Deneb are display-only and show the active Power BI filter cont
             "signal": "scale('x', datum.RowIndex) > 1120 ? scale('x', datum.RowIndex) - 225 : scale('x', datum.RowIndex) + 40"
           },
           "text": {
-            "signal": "'Index Growth: ' + (length(data('periodStart')) && data('periodStart')[0].DisplayIndex != 0 ? format(datum.DisplayIndex / data('periodStart')[0].DisplayIndex - 1, '+.2%') : '')"
+            "signal": "'Index Growth: ' + (length(data('periodStart')) && data('periodStart')[0].DisplayIndexNormalized != 0 ? format(datum.DisplayIndexNormalized / data('periodStart')[0].DisplayIndexNormalized - 1, '+.2%') : '')"
           }
         }
       },
