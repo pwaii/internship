@@ -218,6 +218,24 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       ]
     },
     {
+      "name": "rowIndexRange",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "max"
+          ],
+          "fields": [
+            "RowIndex"
+          ],
+          "as": [
+            "MaxRowIndex"
+          ]
+        }
+      ]
+    },
+    {
       "name": "hundredTick",
       "source": "productYDomain",
       "transform": [
@@ -1510,13 +1528,16 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "#FFFFFF"
           },
           "fillOpacity": {
-            "value": 0
+            "value": 0.001
           },
           "cursor": {
             "value": "crosshair"
           },
           "stroke": {
             "value": "#E3EBF3"
+          },
+          "strokeOpacity": {
+            "value": 0
           }
         }
       }
@@ -1846,7 +1867,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
     },
     {
       "name": "hoverIndex",
-      "update": "hoverX == null || length(data('chartData')) == 0 ? null : clamp(round(invert('x', hoverX)), 1, length(data('dateTickSource')))"
+      "update": "hoverX == null || length(data('rowIndexRange')) == 0 ? null : clamp(round(invert('x', hoverX)), 1, data('rowIndexRange')[0].MaxRowIndex)"
     }
   ]
 }
