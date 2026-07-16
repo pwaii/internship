@@ -41,6 +41,8 @@ SLICERS RECOMMENDED
 - Company: optional.
 - Date: optional Between slicer.
 
+ProductReturn drives the product comparison line. If Final Data contains dates after CohortEndDate, page 2 continues to the latest available Final Data date.
+
 ================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
@@ -89,7 +91,7 @@ SLICERS RECOMMENDED
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
         },
         {
@@ -118,7 +120,7 @@ SLICERS RECOMMENDED
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : 100 * (1 + datum.ProductReturnCalc)",
+          "expr": "isFinite(datum.ProductReturnCalc) ? 100 * (1 + datum.ProductReturnCalc) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : null",
           "as": "DisplayProduct"
         },
         {
@@ -263,6 +265,25 @@ SLICERS RECOMMENDED
       ]
     },
     {
+      "name": "hiddenCards",
+      "source": "latestByProduct",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.CardNo > 12"
+        },
+        {
+          "type": "aggregate",
+          "ops": [
+            "count"
+          ],
+          "as": [
+            "HiddenCount"
+          ]
+        }
+      ]
+    },
+    {
       "name": "yTickData",
       "source": "productYDomain",
       "transform": [
@@ -312,17 +333,43 @@ SLICERS RECOMMENDED
       ]
     },
     {
-      "name": "dateTicks",
+      "name": "dateTickSource",
       "source": "chartData",
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.DateKey === data('chartData')[0].DateKey || datum.DateKey === data('chartData')[length(data('chartData')) - 1].DateKey || datum.DateKey % max(1, ceil((data('chartData')[length(data('chartData')) - 1].DateKey - data('chartData')[0].DateKey) / 7)) < 86400000"
+          "expr": "length(data('latestByProduct')) > 0 && datum.SeriesKey === data('latestByProduct')[0].SeriesKey"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "TickRowNo"
+          ]
         }
       ]
     },
     {
-      "name": "hoverRows",
+      "name": "dateTicks",
+      "source": "dateTickSource",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTickSource')) || (datum.TickRowNo - 1) % max(1, ceil(length(data('dateTickSource')) / 4)) === 0"
+        }
+      ]
+    },
+    {
+      "name": "hoverAnchor",
       "source": "chartData",
       "transform": [
         {
@@ -331,14 +378,14 @@ SLICERS RECOMMENDED
           "as": "HoverDistance"
         },
         {
-          "type": "window",
-          "groupby": [
-            "SeriesKey"
-          ],
+          "type": "collect",
           "sort": {
             "field": "HoverDistance",
             "order": "ascending"
-          },
+          }
+        },
+        {
+          "type": "window",
           "ops": [
             "row_number"
           ],
@@ -349,6 +396,16 @@ SLICERS RECOMMENDED
         {
           "type": "filter",
           "expr": "hoverDateKey != null && datum.HoverRank === 1"
+        }
+      ]
+    },
+    {
+      "name": "hoverRows",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "length(data('hoverAnchor')) > 0 && datum.DateKey === data('hoverAnchor')[0].DateKey"
         },
         {
           "type": "collect",
@@ -364,6 +421,35 @@ SLICERS RECOMMENDED
           ],
           "as": [
             "HoverRowNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hoverRowsVisible",
+      "source": "hoverRows",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.HoverRowNo <= 12"
+        }
+      ]
+    },
+    {
+      "name": "hoverRowsHidden",
+      "source": "hoverRows",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.HoverRowNo > 12"
+        },
+        {
+          "type": "aggregate",
+          "ops": [
+            "count"
+          ],
+          "as": [
+            "HiddenCount"
           ]
         }
       ]
@@ -898,6 +984,39 @@ SLICERS RECOMMENDED
       }
     },
     {
+      "type": "text",
+      "from": {
+        "data": "hiddenCards"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1288
+          },
+          "y": {
+            "value": 452
+          },
+          "align": {
+            "value": "right"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontStyle": {
+            "value": "italic"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others selected' : ''"
+          }
+        }
+      }
+    },
+    {
       "type": "rect",
       "encode": {
         "enter": {
@@ -1303,16 +1422,22 @@ SLICERS RECOMMENDED
             "signal": "dateTickY"
           },
           "align": {
-            "value": "center"
+            "value": "right"
+          },
+          "baseline": {
+            "value": "top"
           },
           "fill": {
             "value": "#111111"
           },
           "fontSize": {
-            "value": 9
+            "value": 8
+          },
+          "angle": {
+            "value": -25
           },
           "limit": {
-            "value": 82
+            "value": 95
           }
         },
         "update": {
@@ -1503,7 +1628,7 @@ SLICERS RECOMMENDED
     {
       "type": "rect",
       "from": {
-        "data": "hoverRows"
+        "data": "hoverRowsVisible"
       },
       "encode": {
         "enter": {
@@ -1533,7 +1658,7 @@ SLICERS RECOMMENDED
     {
       "type": "text",
       "from": {
-        "data": "hoverRows"
+        "data": "hoverRowsVisible"
       },
       "encode": {
         "enter": {
@@ -1566,7 +1691,7 @@ SLICERS RECOMMENDED
     {
       "type": "text",
       "from": {
-        "data": "hoverRows"
+        "data": "hoverRowsVisible"
       },
       "encode": {
         "enter": {
@@ -1593,6 +1718,36 @@ SLICERS RECOMMENDED
           },
           "text": {
             "signal": "format(datum.DisplayProduct, '.2f') + ' / ' + format(datum.DisplayProduct / 100 - 1, '+.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverRowsHidden"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontStyle": {
+            "value": "italic"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "length(data('hoverDate')) && scale('x', data('hoverDate')[0].DateKey) > 1080 ? scale('x', data('hoverDate')[0].DateKey) - 318 : length(data('hoverDate')) ? scale('x', data('hoverDate')[0].DateKey) + 37 : 0"
+          },
+          "y": {
+            "value": 740
+          },
+          "text": {
+            "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others' : ''"
           }
         }
       }
