@@ -14,8 +14,8 @@ function main(workbook: ExcelScript.Workbook): string {
   const INDEX_SHEET = "Index Price";
   const FX_SHEET = "FX Rate";
   const FINAL_SHEET = "Final Data";
-  const MAX_ROWS_PER_RUN = 8000;
-  const WRITE_CHUNK_ROWS = 200;
+  const MAX_ROWS_PER_RUN = 3000;
+  const WRITE_CHUNK_ROWS = 50;
   const EXCEL_MAX_ROWS = 1048576;
 
   const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
@@ -359,25 +359,14 @@ function samplePeriodRows(
   if (rows.length <= 2 || cohortAge <= 6) return rows;
 
   if (cohortAge > 30) {
-    return uniqueDateRows([
-      rows[0],
-      rows[rows.length - 1]
-    ]);
-  }
-
-  if (cohortAge > 12) {
-    return uniqueDateRows([
-      rows[0],
-      rows[Math.floor((rows.length - 1) / 2)],
-      rows[rows.length - 1]
-    ]);
+    return firstRowPerMonthPlusLatest(rows);
   }
 
   const selected: { row: number; serial: number }[] = [];
   const seen = new Set<number>();
 
   for (const item of rows) {
-    const key = fourPointMonthlySamplingKey(item.serial);
+    const key = monthlySamplingKey(item.serial, cohortAge);
     if (!seen.has(key)) {
       seen.add(key);
       selected.push(item);
@@ -392,24 +381,39 @@ function samplePeriodRows(
   return selected;
 }
 
-function uniqueDateRows(rows: { row: number; serial: number }[]): { row: number; serial: number }[] {
+function firstRowPerMonthPlusLatest(rows: { row: number; serial: number }[]): { row: number; serial: number }[] {
   const selected: { row: number; serial: number }[] = [];
-  const seen = new Set<number>();
+  const seenMonths = new Set<number>();
+
   for (const item of rows) {
-    if (!seen.has(item.serial)) {
-      seen.add(item.serial);
+    const date = excelSerialToDate(item.serial);
+    const monthKey = date.getUTCFullYear() * 100 + date.getUTCMonth() + 1;
+    if (!seenMonths.has(monthKey)) {
+      seenMonths.add(monthKey);
       selected.push(item);
     }
   }
+
+  const last = rows[rows.length - 1];
+  if (selected.length === 0 || selected[selected.length - 1].serial !== last.serial) {
+    selected.push(last);
+  }
+
   return selected;
 }
 
-function fourPointMonthlySamplingKey(serial: number): number {
+function monthlySamplingKey(serial: number, cohortAge: number): number {
   const date = excelSerialToDate(serial);
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + 1;
   const day = date.getUTCDate();
   const monthKey = year * 100 + month;
+
+  if (cohortAge > 12) {
+    const half = day <= 15 ? 1 : 2;
+    return monthKey * 10 + half;
+  }
+
   const bucket = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
   return monthKey * 10 + bucket;
 }
@@ -479,9 +483,11 @@ function setFinalDataByBlocks(
     }
 
     setValueBlock(ws, targetRow, 0, chunk, 0, 8);
-    setFormulaBlock(ws, targetRow, 8, chunk, 8, 6);
+    setFormulaBlock(ws, targetRow, 8, chunk, 8, 3);
+    setFormulaBlock(ws, targetRow, 11, chunk, 11, 3);
     setValueBlock(ws, targetRow, 14, chunk, 14, 2);
-    setFormulaBlock(ws, targetRow, 16, chunk, 16, 2);
+    setFormulaBlock(ws, targetRow, 16, chunk, 16, 1);
+    setFormulaBlock(ws, targetRow, 17, chunk, 17, 1);
     setValueBlock(ws, targetRow, 18, chunk, 18, 2);
   }
 }
