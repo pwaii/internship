@@ -1,129 +1,58 @@
 let
     Source = #"Index Price",
 
-    PromoteHeaders =
-        if List.Contains(Table.ColumnNames(Source), "Date") then
-            Source
-        else
-            Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+    #"Promote Headers" =
+        Table.PromoteHeaders(
+            Source,
+            [PromoteAllScalars = true]
+        ),
 
-    CleanColumnNames =
+    #"Clean Column Names" =
         Table.TransformColumnNames(
-            PromoteHeaders,
+            #"Promote Headers",
             each Text.Trim(Text.Clean(Text.From(_)))
         ),
 
-    DateColumnName =
-        List.First(
-            List.Select(
-                Table.ColumnNames(CleanColumnNames),
-                each Text.Upper(Text.Trim(_)) = "DATE"
-            )
-        ),
-
-    FixDate = (v as any) as nullable date =>
-        let
-            result =
-                if v is date then
-                    v
-                else if v is datetime then
-                    Date.From(v)
-                else if v is number then
-                    Date.AddDays(#date(1899, 12, 30), Number.RoundDown(v))
-                else
-                    let
-                        t0 = Text.Trim(Text.From(v)),
-                        t1 = Text.Replace(Text.Replace(Text.Replace(t0, "/", "-"), ".", "-"), " ", "-"),
-                        parts = Text.Split(t1, "-"),
-
-                        parsed =
-                            if List.Count(parts) = 3 then
-                                let
-                                    p1 = Number.FromText(parts{0}),
-                                    p2 = Number.FromText(parts{1}),
-                                    y0 = Number.FromText(parts{2}),
-                                    y = if y0 > 2400 then y0 - 543 else y0,
-
-                                    // MM-DD-YYYY rule:
-                                    // 01-02-2020 = 02 Jan 2020
-                                    m = p1,
-                                    d = p2
-                                in
-                                    #date(y, m, d)
-                            else
-                                try Date.FromText(t0, "en-US") otherwise null
-                    in
-                        parsed
-        in
-            try result otherwise null,
-
-    FixDateColumn =
+    #"Changed Date Type" =
         Table.TransformColumns(
-            CleanColumnNames,
+            #"Clean Column Names",
             {
-                {DateColumnName, each FixDate(_), type date}
+                {
+                    "Date",
+                    each Date.From(_),
+                    type date
+                }
             }
         ),
 
-    RenameDate =
-        if DateColumnName = "Date" then
-            FixDateColumn
-        else
-            Table.RenameColumns(FixDateColumn, {{DateColumnName, "Date"}}),
-
-    UnpivotIndexColumns =
+    #"Unpivot Index Columns" =
         Table.UnpivotOtherColumns(
-            RenameDate,
+            #"Changed Date Type",
             {"Date"},
             "IndexCode",
             "Price"
         ),
 
-    CleanIndexCode =
-        Table.TransformColumns(
-            UnpivotIndexColumns,
+    #"Changed Types" =
+        Table.TransformColumnTypes(
+            #"Unpivot Index Columns",
             {
-                {"IndexCode", each Text.Trim(Text.From(_)), type text}
+                {"IndexCode", type text},
+                {"Price", type number}
             }
         ),
 
-    ConvertPrice =
-        Table.TransformColumns(
-            CleanIndexCode,
-            {
-                {
-                    "Price",
-                    each
-                        let
-                            n =
-                                if _ is number then
-                                    _
-                                else
-                                    try Number.FromText(Text.Replace(Text.From(_), ",", "")) otherwise null
-                        in
-                            n,
-                    type number
-                }
-            }
-        ),
-
-    RemoveInvalidRows =
-        Table.SelectRows(
-            ConvertPrice,
-            each [Date] <> null and [IndexCode] <> null and [IndexCode] <> "" and [Price] <> null
-        ),
-
-    AddIndexName =
+    #"Added Index Name" =
         Table.AddColumn(
-            RemoveInvalidRows,
+            #"Changed Types",
             "IndexName",
             each [IndexCode],
             type text
         ),
 
-    ReorderColumns =
+    #"Reordered Columns" =
         Table.SelectColumns(
-            AddIndexName,
+            #"Added Index Name",
             {
                 "IndexName",
                 "IndexCode",
@@ -132,4 +61,4 @@ let
             }
         )
 in
-    ReorderColumns
+    #"Reordered Columns"
