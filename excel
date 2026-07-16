@@ -8,7 +8,7 @@
  * - Index Price: Date + one column per Index Code
  * - FX Rate: Date/Month + USD/THB
  */
-const DATE_TEXT_ORDER = "MDY";
+const DATE_TEXT_ORDER = "DMY";
 
 function main(workbook: ExcelScript.Workbook): string {
   const PRODUCT_SHEET = "Product Master";
