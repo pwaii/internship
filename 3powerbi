@@ -133,8 +133,173 @@ IMPORTANT
       ]
     },
     {
-      "name": "indexSeries",
+      "name": "seriesDateCounts",
       "source": "indexDaily",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "ops": [
+            "count"
+          ],
+          "as": [
+            "DateCount"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": [
+              "DateCount",
+              "SeriesKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "ReferenceRank"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.ReferenceRank === 1"
+        }
+      ]
+    },
+    {
+      "name": "sharedDateGrid",
+      "source": "indexDaily",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "length(data('seriesDateCounts')) > 0 && datum.SeriesKey === data('seriesDateCounts')[0].SeriesKey"
+        },
+        {
+          "type": "aggregate",
+          "groupby": [
+            "DateKey"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "GridNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "indexGridPairs",
+      "source": "indexDaily",
+      "transform": [
+        {
+          "type": "cross",
+          "with": "sharedDateGrid",
+          "as": [
+            "idx",
+            "grid"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.idx.SeriesKey",
+          "as": "SeriesKey"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.idx.SeriesName",
+          "as": "SeriesName"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.grid.DateKey",
+          "as": "GridDateKey"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.idx.DateKey",
+          "as": "SourceDateKey"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.idx.IndexPrice",
+          "as": "IndexPrice"
+        },
+        {
+          "type": "formula",
+          "expr": "abs(datum.idx.DateKey - datum.grid.DateKey)",
+          "as": "GridDistance"
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey",
+            "GridDateKey"
+          ],
+          "sort": {
+            "field": [
+              "GridDistance",
+              "SourceDateKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          },
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "GridRank"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.GridRank === 1"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.GridDateKey",
+          "as": "DateKey"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": [
+              "SeriesKey",
+              "DateKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "indexSeries",
+      "source": "indexGridPairs",
       "transform": [
         {
           "type": "window",
