@@ -28,8 +28,8 @@ IMPORTANT
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "description": "MTL index comparison dashboard with assigned theme, aligned y-axis, 0.5-step labels, and forced 100.0 tick. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
   "background": "#F4F8FB",
-  "width": 1500,
-  "height": 1020,
+  "width": 1050,
+  "height": 900,
   "padding": 0,
   "autosize": {
     "type": "fit",
@@ -441,8 +441,8 @@ IMPORTANT
         "field": "DateKey"
       },
       "range": [
-        115,
-        1410
+        80.5,
+        987
       ],
       "zero": false,
       "nice": false
@@ -458,8 +458,8 @@ IMPORTANT
         ]
       },
       "range": [
-        916,
-        411
+        805.4,
+        371.1
       ],
       "zero": false,
       "nice": false
@@ -486,7 +486,7 @@ IMPORTANT
     {
       "orient": "bottom",
       "scale": "x",
-      "position": 916,
+      "position": 805.4,
       "labels": false,
       "ticks": false,
       "domain": false,
@@ -499,7 +499,7 @@ IMPORTANT
     {
       "orient": "left",
       "scale": "y",
-      "position": 241,
+      "position": 80.5,
       "labelColor": "#111111",
       "labelFontSize": 12,
       "tickColor": "#111111",
@@ -508,6 +508,7 @@ IMPORTANT
       "gridColor": "#E1E7EF",
       "gridOpacity": 1,
       "tickCount": 7,
+      "title": "Normalized Index",
       "titleColor": "#111111",
       "titleFontSize": 12,
       "titlePadding": 36,
@@ -529,7 +530,7 @@ IMPORTANT
             "value": 0
           },
           "x2": {
-            "value": 1500
+            "value": 1050
           },
           "y2": {
             "value": 70
@@ -549,13 +550,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 28
+            "value": 19.6
           },
           "y": {
             "value": 18
           },
           "width": {
-            "value": 36
+            "value": 25.2
           },
           "height": {
             "value": 36
@@ -575,7 +576,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 46
+            "value": 32.2
           },
           "y": {
             "value": 37
@@ -607,7 +608,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 78
+            "value": 54.6
           },
           "y": {
             "value": 37
@@ -636,7 +637,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 225
+            "value": 157.5
           },
           "y": {
             "value": 37
@@ -668,7 +669,7 @@ IMPORTANT
             "value": 70
           },
           "x2": {
-            "value": 1500
+            "value": 1050
           },
           "y2": {
             "value": 126
@@ -688,7 +689,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 48
+            "value": 33.6
           },
           "y": {
             "value": 99
@@ -717,7 +718,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 210
+            "value": 147
           },
           "y": {
             "value": 99
@@ -746,7 +747,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 350
+            "value": 245
           },
           "y": {
             "value": 99
@@ -775,10 +776,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 350
+            "value": 245
           },
           "x2": {
-            "value": 510
+            "value": 357
           },
           "y": {
             "value": 125
@@ -803,10 +804,10 @@ IMPORTANT
             "value": 126
           },
           "x2": {
-            "value": 1500
+            "value": 1050
           },
           "y2": {
-            "value": 1026
+            "value": 900
           },
           "fill": {
             "value": "#F4F8FB"
@@ -819,10 +820,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 20
+            "value": 14
           },
           "y": {
-            "value": 148
+            "value": 144.92
           },
           "text": {
             "value": "Index Comparator"
@@ -844,13 +845,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 20
+            "value": 14
           },
           "y": {
-            "value": 174
+            "value": 167.28
           },
           "text": {
-            "value": "Select multiple IndexCode or IndexName values in Power BI slicers. Y-axis is intentionally not zero-based."
+            "value": ""
           },
           "fill": {
             "value": "#6B7890"
@@ -872,13 +873,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 198
+            "value": 187.92
           },
           "width": {
-            "value": 276
+            "value": 193.2
           },
           "height": {
-            "value": 116
+            "value": 99.76
           },
           "cornerRadius": {
             "value": 8
@@ -901,7 +902,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "20 + (datum.CardNo - 1) * 288"
+            "signal": "14 + (datum.CardNo - 1) * 201.6"
           },
           "stroke": {
             "scale": "color",
@@ -918,7 +919,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 228
+            "value": 213.72
           },
           "fill": {
             "value": "#6B7890"
@@ -932,7 +933,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "38 + (datum.CardNo - 1) * 288"
+            "signal": "26.6 + (datum.CardNo - 1) * 201.6"
           },
           "text": {
             "signal": "datum.SeriesName"
@@ -948,7 +949,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 268
+            "value": 248.12
           },
           "fill": {
             "value": "#172033"
@@ -962,7 +963,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "38 + (datum.CardNo - 1) * 288"
+            "signal": "26.6 + (datum.CardNo - 1) * 201.6"
           },
           "text": {
             "signal": "format(datum.CompareIndex, '.2f')"
@@ -978,7 +979,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 297
+            "value": 273.06
           },
           "fontSize": {
             "value": 13
@@ -989,7 +990,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "38 + (datum.CardNo - 1) * 288"
+            "signal": "26.6 + (datum.CardNo - 1) * 201.6"
           },
           "fill": {
             "signal": "datum.IndexGrowth >= 0 ? '#00D26A' : '#D31145'"
@@ -1005,16 +1006,16 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 20
+            "value": 14
           },
           "y": {
-            "value": 346
+            "value": 315.2
           },
           "x2": {
-            "value": 1450
+            "value": 1015
           },
           "y2": {
-            "value": 976
+            "value": 857
           },
           "cornerRadius": {
             "value": 8
@@ -1036,10 +1037,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 40
+            "value": 28
           },
           "y": {
-            "value": 381
+            "value": 345.3
           },
           "text": {
             "value": "Index Performance Comparison"
@@ -1061,13 +1062,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 40
+            "value": 28
           },
           "y": {
-            "value": 406
+            "value": 366.8
           },
           "text": {
-            "value": "Normalized to 100 at the first visible date for each index"
+            "value": ""
           },
           "fill": {
             "value": "#6B7890"
@@ -1083,14 +1084,14 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 115
+            "value": 80.5
           },
           "x2": {
-            "value": 1410
+            "value": 987
           },
           "y": {
             "scale": "y",
-            "value": 226
+            "value": 212
           },
           "stroke": {
             "value": "#D31145"
@@ -1116,10 +1117,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 115
+            "value": 80.5
           },
           "x2": {
-            "value": 1410
+            "value": 987
           },
           "stroke": {
             "value": "#E1E7EF"
@@ -1142,13 +1143,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 115
+            "value": 80.5
           },
           "y": {
-            "value": 411
+            "value": 371.1
           },
           "y2": {
-            "value": 916
+            "value": 805.4
           },
           "stroke": {
             "value": "#111111"
@@ -1165,13 +1166,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 115
+            "value": 80.5
           },
           "x2": {
-            "value": 1410
+            "value": 987
           },
           "y": {
-            "value": 916
+            "value": 805.4
           },
           "stroke": {
             "value": "#111111"
@@ -1191,10 +1192,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 109
+            "value": 76.3
           },
           "x2": {
-            "value": 115
+            "value": 80.5
           },
           "stroke": {
             "value": "#111111"
@@ -1220,7 +1221,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 103
+            "value": 72.1
           },
           "align": {
             "value": "right"
@@ -1258,10 +1259,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 115
+            "value": 80.5
           },
           "x2": {
-            "value": 1410
+            "value": 987
           },
           "stroke": {
             "value": "#111111"
@@ -1290,7 +1291,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 103
+            "value": 72.1
           },
           "align": {
             "value": "right"
@@ -1325,10 +1326,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 58
+            "value": 40.6
           },
           "y": {
-            "value": 663.5
+            "value": 588.25
           },
           "text": {
             "value": "Index (Base 100)"
@@ -1404,7 +1405,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 941
+            "value": 826.9
           },
           "align": {
             "value": "center"
@@ -1432,10 +1433,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 760
+            "value": 532
           },
           "y": {
-            "value": 966
+            "value": 848.4
           },
           "text": {
             "value": "Date"
@@ -1461,16 +1462,16 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 115
+            "value": 80.5
           },
           "y": {
-            "value": 411
+            "value": 371.1
           },
           "x2": {
-            "value": 1410
+            "value": 987
           },
           "y2": {
-            "value": 916
+            "value": 805.4
           },
           "fill": {
             "value": "#172033"
@@ -1492,10 +1493,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 411
+            "value": 371.1
           },
           "y2": {
-            "value": 916
+            "value": 805.4
           },
           "stroke": {
             "value": "#D31145"
@@ -1559,13 +1560,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 434
+            "value": 390.88
           },
           "width": {
-            "value": 305
+            "value": 213.5
           },
           "height": {
-            "value": 42
+            "value": 36.12
           },
           "cornerRadius": {
             "value": 8
@@ -1579,7 +1580,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.DateKey) > 770 ? scale('x', datum.DateKey) - 227.5 : scale('x', datum.DateKey) + 14"
           }
         }
       }
@@ -1592,7 +1593,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "value": 461
+            "value": 414.1
           },
           "fill": {
             "value": "#172033"
@@ -1606,7 +1607,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 305 : scale('x', datum.DateKey) + 40"
+            "signal": "scale('x', datum.DateKey) > 770 ? scale('x', datum.DateKey) - 213.5 : scale('x', datum.DateKey) + 28"
           },
           "text": {
             "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
@@ -1622,10 +1623,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "width": {
-            "value": 305
+            "value": 213.5
           },
           "height": {
-            "value": 28
+            "value": 24.08
           },
           "fill": {
             "value": "#FFFFFF"
@@ -1636,10 +1637,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.DateKey) > 770 ? scale('x', datum.DateKey) - 227.5 : scale('x', datum.DateKey) + 14"
           },
           "y": {
-            "signal": "478 + datum.HoverRowNo * 154"
+            "signal": "428.72 + datum.HoverRowNo * 132.44"
           }
         }
       }
@@ -1666,10 +1667,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 308 : scale('x', datum.DateKey) + 37"
+            "signal": "scale('x', datum.DateKey) > 770 ? scale('x', datum.DateKey) - 215.6 : scale('x', datum.DateKey) + 25.9"
           },
           "y": {
-            "signal": "496 + datum.HoverRowNo * 154"
+            "signal": "444.2 + datum.HoverRowNo * 132.44"
           },
           "text": {
             "signal": "datum.SeriesName"
@@ -1696,10 +1697,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 292"
+            "signal": "scale('x', datum.DateKey) > 770 ? scale('x', datum.DateKey) - 26.6 : scale('x', datum.DateKey) + 204.4"
           },
           "y": {
-            "signal": "496 + datum.HoverRowNo * 154"
+            "signal": "444.2 + datum.HoverRowNo * 132.44"
           },
           "fill": {
             "scale": "color",
@@ -1707,6 +1708,31 @@ IMPORTANT
           },
           "text": {
             "signal": "format(datum.CompareIndex, '.2f') + ' / ' + format(datum.IndexGrowth, '+.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 39.2
+          },
+          "y": {
+            "value": 841.52
+          },
+          "text": {
+            "value": ""
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 10
+          },
+          "fontStyle": {
+            "value": "italic"
           }
         }
       }
