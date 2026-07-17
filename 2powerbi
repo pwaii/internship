@@ -1882,15 +1882,15 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
   "signals": [
     {
       "name": "dateTickY",
-      "update": "plotBottom + 20"
+      "update": "plotBottom + 26"
     },
     {
       "name": "chartDateY",
-      "update": "plotBottom + 44"
+      "update": "plotBottom + 66"
     },
     {
       "name": "chartNoteY",
-      "update": "plotBottom + 62"
+      "update": "plotBottom + 88"
     },
     {
       "name": "plotBottom",
