@@ -480,7 +480,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.HoverRowNo <= 12"
+          "expr": "datum.HoverRowNo <= 10"
         }
       ]
     },
@@ -490,7 +490,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.HoverRowNo > 12"
+          "expr": "datum.HoverRowNo > 10"
         },
         {
           "type": "aggregate",
@@ -1635,19 +1635,16 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
     },
     {
       "type": "rect",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
-            "value": 318
+            "value": 304
           },
           "width": {
-            "value": 315
+            "value": 430
           },
           "height": {
-            "value": 44
+            "value": 58
           },
           "cornerRadius": {
             "value": 8
@@ -1673,26 +1670,26 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
+          },
+          "opacity": {
+            "signal": "hoverIndex == null ? 0 : 1"
           }
         }
       }
     },
     {
       "type": "text",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
-            "value": 346
+            "value": 340
           },
           "fill": {
             "value": "#172033"
           },
           "fontSize": {
-            "value": 13
+            "value": 18
           },
           "fontWeight": {
             "value": "bold"
@@ -1700,10 +1697,13 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 430 : scale('x', hoverIndex) + 50"
           },
           "text": {
-            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "hoverIndex == null ? '' : 'Date: ' + timeFormat(hoverIndex, '%d %b %Y')"
+          },
+          "opacity": {
+            "signal": "hoverIndex == null ? 0 : 1"
           }
         }
       }
@@ -1716,10 +1716,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "encode": {
         "enter": {
           "width": {
-            "value": 315
+            "value": 430
           },
           "height": {
-            "value": 28
+            "value": 40
           },
           "fill": {
             "value": "#FFFFFF"
@@ -1730,10 +1730,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
           },
           "y": {
-            "signal": "366 + datum.HoverRowNo * 28"
+            "signal": "372 + datum.HoverRowNo * 40"
           }
         }
       }
@@ -1749,21 +1749,21 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "#172033"
           },
           "fontSize": {
-            "value": 11
+            "value": 15
           },
           "fontWeight": {
             "value": "bold"
           },
           "limit": {
-            "value": 190
+            "value": 275
           }
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : scale('x', hoverIndex) + 47"
           },
           "y": {
-            "signal": "384 + datum.HoverRowNo * 28"
+            "signal": "397 + datum.HoverRowNo * 40"
           },
           "text": {
             "signal": "datum.ProductName"
@@ -1782,7 +1782,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "right"
           },
           "fontSize": {
-            "value": 11
+            "value": 15
           },
           "fontWeight": {
             "value": "bold"
@@ -1790,10 +1790,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 45 : scale('x', hoverIndex) + 405"
           },
           "y": {
-            "signal": "384 + datum.HoverRowNo * 28"
+            "signal": "397 + datum.HoverRowNo * 40"
           },
           "fill": {
             "scale": "color",
@@ -1816,7 +1816,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 11
+            "value": 14
           },
           "fontStyle": {
             "value": "italic"
@@ -1824,10 +1824,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "length(data('hoverDate')) && scale('x', data('hoverDate')[0].DateKey) > 1080 ? scale('x', data('hoverDate')[0].DateKey) - 318 : length(data('hoverDate')) ? scale('x', data('hoverDate')[0].DateKey) + 37 : 0"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : hoverIndex != null ? scale('x', hoverIndex) + 47 : -1000"
           },
           "y": {
-            "value": 740
+            "value": 875
           },
           "text": {
             "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others' : ''"
@@ -1909,12 +1909,4 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "events": {
-            "type": "mouseout",
-            "markname": "hoverArea"
-          },
-          "update": "null"
-        }
-      ]
-    }
-  ]
-}
+            "type
