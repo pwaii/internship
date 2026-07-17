@@ -1,0 +1,1908 @@
+POWER BI DENEB - MTL MULTI-PRODUCT COMPARISON TIME-SERIES HOVER ADAPTIVE Y-AXIS
+
+This is for the next report page: product comparison.
+It supports more than 2 products, uses the same DateKey time-series method as the working product viewer page, adds a hover line with values, and fits the y-axis to selected products.
+
+DATA SOURCE
+Use the Excel-generated Final Data sheet/table.
+
+ADD THESE FIELDS TO DENEB VALUES
+- Company
+- ProductName
+- IndexName
+- IndexCode
+- PR
+- Principal
+- ProductReturn
+- ProductValue
+- Volatility
+- Formula
+- CohortNo
+- CohortStartDate
+- CohortEndDate
+- IndexBaseValue
+- Date
+- Price
+- FXRate
+- FXBaseRate
+- FXGrowth
+
+SETUP
+1. Add a new Deneb visual on the comparison page.
+2. Add all fields above from Final Data.
+3. Use raw Date, not Date hierarchy.
+4. Set numeric fields to Don't summarize.
+5. Choose Create new specification > Vega > Empty.
+6. Paste only the JSON below.
+
+SLICERS RECOMMENDED
+- ProductName: allow multi-select.
+- CohortNo: single select or filter to the cohort you want to compare; selected cards display cohort and start date.
+- Company: optional.
+- Date: optional Between slicer.
+
+ProductReturn drives the product comparison line. If Final Data contains dates after CohortEndDate, page 2 continues to the latest available Final Data date.
+Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at CohortEndDate, Power BI hides later calculated rows before Deneb receives them.
+The graph displays exactly the rows generated in Final Data, so cohort sampling is controlled by the Excel script: newest 6 daily, older than 6 four points/month + latest, older than 12 two points/month + latest, older than 30 one point/month + latest.
+
+================ PASTE JSON BELOW ================
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "MTL product comparison dashboard with hover line and fitted 0.5-step y-axis. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
+  "background": "#F4F8FB",
+  "width": 1500,
+  "height": 900,
+  "padding": 0,
+  "autosize": {
+    "type": "fit",
+    "contains": "padding",
+    "resize": true
+  },
+  "data": [
+    {
+      "name": "dataset"
+    },
+    {
+      "name": "chartData",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.Price)",
+          "as": "NumericPrice"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.IndexBaseValue)",
+          "as": "NumericBase"
+        },
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.PR) > 1 ? toNumber(datum.PR) / 100 : toNumber(datum.PR)",
+          "as": "NumericPR"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(toNumber(datum.FloorRate)) ? (toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)) : 0",
+          "as": "NumericFloor"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(toNumber(datum.Volatility)) ? (toNumber(datum.Volatility) > 1 ? toNumber(datum.Volatility) / 100 : toNumber(datum.Volatility)) : (isFinite(toNumber(datum.CapRate)) ? (toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)) : 1)",
+          "as": "NumericVolatility"
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
+          "as": "DateKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortStartDate)) ? (toNumber(datum.CohortStartDate) > 1000000000 ? toNumber(datum.CohortStartDate) : (toNumber(datum.CohortStartDate) - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
+          "as": "CohortStartKey"
+        },
+        {
+          "type": "filter",
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.NumericPrice / datum.NumericBase * 100",
+          "as": "DisplayIndex"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DisplayIndex / 100 - 1",
+          "as": "IndexReturnCalc"
+        },
+        {
+          "type": "formula",
+          "expr": "upper(toString(datum.Formula || datum.FormulaType || 'PR_ONLY'))",
+          "as": "FormulaKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
+          "as": "ProductReturnCalc"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.ProductReturnCalc) ? 100 * (1 + datum.ProductReturnCalc) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : null",
+          "as": "DisplayProduct"
+        },
+        {
+          "type": "filter",
+          "expr": "isFinite(datum.ProductReturnCalc) && isFinite(datum.DisplayProduct)"
+        },
+        {
+          "type": "formula",
+          "expr": "toString(datum.ProductName) + ' | C' + toString(datum.CohortNo)",
+          "as": "SeriesKey"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": [
+              "SeriesKey",
+              "DateKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          }
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          },
+          "ops": [
+            "row_number"
+          ],
+          "fields": [
+            null
+          ],
+          "as": [
+            "RowIndex"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.DisplayProduct",
+          "as": "DisplayProductNormalized"
+        }
+      ]
+    },
+    {
+      "name": "productYDomain",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "min",
+            "max"
+          ],
+          "fields": [
+            "DisplayProductNormalized",
+            "DisplayProductNormalized"
+          ],
+          "as": [
+            "MinY",
+            "MaxY"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "max(1, datum.MaxY - datum.MinY)",
+          "as": "Spread"
+        },
+        {
+          "type": "formula",
+          "expr": "floor((datum.MinY - max(0.5, datum.Spread * 0.12)) * 2) / 2",
+          "as": "DomainMin"
+        },
+        {
+          "type": "formula",
+          "expr": "ceil((datum.MaxY + max(0.5, datum.Spread * 0.12)) * 2) / 2",
+          "as": "DomainMax"
+        }
+      ]
+    },
+    {
+      "name": "rowIndexRange",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "max"
+          ],
+          "fields": [
+            "RowIndex"
+          ],
+          "as": [
+            "MaxRowIndex"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hundredTick",
+      "source": "productYDomain",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.DomainMin <= 100 && datum.DomainMax >= 100"
+        },
+        {
+          "type": "formula",
+          "expr": "100",
+          "as": "Value"
+        },
+        {
+          "type": "formula",
+          "expr": "'100'",
+          "as": "Label"
+        }
+      ]
+    },
+    {
+      "name": "latestByProduct",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "collect",
+          "sort": {
+            "field": [
+              "SeriesKey",
+              "DateKey"
+            ],
+            "order": [
+              "ascending",
+              "descending"
+            ]
+          }
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "DateKey",
+            "order": "descending"
+          },
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "LatestRank"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.LatestRank === 1"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "SeriesKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "CardNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "visibleCards",
+      "source": "latestByProduct",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.CardNo <= 12"
+        }
+      ]
+    },
+    {
+      "name": "hiddenCards",
+      "source": "latestByProduct",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.CardNo > 12"
+        },
+        {
+          "type": "aggregate",
+          "ops": [
+            "count"
+          ],
+          "as": [
+            "HiddenCount"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "yTickData",
+      "source": "productYDomain",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "datum.DomainMax - datum.DomainMin",
+          "as": "AxisSpan"
+        },
+        {
+          "type": "formula",
+          "expr": "floor(datum.AxisSpan / 0.5) + 1",
+          "as": "HalfStepCount"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.HalfStepCount > 15 ? 1 : 0.5",
+          "as": "TickStep"
+        },
+        {
+          "type": "formula",
+          "expr": "ceil(datum.DomainMin / datum.TickStep) * datum.TickStep",
+          "as": "FirstTick"
+        },
+        {
+          "type": "formula",
+          "expr": "sequence(datum.FirstTick, datum.DomainMax + datum.TickStep * 0.5, datum.TickStep)",
+          "as": "TickArray"
+        },
+        {
+          "type": "flatten",
+          "fields": [
+            "TickArray"
+          ],
+          "as": [
+            "Value"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.Value >= datum.DomainMin && datum.Value <= datum.DomainMax"
+        },
+        {
+          "type": "formula",
+          "expr": "abs(datum.Value - 100) < 0.0001 ? '0%' : datum.TickStep >= 1 ? format((datum.Value - 100) / 100, '+.0%') : format((datum.Value - 100) / 100, '+.1%')",
+          "as": "Label"
+        }
+      ]
+    },
+    {
+      "name": "dateTickSource",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "length(data('latestByProduct')) > 0 && datum.SeriesKey === data('latestByProduct')[0].SeriesKey"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "TickRowNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dateTicks",
+      "source": "dateTickSource",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTickSource')) || (datum.TickRowNo - 1) % max(1, ceil(length(data('dateTickSource')) / 4)) === 0"
+        }
+      ]
+    },
+    {
+      "name": "hoverAnchor",
+      "source": "chartData",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "hoverIndex == null ? null : abs(datum.DateKey - hoverIndex)",
+          "as": "HoverDistance"
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "HoverDistance",
+            "order": "ascending"
+          },
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "HoverRank"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "HoverDistance",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "filter",
+          "expr": "hoverIndex != null && datum.HoverRank === 1"
+        }
+      ]
+    },
+    {
+      "name": "hoverRows",
+      "source": "hoverAnchor",
+      "transform": [
+        {
+          "type": "collect",
+          "sort": {
+            "field": "SeriesKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "HoverRowNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hoverRowsVisible",
+      "source": "hoverRows",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.HoverRowNo <= 12"
+        }
+      ]
+    },
+    {
+      "name": "hoverRowsHidden",
+      "source": "hoverRows",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.HoverRowNo > 12"
+        },
+        {
+          "type": "aggregate",
+          "ops": [
+            "count"
+          ],
+          "as": [
+            "HiddenCount"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hoverDate",
+      "source": "hoverRows",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.HoverRowNo === 1"
+        }
+      ]
+    }
+  ],
+  "scales": [
+    {
+      "name": "x",
+      "type": "linear",
+      "domain": {
+        "data": "chartData",
+        "field": "DateKey"
+      },
+      "range": [
+        190,
+        1360
+      ],
+      "nice": true,
+      "zero": false
+    },
+    {
+      "name": "y",
+      "type": "linear",
+      "domain": {
+        "data": "productYDomain",
+        "fields": [
+          "DomainMin",
+          "DomainMax"
+        ]
+      },
+      "range": [
+        {
+          "signal": "plotBottom"
+        },
+        {
+          "signal": "plotTop"
+        }
+      ],
+      "zero": false,
+      "nice": false
+    },
+    {
+      "name": "color",
+      "type": "ordinal",
+      "domain": {
+        "data": "chartData",
+        "field": "SeriesKey"
+      },
+      "range": [
+        "#59C7F2",
+        "#D31145",
+        "#47DDB1",
+        "#7B61FF",
+        "#FFD166",
+        "#FF9F1C",
+        "#2EC4B6",
+        "#9B5DE5"
+      ]
+    }
+  ],
+  "axes": [
+    {
+      "orient": "bottom",
+      "scale": "x",
+      "position": 780,
+      "labels": false,
+      "ticks": false,
+      "domain": false
+    },
+    {
+      "orient": "left",
+      "scale": "y",
+      "position": 190,
+      "labels": false,
+      "ticks": false,
+      "domain": false
+    }
+  ],
+  "marks": [
+    {
+      "name": "pageBackground",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 900
+          },
+          "fill": {
+            "value": "#F6F8FB"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderTop",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 70
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderLogo",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 28
+          },
+          "y": {
+            "value": 18
+          },
+          "width": {
+            "value": 44
+          },
+          "height": {
+            "value": 36
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#D31145"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderLogoText",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 50
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "AIA"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 18
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderTitle",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 80
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "OneView"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 18
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderByline",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 170
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "by G.8 Intern"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 13
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNav",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 70
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 126
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNavProduct",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 48
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Product Viewer"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNavComparator",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 210
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Comparator"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderNavIndex",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 350
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Index Dashboard"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
+          }
+        }
+      }
+    },
+    {
+      "name": "sharedHeaderActiveRule",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 210
+          },
+          "x2": {
+            "value": 330
+          },
+          "y": {
+            "value": 125
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 3
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "width": {
+            "value": 330
+          },
+          "height": {
+            "value": 74
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 1.4
+          },
+          "shadowColor": {
+            "value": "#D8E1EA"
+          },
+          "shadowBlur": {
+            "value": 6
+          },
+          "shadowOffsetY": {
+            "value": 3
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "56 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "y": {
+            "signal": "220 + floor((datum.CardNo - 1) / 4) * 84"
+          },
+          "stroke": {
+            "scale": "color",
+            "field": "SeriesKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "limit": {
+            "value": 280
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "y": {
+            "signal": "242 + floor((datum.CardNo - 1) / 4) * 84"
+          },
+          "text": {
+            "signal": "datum.ProductName"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 9.5
+          },
+          "limit": {
+            "value": 295
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "y": {
+            "signal": "266 + floor((datum.CardNo - 1) / 4) * 84"
+          },
+          "text": {
+            "signal": "'Index: ' + datum.IndexCode + '   PR: ' + format(datum.NumericPR, '.0%') + '   Volatility: ' + format(datum.NumericVolatility, '.0%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "fontSize": {
+            "value": 10.5
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "limit": {
+            "value": 295
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "y": {
+            "signal": "289 + floor((datum.CardNo - 1) / 4) * 84"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          },
+          "text": {
+            "signal": "'Growth: ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-') + '   Latest: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hiddenCards"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 1288
+          },
+          "y": {
+            "value": 452
+          },
+          "align": {
+            "value": "right"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontStyle": {
+            "value": "italic"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others selected' : ''"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 56
+          },
+          "y": {
+            "signal": "chartPanelY"
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 878
+          },
+          "cornerRadius": {
+            "value": 8
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          },
+          "strokeWidth": {
+            "value": 1.1
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "y": {
+            "signal": "chartTitleY"
+          },
+          "text": {
+            "value": "Product Comparison"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "y": {
+            "signal": "plotTop"
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.4
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "x2": {
+            "value": 1360
+          },
+          "y": {
+            "signal": "plotBottom"
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.4
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "from": {
+        "data": "yTickData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "x2": {
+            "value": 1360
+          },
+          "stroke": {
+            "value": "#E1E7EF"
+          },
+          "strokeWidth": {
+            "value": 1
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "yTickData"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 176
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          },
+          "text": {
+            "field": "Label"
+          }
+        }
+      }
+    },
+    {
+      "name": "forcedHundredGrid",
+      "type": "rule",
+      "from": {
+        "data": "hundredTick"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "x2": {
+            "value": 1360
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.35
+          },
+          "strokeOpacity": {
+            "value": 0.7
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 132
+          },
+          "y": {
+            "signal": "(plotTop + plotBottom) / 2"
+          },
+          "text": {
+            "value": "Growth"
+          },
+          "angle": {
+            "value": -90
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 775
+          },
+          "y": {
+            "signal": "chartDateY"
+          },
+          "text": {
+            "value": "Date"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "group",
+      "from": {
+        "facet": {
+          "name": "series",
+          "data": "chartData",
+          "groupby": "SeriesKey"
+        }
+      },
+      "marks": [
+        {
+          "type": "line",
+          "from": {
+            "data": "series"
+          },
+          "encode": {
+            "enter": {
+              "interpolate": {
+                "value": "linear"
+              },
+              "strokeWidth": {
+                "value": 3
+              }
+            },
+            "update": {
+              "x": {
+                "scale": "x",
+                "field": "DateKey"
+              },
+              "y": {
+                "scale": "y",
+                "field": "DisplayProductNormalized"
+              },
+              "stroke": {
+                "scale": "color",
+                "field": "SeriesKey"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "latestByProduct"
+      },
+      "encode": {
+        "enter": {
+          "size": {
+            "value": 70
+          },
+          "stroke": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 2
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProductNormalized"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "latestByProduct"
+      },
+      "encode": {
+        "enter": {
+          "dx": {
+            "value": 8
+          },
+          "dy": {
+            "value": -8
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProductNormalized"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          },
+          "text": {
+            "signal": "format(datum.DisplayProductNormalized / 100 - 1, '+.1%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 78
+          },
+          "y": {
+            "signal": "chartNoteY"
+          },
+          "text": {
+            "value": "Remark: FX rate references Bank of Thailand (BoT)."
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 9
+          },
+          "fontStyle": {
+            "value": "italic"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "dateTicks"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "signal": "dateTickY"
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "top"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 8
+          },
+          "angle": {
+            "value": -25
+          },
+          "limit": {
+            "value": 95
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          },
+          "text": {
+            "signal": "timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "name": "hoverArea",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "y": {
+            "signal": "plotTop"
+          },
+          "x2": {
+            "value": 1360
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fillOpacity": {
+            "value": 0.001
+          },
+          "cursor": {
+            "value": "crosshair"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          },
+          "strokeOpacity": {
+            "value": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "hoverBand",
+      "type": "rect",
+      "from": {
+        "data": "dateTickSource"
+      },
+      "encode": {
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) - 24"
+          },
+          "x2": {
+            "signal": "scale('x', datum.DateKey) + 24"
+          },
+          "y": {
+            "signal": "plotTop"
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fillOpacity": {
+            "value": 0.01
+          },
+          "cursor": {
+            "value": "crosshair"
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "from": {
+        "data": "hoverDate"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "signal": "plotTop"
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 2
+          },
+          "strokeDash": {
+            "value": [
+              4,
+              4
+            ]
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "hoverRows"
+      },
+      "encode": {
+        "enter": {
+          "size": {
+            "value": 85
+          },
+          "stroke": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 2.5
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          },
+          "y": {
+            "scale": "y",
+            "field": "DisplayProductNormalized"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "hoverDate"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 318
+          },
+          "width": {
+            "value": 315
+          },
+          "height": {
+            "value": 44
+          },
+          "cornerRadius": {
+            "value": 8
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          },
+          "strokeWidth": {
+            "value": 1.2
+          },
+          "shadowColor": {
+            "value": "#D8E1EA"
+          },
+          "shadowBlur": {
+            "value": 7
+          },
+          "shadowOffsetY": {
+            "value": 3
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverDate"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "value": 346
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
+          },
+          "text": {
+            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "hoverRowsVisible"
+      },
+      "encode": {
+        "enter": {
+          "width": {
+            "value": 315
+          },
+          "height": {
+            "value": 28
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#EEF2F7"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+          },
+          "y": {
+            "signal": "366 + datum.HoverRowNo * 28"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverRowsVisible"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "limit": {
+            "value": 190
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
+          },
+          "y": {
+            "signal": "384 + datum.HoverRowNo * 28"
+          },
+          "text": {
+            "signal": "datum.ProductName"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverRowsVisible"
+      },
+      "encode": {
+        "enter": {
+          "align": {
+            "value": "right"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
+          },
+          "y": {
+            "signal": "384 + datum.HoverRowNo * 28"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          },
+          "text": {
+            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverRowsHidden"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontStyle": {
+            "value": "italic"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "length(data('hoverDate')) && scale('x', data('hoverDate')[0].DateKey) > 1080 ? scale('x', data('hoverDate')[0].DateKey) - 318 : length(data('hoverDate')) ? scale('x', data('hoverDate')[0].DateKey) + 37 : 0"
+          },
+          "y": {
+            "value": 740
+          },
+          "text": {
+            "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others' : ''"
+          }
+        }
+      }
+    }
+  ],
+  "signals": [
+    {
+      "name": "dateTickY",
+      "update": "plotBottom + 20"
+    },
+    {
+      "name": "chartDateY",
+      "update": "plotBottom + 44"
+    },
+    {
+      "name": "chartNoteY",
+      "update": "plotBottom + 62"
+    },
+    {
+      "name": "plotBottom",
+      "update": "780"
+    },
+    {
+      "name": "plotTop",
+      "update": "chartPanelY + 90"
+    },
+    {
+      "name": "chartTitleY",
+      "update": "chartPanelY + 30"
+    },
+    {
+      "name": "chartPanelY",
+      "update": "220 + cardRows * 84 + 24"
+    },
+    {
+      "name": "cardRows",
+      "update": "max(1, ceil(length(data('visibleCards')) / 4))"
+    },
+    {
+      "name": "hoverIndex",
+      "value": null,
+      "on": [
+        {
+          "events": {
+            "type": "mousemove",
+            "markname": "hoverBand"
+          },
+          "update": "datum.DateKey"
+        },
+        {
+          "events": {
+            "type": "mousemove",
+            "markname": "hoverArea"
+          },
+          "update": "invert('x', clamp(x(), 190, 1360))"
+        },
+        {
+          "events": {
+            "type": "mouseout",
+            "markname": "hoverArea"
+          },
+          "update": "null"
+        }
+      ]
+    }
+  ]
+}
