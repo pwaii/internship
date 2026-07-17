@@ -77,7 +77,7 @@ IMPORTANT
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
         },
         {
@@ -270,6 +270,9 @@ IMPORTANT
           "ops": [
             "count"
           ],
+          "fields": [
+            null
+          ],
           "as": [
             "DateCount"
           ]
@@ -394,16 +397,16 @@ IMPORTANT
             "TickArray"
           ],
           "as": [
-            "Value"
+            "TickValue"
           ]
         },
         {
           "type": "filter",
-          "expr": "datum.Value >= datum.DomainMin && datum.Value <= datum.DomainMax"
+          "expr": "datum.TickValue >= datum.DomainMin && datum.TickValue <= datum.DomainMax"
         },
         {
           "type": "formula",
-          "expr": "datum.TickStep >= 1 ? format(datum.Value, '.0f') : format(datum.Value, '.1f')",
+          "expr": "datum.TickStep >= 1 ? format(datum.TickValue, '.0f') : format(datum.TickValue, '.1f')",
           "as": "Label"
         }
       ]
@@ -442,7 +445,7 @@ IMPORTANT
         1410
       ],
       "zero": false,
-      "nice": true
+      "nice": false
     },
     {
       "name": "y",
