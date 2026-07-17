@@ -1446,9 +1446,6 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       },
       "encode": {
         "enter": {
-          "dx": {
-            "value": 8
-          },
           "dy": {
             "value": -8
           },
@@ -1461,8 +1458,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "scale": "x",
-            "field": "DateKey"
+            "signal": "scale('x', datum.DateKey) > 1320 ? scale('x', datum.DateKey) - 8 : scale('x', datum.DateKey) + 8"
+          },
+          "align": {
+            "signal": "scale('x', datum.DateKey) > 1320 ? 'right' : 'left'"
           },
           "y": {
             "scale": "y",
@@ -1564,7 +1563,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#FFFFFF"
           },
           "fillOpacity": {
-            "value": 0.001
+            "value": 0
           },
           "cursor": {
             "value": "crosshair"
@@ -1574,38 +1573,6 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           },
           "strokeOpacity": {
             "value": 0
-          }
-        }
-      }
-    },
-    {
-      "name": "hoverBand",
-      "type": "rect",
-      "from": {
-        "data": "dateTickSource"
-      },
-      "encode": {
-        "update": {
-          "x": {
-            "signal": "scale('x', datum.DateKey) - 24"
-          },
-          "x2": {
-            "signal": "scale('x', datum.DateKey) + 24"
-          },
-          "y": {
-            "signal": "plotTop"
-          },
-          "y2": {
-            "signal": "plotBottom"
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fillOpacity": {
-            "value": 0
-          },
-          "cursor": {
-            "value": "crosshair"
           }
         }
       }
@@ -1916,13 +1883,6 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "name": "hoverIndex",
       "value": null,
       "on": [
-        {
-          "events": {
-            "type": "mousemove",
-            "markname": "hoverBand"
-          },
-          "update": "datum.DateKey"
-        },
         {
           "events": {
             "type": "mousemove",
