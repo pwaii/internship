@@ -1,1813 +1,613 @@
-POWER BI DENEB - MTL PAGE 2 PRODUCT COMPARISON FINAL COMPLETE
+/**
+ * Excel Office Script
+ * Fast formula-based Final Data builder.
+ *
+ * Input sheets:
+ * - Product Master: Company, Product Name, Index, Index Code, PR, Formula, Volatility
+ * - Cohort Schedule: Product Name, Cohort No., Cohort Start Date, Cohort End Date
+ * - Index Price: Date + one column per Index Code
+ * - FX Rate: Date/Month + USD/THB
+ */
+const DATE_TEXT_ORDER = "DMY";
+const FINAL_DATA_BUILD_VERSION = "INDEX_TO_LATEST_V2";
 
-This is for the next report page: product comparison.
-It supports more than 2 products, uses the same DateKey time-series method as the working product viewer page, adds a hover line with values, and fits the y-axis to selected products.
+function main(workbook: ExcelScript.Workbook): string {
+  const PRODUCT_SHEET = "Product Master";
+  const COHORT_SHEET = "Cohort Schedule";
+  const INDEX_SHEET = "Index Price";
+  const FX_SHEET = "FX Rate";
+  const FINAL_SHEET = "Final Data";
+  const MAX_ROWS_PER_RUN = 1000;
+  const WRITE_CHUNK_ROWS = 20;
+  const EXCEL_MAX_ROWS = 1048576;
 
-DATA SOURCE
-Use the same final query/table used by the product viewer page, for example:
-MTL_Deneb_Data
+  const productWs = mustGetSheet(workbook, PRODUCT_SHEET);
+  const cohortWs = mustGetSheet(workbook, COHORT_SHEET);
+  const indexWs = mustGetSheet(workbook, INDEX_SHEET);
+  const fxWs = mustGetSheet(workbook, FX_SHEET);
 
-ADD THESE FIELDS TO DENEB VALUES
-- Company
-- ProductName
-- IndexName
-- IndexCode
-- PR
-- FormulaType
-- Principal
-- FloorRate
-- CapRate
-- CohortNo
-- CohortStartDate
-- CohortEndDate
-- ObservationEndDate
-- IndexBaseValue
-- Date
-- Price
-- FXPair
-- FXRate
+  const productData = getUsedValues(productWs);
+  const cohortData = getUsedValues(cohortWs);
+  const indexData = getUsedValues(indexWs);
+  const fxData = getUsedValues(fxWs);
 
-SETUP
-1. Add a new Deneb visual on the comparison page.
-2. Add all fields above from the same table/query.
-3. Use raw Date, not Date hierarchy.
-4. Set numeric fields to Don't summarize.
-5. Choose Create new specification > Vega > Empty.
-6. Paste only the JSON below.
+  const productHeaders = headerMap(productData[0]);
+  const cohortHeaders = headerMap(cohortData[0]);
+  const indexHeaders = headerMap(indexData[0]);
+  const fxHeaders = headerMap(fxData[0]);
 
-SLICERS RECOMMENDED
-- ProductName: allow multi-select.
-- CohortNo: single select or filter to the cohort you want to compare; selected cards display cohort and start date.
-- Company: optional.
-- Date: optional Between slicer.
+  const pCompany = firstHeader(productHeaders, ["COMPANY", "COMPANYNAME"]);
+  const pProduct = requiredHeader(productHeaders, ["PRODUCTNAME"], PRODUCT_SHEET);
+  const pIndex = requiredHeader(productHeaders, ["INDEX"], PRODUCT_SHEET);
+  const pIndexCode = requiredHeader(productHeaders, ["INDEXCODE"], PRODUCT_SHEET);
+  const pPR = requiredHeader(productHeaders, ["PR"], PRODUCT_SHEET);
+  const pFormula = requiredHeader(productHeaders, ["FORMULA"], PRODUCT_SHEET);
+  const pVolatility = firstHeader(productHeaders, ["VOLATILITY"]);
 
-================ PASTE JSON BELOW ================
-{
-  "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "description": "MTL product comparison dashboard with hover line and fitted 0.5-step y-axis. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
-  "background": "#F4F8FB",
-  "width": 1500,
-  "height": 900,
-  "padding": 0,
-  "autosize": {
-    "type": "fit",
-    "contains": "padding",
-    "resize": true
-  },
-  "data": [
-    {
-      "name": "dataset"
-    },
-    {
-      "name": "chartData",
-      "source": "dataset",
-      "transform": [
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.Price)",
-          "as": "NumericPrice"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.IndexBaseValue)",
-          "as": "NumericBase"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.PR) > 1 ? toNumber(datum.PR) / 100 : toNumber(datum.PR)",
-          "as": "NumericPR"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)",
-          "as": "NumericFloor"
-        },
-        {
-          "type": "formula",
-          "expr": "toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)",
-          "as": "NumericVolatility"
-        },
-        {
-          "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
-          "as": "DateKey"
-        },
-        {
-          "type": "formula",
-          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
-          "as": "CohortStartKey"
-        },
-        {
-          "type": "filter",
-          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey) && (!isFinite(datum.CohortStartKey) || datum.DateKey >= datum.CohortStartKey)"
-        },
-        {
-          "type": "formula",
-          "expr": "datum.NumericPrice / datum.NumericBase * 100",
-          "as": "DisplayIndex"
-        },
-        {
-          "type": "formula",
-          "expr": "datum.DisplayIndex / 100 - 1",
-          "as": "IndexReturnCalc"
-        },
-        {
-          "type": "formula",
-          "expr": "upper(toString(datum.FormulaType || 'PR_ONLY'))",
-          "as": "FormulaKey"
-        },
-        {
-          "type": "formula",
-          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
-          "as": "ProductReturnCalc"
-        },
-        {
-          "type": "formula",
-          "expr": "100 * (1 + datum.ProductReturnCalc)",
-          "as": "DisplayProduct"
-        },
-        {
-          "type": "formula",
-          "expr": "toString(datum.ProductName) + ' | C' + toString(datum.CohortNo)",
-          "as": "SeriesKey"
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": [
-              "SeriesKey",
-              "DateKey"
-            ],
-            "order": [
-              "ascending",
-              "ascending"
-            ]
-          }
+  const cProduct = requiredHeader(cohortHeaders, ["PRODUCTNAME"], COHORT_SHEET);
+  const cCohortNo = requiredHeader(cohortHeaders, ["COHORTNO"], COHORT_SHEET);
+  const cStart = requiredHeader(cohortHeaders, ["COHORTSTARTDATE"], COHORT_SHEET);
+  const cEnd = requiredHeader(cohortHeaders, ["COHORTENDDATE"], COHORT_SHEET);
+
+  const iDate = requiredHeader(indexHeaders, ["DATE"], INDEX_SHEET);
+  const fDate = firstHeader(fxHeaders, ["DATE", "MONTH"]) ?? 0;
+  const fRate = firstHeader(fxHeaders, ["USDTHB", "USDTH"]) ?? 1;
+
+  const finalWs = workbook.getWorksheet(FINAL_SHEET);
+  if (!finalWs) {
+    throw new Error(`Missing sheet: ${FINAL_SHEET}. Please create a blank sheet named "${FINAL_SHEET}" before running this script.`);
+  }
+
+  const headers = [
+    "Company",
+    "ProductName",
+    "IndexName",
+    "IndexCode",
+    "CohortNo",
+    "CohortStartDate",
+    "CohortEndDate",
+    "Date",
+    "Price",
+    "IndexBaseValue",
+    "IndexGrowth",
+    "FXRate",
+    "FXBaseRate",
+    "FXGrowth",
+    "PR",
+    "Principal",
+    "ProductReturn",
+    "ProductValue",
+    "Volatility",
+    "Formula"
+  ];
+
+  const statusValue = cleanKey(finalWs.getRange("U4").getValue());
+  const storedBuildVersion = cleanKey(finalWs.getRange("U5").getValue());
+  const resetRequested = statusValue === "RESET" || storedBuildVersion !== cleanKey(FINAL_DATA_BUILD_VERSION);
+  if ((statusValue === "DONE" || statusValue === "COMPLETE") && !resetRequested) {
+    return "Final Data is already complete. Type RESET in Final Data!U4 if you want to rebuild from scratch.";
+  }
+
+  const savedRowCount = toNumber(finalWs.getRange("U1").getValue()) ?? 0;
+  const savedCohortRow = toNumber(finalWs.getRange("U2").getValue());
+  const savedDateOffset = toNumber(finalWs.getRange("U3").getValue()) ?? 0;
+  const isResume = !resetRequested && savedRowCount > 0 && savedCohortRow !== null && savedCohortRow >= 1;
+
+  let existingRows = isResume ? Math.floor(savedRowCount) : 0;
+  let startCohortRow = isResume ? Math.floor(savedCohortRow) : 1;
+  let startDateOffset = isResume ? Math.floor(savedDateOffset) : 0;
+
+  if (!isResume) {
+    clearFinalDataArea(finalWs);
+    finalWs.getRangeByIndexes(0, 0, 1, headers.length).setValues([headers]);
+    finalWs.getRange("U1:U5").clear(ExcelScript.ClearApplyTo.contents);
+  }
+
+  const productRows = buildProductRows(productData, pProduct);
+  const maxCohortNoByProduct = buildMaxCohortNoByProduct(cohortData, cProduct, cCohortNo);
+  const indexHeaderCodes = indexData[0].map(v => cleanIndexCode(v));
+  const indexDateRows = buildDateRows(indexData, iDate);
+  const fxDateRows = buildDateRows(fxData, fDate);
+
+  let rows: (string | number | boolean)[][] = [];
+  let writtenThisRun = 0;
+  let nextCohortRow: number | string = "DONE";
+  let nextDateOffset = 0;
+  let reachedLimit = false;
+
+  for (let c = startCohortRow; c < cohortData.length; c++) {
+    const productName = text(cohortData[c][cProduct]);
+    if (!productName) continue;
+
+    const productRow = productRows.get(cleanKey(productName));
+    if (productRow === undefined) continue;
+
+    const startSerial = toExcelSerial(cohortData[c][cStart]);
+    const endSerial = toExcelSerial(cohortData[c][cEnd]);
+    if (startSerial === null || endSerial === null || endSerial < startSerial) continue;
+
+    const indexCode = cleanIndexCode(productData[productRow][pIndexCode]);
+    const indexCol = indexHeaderCodes.findIndex(code => code === indexCode);
+    if (indexCol < 0) continue;
+
+    const periodRowsAll = getDateRowsFromStart(indexDateRows, startSerial).filter(d => {
+      const price = toNumber(indexData[d.row][indexCol]);
+      return price !== null;
+    });
+    const cohortNoNumber = toNumber(cohortData[c][cCohortNo]);
+    const maxCohortNo = maxCohortNoByProduct.get(cleanKey(productName));
+    const cohortAge = cohortNoNumber !== null && maxCohortNo !== undefined ? maxCohortNo - cohortNoNumber : cohortData.length - c - 1;
+    const periodRows = samplePeriodRows(periodRowsAll, cohortAge);
+    if (periodRows.length === 0) continue;
+
+    const productExcelRow = productRow + 1;
+    const cohortExcelRow = c + 1;
+    const baseIndexExcelRow = periodRows[0].row + 1;
+    const baseFxRow: number | undefined = findFxRowOnOrBefore(startSerial, fxDateRows);
+    const formulaText = text(productData[productRow][pFormula]) || "FXGrowth * PR * MAX(0, IndexGrowth)";
+    const companyValue = pCompany === null ? "MTL" : text(productData[productRow][pCompany]);
+    const indexNameValue = text(productData[productRow][pIndex]);
+    const indexCodeValue = text(productData[productRow][pIndexCode]);
+    const cohortNoValue = cohortData[c][cCohortNo];
+    const prValue = normalizeRate(productData[productRow][pPR]);
+    const volatilityValue = pVolatility === null ? "" : normalizeRate(productData[productRow][pVolatility]);
+
+    const dateStart = c === startCohortRow ? startDateOffset : 0;
+    for (let d = dateStart; d < periodRows.length; d++) {
+      const item = periodRows[d];
+      const finalRow = existingRows + writtenThisRun + rows.length + 2;
+      const indexExcelRow = item.row + 1;
+      const fxExcelRow: number | undefined = findFxRowOnOrBefore(item.serial, fxDateRows);
+      const baseFxExcelRow: number | undefined = baseFxRow ?? fxExcelRow;
+
+      rows.push([
+        companyValue,
+        productName,
+        indexNameValue,
+        indexCodeValue,
+        cohortNoValue,
+        excelSerialToIsoDate(startSerial),
+        excelSerialToIsoDate(endSerial),
+        excelSerialToIsoDate(item.serial),
+        `=${ref(INDEX_SHEET, indexExcelRow, indexCol + 1)}`,
+        `=${ref(INDEX_SHEET, baseIndexExcelRow, indexCol + 1)}`,
+        `=IFERROR(I${finalRow}/J${finalRow}-1,"")`,
+        fxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, fxExcelRow + 1, fRate + 1)}`,
+        baseFxExcelRow === undefined ? `=""` : `=${ref(FX_SHEET, baseFxExcelRow + 1, fRate + 1)}`,
+        `=IFERROR(L${finalRow}/M${finalRow},"")`,
+        prValue,
+        `=100`,
+        makeProductReturnFormula(formulaText, finalRow),
+        `=IFERROR(100*(1+Q${finalRow}),"")`,
+        volatilityValue,
+        formulaText
+      ]);
+
+      if (rows.length >= WRITE_CHUNK_ROWS) {
+        if (existingRows + writtenThisRun + rows.length + 1 > EXCEL_MAX_ROWS) {
+          throw new Error(`Final Data would exceed Excel row limit. Existing rows: ${existingRows}, written this run: ${writtenThisRun}, new rows: ${rows.length}.`);
         }
-      ]
-    },
-    {
-      "name": "productYDomain",
-      "source": "chartData",
-      "transform": [
-        {
-          "type": "aggregate",
-          "ops": [
-            "min",
-            "max"
-          ],
-          "fields": [
-            "DisplayProduct",
-            "DisplayProduct"
-          ],
-          "as": [
-            "MinY",
-            "MaxY"
-          ]
-        },
-        {
-          "type": "formula",
-          "expr": "max(1, datum.MaxY - datum.MinY)",
-          "as": "Spread"
-        },
-        {
-          "type": "formula",
-          "expr": "floor((datum.MinY - max(0.5, datum.Spread * 0.12)) * 2) / 2",
-          "as": "DomainMin"
-        },
-        {
-          "type": "formula",
-          "expr": "ceil((datum.MaxY + max(0.5, datum.Spread * 0.12)) * 2) / 2",
-          "as": "DomainMax"
-        }
-      ]
-    },
-    {
-      "name": "hundredTick",
-      "source": "productYDomain",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.DomainMin <= 100 && datum.DomainMax >= 100"
-        },
-        {
-          "type": "formula",
-          "expr": "100",
-          "as": "Value"
-        },
-        {
-          "type": "formula",
-          "expr": "'100'",
-          "as": "Label"
-        }
-      ]
-    },
-    {
-      "name": "latestByProduct",
-      "source": "chartData",
-      "transform": [
-        {
-          "type": "collect",
-          "sort": {
-            "field": [
-              "SeriesKey",
-              "DateKey"
-            ],
-            "order": [
-              "ascending",
-              "descending"
-            ]
-          }
-        },
-        {
-          "type": "window",
-          "groupby": [
-            "SeriesKey"
-          ],
-          "sort": {
-            "field": "DateKey",
-            "order": "descending"
-          },
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "LatestRank"
-          ]
-        },
-        {
-          "type": "filter",
-          "expr": "datum.LatestRank === 1"
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "SeriesKey",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "CardNo"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "visibleCards",
-      "source": "latestByProduct",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.CardNo <= 6"
-        }
-      ]
-    },
-    {
-      "name": "yTickData",
-      "source": "productYDomain",
-      "transform": [
-        {
-          "type": "formula",
-          "expr": "datum.DomainMax - datum.DomainMin",
-          "as": "AxisSpan"
-        },
-        {
-          "type": "formula",
-          "expr": "floor(datum.AxisSpan / 0.5) + 1",
-          "as": "HalfStepCount"
-        },
-        {
-          "type": "formula",
-          "expr": "datum.HalfStepCount > 15 ? 1 : 0.5",
-          "as": "TickStep"
-        },
-        {
-          "type": "formula",
-          "expr": "ceil(datum.DomainMin / datum.TickStep) * datum.TickStep",
-          "as": "FirstTick"
-        },
-        {
-          "type": "formula",
-          "expr": "sequence(datum.FirstTick, datum.DomainMax + datum.TickStep * 0.5, datum.TickStep)",
-          "as": "TickArray"
-        },
-        {
-          "type": "flatten",
-          "fields": [
-            "TickArray"
-          ],
-          "as": [
-            "Value"
-          ]
-        },
-        {
-          "type": "filter",
-          "expr": "datum.Value >= datum.DomainMin && datum.Value <= datum.DomainMax"
-        },
-        {
-          "type": "formula",
-          "expr": "datum.TickStep >= 1 ? format(datum.Value, '.0f') : format(datum.Value, '.1f')",
-          "as": "Label"
-        }
-      ]
-    },
-    {
-      "name": "dateTicksSource",
-      "source": "chartData",
-      "transform": [
-        {
-          "type": "aggregate",
-          "groupby": [
-            "DateKey"
-          ],
-          "ops": [
-            "count"
-          ],
-          "fields": [
-            null
-          ],
-          "as": [
-            "DateCount"
-          ]
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "DateKey",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "TickRowNo"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "dateTicks",
-      "source": "dateTicksSource",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTicksSource')) || datum.TickRowNo % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
-        }
-      ]
-    },
-    {
-      "name": "hoverRows",
-      "source": "chartData",
-      "transform": [
-        {
-          "type": "formula",
-          "expr": "hoverDateKey == null ? null : abs(datum.DateKey - hoverDateKey)",
-          "as": "HoverDistance"
-        },
-        {
-          "type": "window",
-          "groupby": [
-            "SeriesKey"
-          ],
-          "sort": {
-            "field": "HoverDistance",
-            "order": "ascending"
-          },
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "HoverRank"
-          ]
-        },
-        {
-          "type": "filter",
-          "expr": "hoverDateKey != null && datum.HoverRank === 1"
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "SeriesKey",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "HoverRowNo"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "hoverDate",
-      "source": "hoverRows",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.HoverRowNo === 1"
-        }
-      ]
-    }
-  ],
-  "scales": [
-    {
-      "name": "x",
-      "type": "linear",
-      "domain": {
-        "data": "chartData",
-        "field": "DateKey"
-      },
-      "range": [
-        150,
-        1430
-      ],
-      "nice": false,
-      "zero": false
-    },
-    {
-      "name": "y",
-      "type": "linear",
-      "domain": {
-        "data": "productYDomain",
-        "fields": [
-          "DomainMin",
-          "DomainMax"
-        ]
-      },
-      "range": [
-        820,
-        450
-      ],
-      "zero": false,
-      "nice": false
-    },
-    {
-      "name": "color",
-      "type": "ordinal",
-      "domain": {
-        "data": "chartData",
-        "field": "SeriesKey"
-      },
-      "range": [
-        "#59C7F2",
-        "#D31145",
-        "#47DDB1",
-        "#7B61FF",
-        "#FFD166",
-        "#FF9F1C",
-        "#2EC4B6",
-        "#9B5DE5"
-      ]
-    }
-  ],
-  "axes": [
-    {
-      "orient": "bottom",
-      "scale": "x",
-      "position": 820,
-      "labels": false,
-      "ticks": false,
-      "domain": false
-    },
-    {
-      "orient": "left",
-      "scale": "y",
-      "position": 276,
-      "labels": false,
-      "ticks": false,
-      "domain": false
-    }
-  ],
-  "marks": [
-    {
-      "name": "sharedHeaderTop",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 0
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 70
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "stroke": {
-            "value": "#E3EBF3"
-          }
-        }
+        setFinalDataByBlocks(finalWs, existingRows + writtenThisRun + 1, rows, WRITE_CHUNK_ROWS);
+        writtenThisRun += rows.length;
+        saveProgress(finalWs, existingRows + writtenThisRun, c, d + 1, "RUN AGAIN");
+        rows = [];
       }
-    },
-    {
-      "name": "sharedHeaderLogo",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 28
-          },
-          "y": {
-            "value": 18
-          },
-          "width": {
-            "value": 36
-          },
-          "height": {
-            "value": 36
-          },
-          "cornerRadius": {
-            "value": 7
-          },
-          "fill": {
-            "value": "#D31145"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderLogoText",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 46
-          },
-          "y": {
-            "value": 37
-          },
-          "text": {
-            "value": "M"
-          },
-          "align": {
-            "value": "center"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fontSize": {
-            "value": 17
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderTitle",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 78
-          },
-          "y": {
-            "value": 37
-          },
-          "text": {
-            "value": "Index Intelligence"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderByline",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 225
-          },
-          "y": {
-            "value": 37
-          },
-          "text": {
-            "value": "by MTL Product Dev"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 13
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderNav",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 70
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 126
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "stroke": {
-            "value": "#E3EBF3"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderNavProduct",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 48
-          },
-          "y": {
-            "value": 99
-          },
-          "text": {
-            "value": "Product Viewer"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 14
-          },
-          "fontWeight": {
-            "value": "normal"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderNavComparator",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 210
-          },
-          "y": {
-            "value": 99
-          },
-          "text": {
-            "value": "Comparator"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#D31145"
-          },
-          "fontSize": {
-            "value": 14
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderNavIndex",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 350
-          },
-          "y": {
-            "value": 99
-          },
-          "text": {
-            "value": "Index Dashboard"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 14
-          },
-          "fontWeight": {
-            "value": "normal"
-          }
-        }
-      }
-    },
-    {
-      "name": "sharedHeaderActiveRule",
-      "type": "rule",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 210
-          },
-          "x2": {
-            "value": 330
-          },
-          "y": {
-            "value": 125
-          },
-          "stroke": {
-            "value": "#D31145"
-          },
-          "strokeWidth": {
-            "value": 3
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 126
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 900
-          },
-          "fill": {
-            "value": "#F4F8FB"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 164
-          },
-          "text": {
-            "value": "Product Comparator"
-          },
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 24
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 192
-          },
-          "text": {
-              "value": ""
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "limit": {
-            "value": 850
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 210
-          },
-          "text": {
-              "value": ""
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "limit": {
-            "value": 850
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "from": {
-        "data": "visibleCards"
-      },
-      "encode": {
-        "enter": {
-          "width": {
-            "value": 440
-          },
-          "height": {
-            "value": 86
-          },
-          "cornerRadius": {
-            "value": 8
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "strokeWidth": {
-            "value": 2
-          },
-          "shadowColor": {
-            "value": "#CBD5E1"
-          },
-          "shadowBlur": {
-            "value": 12
-          },
-          "shadowOffsetY": {
-            "value": 5
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "56 + ((datum.CardNo - 1) % 3) * 480"
-          },
-          "y": {
-            "signal": "190 + floor((datum.CardNo - 1) / 3) * 90"
-          },
-          "stroke": {
-            "scale": "color",
-            "field": "SeriesKey"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "visibleCards"
-      },
-      "encode": {
-        "enter": {
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 14
-          },
-          "fontWeight": {
-            "value": "bold"
-          },
-          "limit": {
-            "value": 370
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
-          },
-          "y": {
-            "signal": "216 + floor((datum.CardNo - 1) / 3) * 90"
-          },
-          "text": {
-            "signal": "datum.ProductName"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "visibleCards"
-      },
-      "encode": {
-        "enter": {
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 11
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
-          },
-          "y": {
-            "signal": "244 + floor((datum.CardNo - 1) / 3) * 90"
-          },
-          "text": {
-            "signal": "'Index: ' + datum.IndexCode + '   PR: ' + format(datum.NumericPR, '.0%') + '   Volatility: ' + format(datum.NumericVolatility, '.0%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "visibleCards"
-      },
-      "encode": {
-        "enter": {
-          "fontSize": {
-            "value": 14
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
-          },
-          "y": {
-            "signal": "269 + floor((datum.CardNo - 1) / 3) * 90"
-          },
-          "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
-          },
-          "text": {
-            "signal": "'Growth: ' + format(datum.DisplayProduct / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + timeFormat(datum.DateKey, '%d %b %Y')"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 376
-          },
-          "x2": {
-            "value": 1486
-          },
-          "y2": {
-            "value": 890
-          },
-          "cornerRadius": {
-            "value": 8
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "stroke": {
-            "value": "#E3EBF3"
-          },
-          "strokeWidth": {
-            "value": 1.2
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 78
-          },
-          "y": {
-            "value": 408
-          },
-          "text": {
-            "value": "Normalized Product Comparison"
-          },
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 16
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 78
-          },
-          "y": {
-            "value": 418
-          },
-          "text": {
-              "value": ""
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 12
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y": {
-            "scale": "y",
-            "value": 100
-          },
-          "stroke": {
-            "value": "#111111"
-          },
-          "strokeWidth": {
-            "value": 1.2
-          },
-          "strokeOpacity": {
-            "value": 0
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "y": {
-            "value": 450
-          },
-          "y2": {
-            "value": 820
-          },
-          "stroke": {
-            "value": "#111111"
-          },
-          "strokeWidth": {
-            "value": 1.4
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y": {
-            "value": 820
-          },
-          "stroke": {
-            "value": "#111111"
-          },
-          "strokeWidth": {
-            "value": 1.4
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "from": {
-        "data": "yTickData"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "x2": {
-            "value": 1430
-          },
-          "stroke": {
-            "value": "#E1E7EF"
-          },
-          "strokeWidth": {
-            "value": 1
-          }
-        },
-        "update": {
-          "y": {
-            "scale": "y",
-            "field": "Value"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "yTickData"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 136
-          },
-          "align": {
-            "value": "right"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#111111"
-          },
-          "fontSize": {
-            "value": 12
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "y": {
-            "scale": "y",
-            "field": "Value"
-          },
-          "text": {
-            "field": "Label"
-          }
-        }
-      }
-    },
-    {
-      "name": "forcedHundredGrid",
-      "type": "rule",
-      "from": {
-        "data": "hundredTick"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "x2": {
-            "value": 1430
-          },
-          "stroke": {
-            "value": "#111111"
-          },
-          "strokeWidth": {
-            "value": 1.35
-          },
-          "strokeOpacity": {
-            "value": 0.7
-          }
-        },
-        "update": {
-          "y": {
-            "scale": "y",
-            "field": "Value"
-          }
-        }
-      }
-    },
-    {
-      "name": "forcedHundredLabel",
-      "type": "text",
-      "from": {
-        "data": "hundredTick"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 136
-          },
-          "align": {
-            "value": "right"
-          },
-          "baseline": {
-            "value": "middle"
-          },
-          "fill": {
-            "value": "#D31145"
-          },
-          "fontSize": {
-            "value": 12
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "y": {
-            "scale": "y",
-            "field": "Value"
-          },
-          "text": {
-            "field": "Label"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 100
-          },
-          "y": {
-            "value": 635
-          },
-          "text": {
-            "value": "Growth"
-          },
-          "angle": {
-            "value": -90
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#111111"
-          },
-          "fontSize": {
-            "value": 13
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 790
-          },
-          "y": {
-            "value": 872
-          },
-          "text": {
-            "value": "Date"
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#111111"
-          },
-          "fontSize": {
-            "value": 13
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        }
-      }
-    },
-    {
-      "type": "group",
-      "from": {
-        "facet": {
-          "name": "series",
-          "data": "chartData",
-          "groupby": "SeriesKey"
-        }
-      },
-      "marks": [
-        {
-          "type": "line",
-          "from": {
-            "data": "series"
-          },
-          "encode": {
-            "enter": {
-              "interpolate": {
-                "value": "monotone"
-              },
-              "strokeWidth": {
-                "value": 3
-              }
-            },
-            "update": {
-              "x": {
-                "scale": "x",
-                "field": "DateKey"
-              },
-              "y": {
-                "scale": "y",
-                "field": "DisplayProduct"
-              },
-              "stroke": {
-                "scale": "color",
-                "field": "SeriesKey"
-              }
-            }
-          }
-        }
-      ]
-    },
-    {
-      "type": "symbol",
-      "from": {
-        "data": "latestByProduct"
-      },
-      "encode": {
-        "enter": {
-          "size": {
-            "value": 70
-          },
-          "stroke": {
-            "value": "#FFFFFF"
-          },
-          "strokeWidth": {
-            "value": 2
-          }
-        },
-        "update": {
-          "x": {
-            "scale": "x",
-            "field": "DateKey"
-          },
-          "y": {
-            "scale": "y",
-            "field": "DisplayProduct"
-          },
-          "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "latestByProduct"
-      },
-      "encode": {
-        "enter": {
-          "dx": {
-            "value": -10
-          },
-          "dy": {
-            "value": -8
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "fontWeight": {
-            "value": "bold"
-          },
-          "align": {
-            "value": "right"
-          }
-        },
-        "update": {
-          "x": {
-            "scale": "x",
-            "field": "DateKey"
-          },
-          "y": {
-            "scale": "y",
-            "field": "DisplayProduct"
-          },
-          "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
-          },
-          "text": {
-            "signal": "format(datum.DisplayProduct / 100 - 1, '+.1%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 56
-          },
-          "y": {
-            "value": 882
-          },
-          "text": {
-            "value": "Remark: FX rate references Bank of Thailand (BoT)."
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 10
-          },
-          "fontStyle": {
-            "value": "italic"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "dateTicks"
-      },
-      "encode": {
-        "enter": {
-          "y": {
-            "value": 844
-          },
-          "align": {
-            "value": "center"
-          },
-          "fill": {
-            "value": "#111111"
-          },
-          "fontSize": {
-            "value": 10
-          }
-        },
-        "update": {
-          "x": {
-            "scale": "x",
-            "field": "DateKey"
-          },
-          "text": {
-            "signal": "timeFormat(datum.DateKey, '%d %b %Y')"
-          }
-        }
-      }
-    },
-    {
-      "name": "hoverArea",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 150
-          },
-          "y": {
-            "value": 450
-          },
-          "x2": {
-            "value": 1430
-          },
-          "y2": {
-            "value": 820
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "fillOpacity": {
-            "value": 0
-          },
-          "cursor": {
-            "value": "crosshair"
-          }
-        }
-      }
-    },
-    {
-      "type": "rule",
-      "from": {
-        "data": "hoverDate"
-      },
-      "encode": {
-        "enter": {
-          "y": {
-            "value": 450
-          },
-          "y2": {
-            "value": 820
-          },
-          "stroke": {
-            "value": "#D31145"
-          },
-          "strokeWidth": {
-            "value": 2
-          },
-          "strokeDash": {
-            "value": [
-              4,
-              4
-            ]
-          }
-        },
-        "update": {
-          "x": {
-            "scale": "x",
-            "field": "DateKey"
-          }
-        }
-      }
-    },
-    {
-      "type": "symbol",
-      "from": {
-        "data": "hoverRows"
-      },
-      "encode": {
-        "enter": {
-          "size": {
-            "value": 85
-          },
-          "stroke": {
-            "value": "#FFFFFF"
-          },
-          "strokeWidth": {
-            "value": 2.5
-          }
-        },
-        "update": {
-          "x": {
-            "scale": "x",
-            "field": "DateKey"
-          },
-          "y": {
-            "scale": "y",
-            "field": "DisplayProduct"
-          },
-          "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "from": {
-        "data": "hoverDate"
-      },
-      "encode": {
-        "enter": {
-          "y": {
-            "value": 470
-          },
-          "width": {
-            "value": 315
-          },
-          "height": {
-            "value": 44
-          },
-          "cornerRadius": {
-            "value": 8
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "stroke": {
-            "value": "#E3EBF3"
-          },
-          "strokeWidth": {
-            "value": 1.2
-          },
-          "shadowColor": {
-            "value": "#CBD5E1"
-          },
-          "shadowBlur": {
-            "value": 12
-          },
-          "shadowOffsetY": {
-            "value": 5
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "hoverDate"
-      },
-      "encode": {
-        "enter": {
-          "y": {
-            "value": 498
-          },
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 13
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
-          },
-          "text": {
-            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
-          }
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "from": {
-        "data": "hoverRows"
-      },
-      "encode": {
-        "enter": {
-          "width": {
-            "value": 315
-          },
-          "height": {
-            "value": 28
-          },
-          "fill": {
-            "value": "#FFFFFF"
-          },
-          "stroke": {
-            "value": "#EEF2F7"
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
-          },
-          "y": {
-            "signal": "480 + datum.HoverRowNo * 34"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "hoverRows"
-      },
-      "encode": {
-        "enter": {
-          "fill": {
-            "value": "#172033"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "fontWeight": {
-            "value": "bold"
-          },
-          "limit": {
-            "value": 190
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
-          },
-          "y": {
-            "signal": "498 + datum.HoverRowNo * 34"
-          },
-          "text": {
-            "signal": "datum.ProductName"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "hoverRows"
-      },
-      "encode": {
-        "enter": {
-          "align": {
-            "value": "right"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "fontWeight": {
-            "value": "bold"
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
-          },
-          "y": {
-            "signal": "498 + datum.HoverRowNo * 34"
-          },
-          "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
-          },
-          "text": {
-            "signal": "format(datum.DisplayProduct, '.2f') + ' / ' + format(datum.DisplayProduct / 100 - 1, '+.2%')"
-          }
-        }
+
+      if (writtenThisRun >= MAX_ROWS_PER_RUN) {
+        nextCohortRow = c;
+        nextDateOffset = d + 1;
+        reachedLimit = true;
+        break;
       }
     }
-  ],
-  "signals": [
-    {
-      "name": "hoverX",
-      "value": null,
-      "on": [
-        {
-          "events": {
-            "type": "mousemove",
-            "markname": "hoverArea"
-          },
-          "update": "clamp(x(), 150, 1430)"
-        },
-        {
-          "events": {
-            "type": "mouseout",
-            "markname": "hoverArea"
-          },
-          "update": "null"
-        }
-      ]
-    },
-    {
-      "name": "hoverDateKey",
-      "update": "hoverX == null || length(data('chartData')) == 0 ? null : invert('x', hoverX)"
+
+    if (reachedLimit) break;
+  }
+
+  if (reachedLimit === false) {
+    nextCohortRow = "DONE";
+    nextDateOffset = 0;
+  }
+
+  if (rows.length > 0) {
+    if (existingRows + writtenThisRun + rows.length + 1 > EXCEL_MAX_ROWS) {
+      throw new Error(`Final Data would exceed Excel row limit. Existing rows: ${existingRows}, written this run: ${writtenThisRun}, new rows: ${rows.length}.`);
     }
-  ]
+    setFinalDataByBlocks(finalWs, existingRows + writtenThisRun + 1, rows, WRITE_CHUNK_ROWS);
+    writtenThisRun += rows.length;
+    rows = [];
+  }
+
+  const totalRows = existingRows + writtenThisRun;
+  saveProgress(finalWs, totalRows, nextCohortRow, nextDateOffset, nextCohortRow === "DONE" ? "COMPLETE" : "RUN AGAIN");
+  finalWs.getRange("A1:T1").getFormat().getFont().setBold(true);
+
+  return nextCohortRow === "DONE"
+    ? `Complete. Final Data rows: ${totalRows}.`
+    : `Paused safely. Added ${writtenThisRun} rows. Total rows: ${totalRows}. Run the script again to continue from cohort sheet row ${nextCohortRow}, date offset ${nextDateOffset}.`;
+}
+
+function mustGetSheet(workbook: ExcelScript.Workbook, name: string): ExcelScript.Worksheet {
+  const ws = workbook.getWorksheet(name);
+  if (!ws) throw new Error(`Missing sheet: ${name}`);
+  return ws;
+}
+
+function getUsedValues(ws: ExcelScript.Worksheet): (string | number | boolean)[][] {
+  const range = ws.getUsedRange(true);
+  if (!range) throw new Error(`Sheet has no data: ${ws.getName()}`);
+  return range.getValues() as (string | number | boolean)[][];
+}
+
+function saveProgress(
+  ws: ExcelScript.Worksheet,
+  totalRows: number,
+  nextCohortRow: number | string,
+  nextDateOffset: number,
+  status: string
+) {
+  ws.getRange("U1:U5").setValues([
+    [totalRows],
+    [nextCohortRow],
+    [nextDateOffset],
+    [status],
+    [FINAL_DATA_BUILD_VERSION]
+  ]);
+}
+
+function clearFinalDataArea(ws: ExcelScript.Worksheet) {
+  const marker = Number(ws.getRange("U1").getValue());
+  const used = ws.getUsedRange(true);
+  const fallbackRows = used ? Math.min(Math.max(used.getRowCount(), 1), 2000) : 1;
+  const rowCount = Math.min(Number.isFinite(marker) && marker > 0 ? marker + 1 : fallbackRows, 1048576);
+
+  for (let start = 0; start < rowCount; start += 500) {
+    const count = Math.min(500, rowCount - start);
+    if (count <= 0) break;
+    ws.getRangeByIndexes(start, 0, count, 20).clear(ExcelScript.ClearApplyTo.contents);
+  }
+}
+
+function headerMap(row: (string | number | boolean)[]): Map<string, number> {
+  const m = new Map<string, number>();
+  row.forEach((v, i) => m.set(cleanHeader(v), i));
+  return m;
+}
+
+function requiredHeader(map: Map<string, number>, names: string[], sheetName: string): number {
+  const found = firstHeader(map, names);
+  if (found === null) throw new Error(`Missing required header on ${sheetName}: ${names.join(" / ")}`);
+  return found;
+}
+
+function firstHeader(map: Map<string, number>, names: string[]): number | null {
+  for (const n of names) {
+    const v = map.get(cleanHeader(n));
+    if (v !== undefined) return v;
+  }
+  return null;
+}
+
+function cleanHeader(v: unknown): string {
+  return String(v ?? "").trim().toUpperCase().replace(/[\s._\-()/#: '"\u00A0]/g, "");
+}
+
+function cleanKey(v: unknown): string {
+  return String(v ?? "").trim().toUpperCase();
+}
+
+function cleanIndexCode(v: unknown): string {
+  let s = cleanHeader(v);
+  if (s.endsWith("INDEX")) s = s.substring(0, s.length - 5);
+  return s;
+}
+
+function text(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+function toNumber(v: unknown): number | null {
+  if (typeof v === "number" && isFinite(v)) return v;
+  const cleaned = String(v ?? "").replace(/[%~,]/g, "").trim();
+  if (cleaned === "") return null;
+  const n = Number(cleaned);
+  return isFinite(n) ? n : null;
+}
+
+function normalizeRate(v: unknown): number | string {
+  const n = toNumber(v);
+  if (n === null) return "";
+  return n > 1 ? n / 100 : n;
+}
+
+function toExcelSerial(v: unknown): number | null {
+  if (typeof v === "number" && isFinite(v)) return v;
+  const raw = String(v ?? "").trim();
+
+  const iso = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (iso) {
+    return ymdToExcelSerial(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  }
+
+  const numericDate = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (numericDate) {
+    const first = Number(numericDate[1]);
+    const second = Number(numericDate[2]);
+    let year = Number(numericDate[3]);
+    if (year < 100) year += 2000;
+
+    let month: number;
+    let day: number;
+
+    if (first > 12) {
+      day = first;
+      month = second;
+    } else if (second > 12) {
+      month = first;
+      day = second;
+    } else if (DATE_TEXT_ORDER === "MDY") {
+      month = first;
+      day = second;
+    } else {
+      day = first;
+      month = second;
+    }
+
+    return ymdToExcelSerial(year, month, day);
+  }
+
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  return ymdToExcelSerial(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+function ymdToExcelSerial(year: number, month: number, day: number): number | null {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const utcMs = Date.UTC(year, month - 1, day);
+  const d = new Date(utcMs);
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() + 1 !== month || d.getUTCDate() !== day) return null;
+
+  return utcMs / 86400000 + 25569;
+}
+
+function excelSerialToIsoDate(serial: number): string {
+  const d = excelSerialToDate(serial);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildProductRows(data: (string | number | boolean)[][], productCol: number): Map<string, number> {
+  const m = new Map<string, number>();
+  for (let r = 1; r < data.length; r++) {
+    const key = cleanKey(data[r][productCol]);
+    if (key && !m.has(key)) m.set(key, r);
+  }
+  return m;
+}
+
+function buildMaxCohortNoByProduct(
+  data: (string | number | boolean)[][],
+  productCol: number,
+  cohortNoCol: number
+): Map<string, number> {
+  const m = new Map<string, number>();
+  for (let r = 1; r < data.length; r++) {
+    const key = cleanKey(data[r][productCol]);
+    const cohortNo = toNumber(data[r][cohortNoCol]);
+    if (!key || cohortNo === null) continue;
+    const current = m.get(key);
+    if (current === undefined || cohortNo > current) m.set(key, cohortNo);
+  }
+  return m;
+}
+
+function buildDateRows(data: (string | number | boolean)[][], dateCol: number): { row: number; serial: number }[] {
+  const rows: { row: number; serial: number }[] = [];
+  for (let r = 1; r < data.length; r++) {
+    const serial = toExcelSerial(data[r][dateCol]);
+    if (serial !== null) rows.push({ row: r, serial });
+  }
+  rows.sort((a, b) => a.serial - b.serial);
+  return rows;
+}
+
+function getDateRowsFromStart(
+  rows: { row: number; serial: number }[],
+  startSerial: number
+): { row: number; serial: number }[] {
+  const result: { row: number; serial: number }[] = [];
+  for (const item of rows) {
+    if (item.serial < startSerial) continue;
+    result.push(item);
+  }
+  return result;
+}
+
+function samplePeriodRows(
+  rows: { row: number; serial: number }[],
+  cohortAge: number
+): { row: number; serial: number }[] {
+  if (cohortAge <= 0) return rows;
+  if (rows.length <= 2 || cohortAge < 6) return rows;
+
+  if (cohortAge >= 30) {
+    return firstRowPerMonthPlusLatest(rows);
+  }
+
+  const selected: { row: number; serial: number }[] = [];
+  const seen = new Set<number>();
+
+  for (const item of rows) {
+    const key = monthlySamplingKey(item.serial, cohortAge);
+    if (!seen.has(key)) {
+      seen.add(key);
+      selected.push(item);
+    }
+  }
+
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  if (selected.length === 0 || selected[0].serial !== first.serial) selected.unshift(first);
+  if (selected[selected.length - 1].serial !== last.serial) selected.push(last);
+
+  return selected;
+}
+
+function firstRowPerMonthPlusLatest(rows: { row: number; serial: number }[]): { row: number; serial: number }[] {
+  const selected: { row: number; serial: number }[] = [];
+  const seenMonths = new Set<number>();
+
+  for (const item of rows) {
+    const date = excelSerialToDate(item.serial);
+    const monthKey = date.getUTCFullYear() * 100 + date.getUTCMonth() + 1;
+    if (!seenMonths.has(monthKey)) {
+      seenMonths.add(monthKey);
+      selected.push(item);
+    }
+  }
+
+  const last = rows[rows.length - 1];
+  if (selected.length === 0 || selected[selected.length - 1].serial !== last.serial) {
+    selected.push(last);
+  }
+
+  return selected;
+}
+
+function monthlySamplingKey(serial: number, cohortAge: number): number {
+  const date = excelSerialToDate(serial);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  const monthKey = year * 100 + month;
+
+  if (cohortAge >= 12) {
+    const half = day <= 15 ? 1 : 2;
+    return monthKey * 10 + half;
+  }
+
+  const bucket = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
+  return monthKey * 10 + bucket;
+}
+
+function excelSerialToDate(serial: number): Date {
+  const utcMs = Math.round((serial - 25569) * 86400000);
+  return new Date(utcMs);
+}
+
+function findFxRowOnOrBefore(serial: number, fxDateRows: { row: number; serial: number }[]): number | undefined {
+  let best: number | undefined = undefined;
+  for (const item of fxDateRows) {
+    if (item.serial <= serial) {
+      best = item.row;
+    } else {
+      break;
+    }
+  }
+  return best;
+}
+
+function makeProductReturnFormula(rawFormula: string, row: number): string {
+  let expr = rawFormula.trim();
+  if (expr.includes("=")) expr = expr.substring(expr.indexOf("=") + 1);
+  if (!expr) expr = "FXGrowth * PR * MAX(0, IndexGrowth)";
+
+  // In Final Data, IndexGrowth is already Price / IndexBaseValue - 1.
+  // If a product formula says IndexGrowth - 1, it is usually describing
+  // IndexRatio - 1, so normalize that wording back to IndexGrowth.
+  expr = expr
+    .replace(/\bIndexGrowth\b\s*-\s*1/gi, "IndexGrowth")
+    .replace(/\bIndexGrowth\b\s*-\s*100%/gi, "IndexGrowth")
+    .replace(/\bIndexReturn\b/gi, "IndexGrowth");
+
+  expr = expr
+    .replace(/\bPrincipal\b/gi, `P${row}`)
+    .replace(/\bFXGrowth\b/gi, `N${row}`)
+    .replace(/\bPR\b/gi, `O${row}`)
+    .replace(/\bIndexGrowth\b/gi, `K${row}`)
+    .replace(/\bPrice\b/gi, `I${row}`)
+    .replace(/\bIndexBaseValue\b/gi, `J${row}`)
+    .replace(/\bFXRate\b/gi, `L${row}`)
+    .replace(/\bFXBaseRate\b/gi, `M${row}`);
+
+  const hasPrincipal = /P\d+/.test(expr);
+  return hasPrincipal ? `=IFERROR((${expr})/P${row},"")` : `=IFERROR(${expr},"")`;
+}
+
+function ref(sheetName: string, row: number, col: number): string {
+  return `'${sheetName}'!${colLetter(col)}${row}`;
+}
+
+function setFinalDataByBlocks(
+  ws: ExcelScript.Worksheet,
+  startRow: number,
+  data: (string | number | boolean)[][],
+  chunkSize: number
+) {
+  if (data.length === 0) return;
+  const maxRows = 1048576;
+
+  for (let start = 0; start < data.length; start += chunkSize) {
+    const chunk = data.slice(start, start + chunkSize);
+    const targetRow = startRow + start;
+    if (targetRow < 0 || targetRow + chunk.length > maxRows) {
+      throw new Error(`Invalid write range at row ${targetRow + 1}, rows ${chunk.length}.`);
+    }
+
+    setValueBlock(ws, targetRow, 0, chunk, 0, 8);
+    setFormulaBlock(ws, targetRow, 8, chunk, 8, 1);
+    setFormulaBlock(ws, targetRow, 9, chunk, 9, 1);
+    setFormulaBlock(ws, targetRow, 10, chunk, 10, 1);
+    setFormulaBlock(ws, targetRow, 11, chunk, 11, 1);
+    setFormulaBlock(ws, targetRow, 12, chunk, 12, 1);
+    setFormulaBlock(ws, targetRow, 13, chunk, 13, 1);
+    setValueBlock(ws, targetRow, 14, chunk, 14, 2);
+    setFormulaBlock(ws, targetRow, 16, chunk, 16, 1);
+    setFormulaBlock(ws, targetRow, 17, chunk, 17, 1);
+    setValueBlock(ws, targetRow, 18, chunk, 18, 2);
+  }
+}
+
+function setValueBlock(
+  ws: ExcelScript.Worksheet,
+  targetRow: number,
+  targetCol: number,
+  rows: (string | number | boolean)[][],
+  sourceCol: number,
+  colCount: number
+) {
+  const values = rows.map(row => row.slice(sourceCol, sourceCol + colCount).map(value => safeCellValue(value)));
+  ws.getRangeByIndexes(targetRow, targetCol, rows.length, colCount).setValues(values);
+}
+
+function setFormulaBlock(
+  ws: ExcelScript.Worksheet,
+  targetRow: number,
+  targetCol: number,
+  rows: (string | number | boolean)[][],
+  sourceCol: number,
+  colCount: number
+) {
+  const formulas = rows.map(row => row.slice(sourceCol, sourceCol + colCount).map(value => String(value ?? "")));
+  ws.getRangeByIndexes(targetRow, targetCol, rows.length, colCount).setFormulas(formulas);
+}
+
+function safeCellValue(value: string | number | boolean): string | number | boolean {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? value : "";
+  return value;
+}
+
+function colLetter(col: number): string {
+  let s = "";
+  while (col > 0) {
+    const mod = (col - 1) % 26;
+    s = String.fromCharCode(65 + mod) + s;
+    col = Math.floor((col - mod) / 26);
+  }
+  return s;
 }
