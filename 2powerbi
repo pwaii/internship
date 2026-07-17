@@ -1,10 +1,11 @@
-POWER BI DENEB - MTL MULTI-PRODUCT COMPARISON TIME-SERIES HOVER ADAPTIVE Y-AXIS
+POWER BI DENEB - MTL PAGE 2 PRODUCT COMPARISON FINAL COMPLETE
 
 This is for the next report page: product comparison.
 It supports more than 2 products, uses the same DateKey time-series method as the working product viewer page, adds a hover line with values, and fits the y-axis to selected products.
 
 DATA SOURCE
-Use the Excel-generated Final Data sheet/table.
+Use the same final query/table used by the product viewer page, for example:
+MTL_Deneb_Data
 
 ADD THESE FIELDS TO DENEB VALUES
 - Company
@@ -12,24 +13,23 @@ ADD THESE FIELDS TO DENEB VALUES
 - IndexName
 - IndexCode
 - PR
+- FormulaType
 - Principal
-- ProductReturn
-- ProductValue
-- Volatility
-- Formula
+- FloorRate
+- CapRate
 - CohortNo
 - CohortStartDate
 - CohortEndDate
+- ObservationEndDate
 - IndexBaseValue
 - Date
 - Price
+- FXPair
 - FXRate
-- FXBaseRate
-- FXGrowth
 
 SETUP
 1. Add a new Deneb visual on the comparison page.
-2. Add all fields above from Final Data.
+2. Add all fields above from the same table/query.
 3. Use raw Date, not Date hierarchy.
 4. Set numeric fields to Don't summarize.
 5. Choose Create new specification > Vega > Empty.
@@ -41,17 +41,13 @@ SLICERS RECOMMENDED
 - Company: optional.
 - Date: optional Between slicer.
 
-ProductReturn drives the product comparison line. Page 2 only keeps rows inside each cohort's own CohortStartDate to ObservationEndDate/CohortEndDate window.
-The Date slicer can therefore remove product/cohort combinations when the selected date range has no valid rows for that cohort.
-Newest cohort rows are recalculated from the formula in Deneb for every available date row. Source row sampling is controlled by the Excel script: newest cohort daily, newer cohorts under 6 daily, older than 6 four points/month + latest, older than 12 two points/month + latest, older than 30 one point/month + latest.
-
 ================ PASTE JSON BELOW ================
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "description": "MTL product comparison dashboard with hover line and fitted 0.5-step y-axis. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
   "background": "#F4F8FB",
   "width": 1500,
-  "height": 900,
+  "height": 1020,
   "padding": 0,
   "autosize": {
     "type": "fit",
@@ -83,46 +79,22 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.FloorRate)) ? (toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)) : 0",
+          "expr": "toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)",
           "as": "NumericFloor"
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.Volatility)) ? (toNumber(datum.Volatility) > 1 ? toNumber(datum.Volatility) / 100 : toNumber(datum.Volatility)) : (isFinite(toNumber(datum.CapRate)) ? (toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)) : 1)",
+          "expr": "toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)",
           "as": "NumericVolatility"
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
-        },
-        {
-          "type": "formula",
-          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 100000000000 ? datum.CohortStartDate : datum.CohortStartDate > 1000000000 ? datum.CohortStartDate * 1000 : (datum.CohortStartDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortStartDate)) ? (toNumber(datum.CohortStartDate) > 100000000000 ? toNumber(datum.CohortStartDate) : toNumber(datum.CohortStartDate) > 1000000000 ? toNumber(datum.CohortStartDate) * 1000 : (toNumber(datum.CohortStartDate) - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
-          "as": "CohortStartKey"
-        },
-        {
-          "type": "formula",
-          "expr": "isDate(datum.CohortEndDate) ? time(datum.CohortEndDate) : isNumber(datum.CohortEndDate) ? (datum.CohortEndDate > 100000000000 ? datum.CohortEndDate : datum.CohortEndDate > 1000000000 ? datum.CohortEndDate * 1000 : (datum.CohortEndDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortEndDate)) ? (toNumber(datum.CohortEndDate) > 100000000000 ? toNumber(datum.CohortEndDate) : toNumber(datum.CohortEndDate) > 1000000000 ? toNumber(datum.CohortEndDate) * 1000 : (toNumber(datum.CohortEndDate) - 25569) * 86400000) : time(toDate(datum.CohortEndDate))",
-          "as": "CohortEndKey"
-        },
-        {
-          "type": "formula",
-          "expr": "isDate(datum.ObservationEndDate) ? time(datum.ObservationEndDate) : isNumber(datum.ObservationEndDate) ? (datum.ObservationEndDate > 100000000000 ? datum.ObservationEndDate : datum.ObservationEndDate > 1000000000 ? datum.ObservationEndDate * 1000 : (datum.ObservationEndDate - 25569) * 86400000) : isFinite(toNumber(datum.ObservationEndDate)) ? (toNumber(datum.ObservationEndDate) > 100000000000 ? toNumber(datum.ObservationEndDate) : toNumber(datum.ObservationEndDate) > 1000000000 ? toNumber(datum.ObservationEndDate) * 1000 : (toNumber(datum.ObservationEndDate) - 25569) * 86400000) : time(toDate(datum.ObservationEndDate))",
-          "as": "ObservationEndKey"
-        },
-        {
-          "type": "formula",
-          "expr": "isFinite(datum.ObservationEndKey) ? datum.ObservationEndKey : datum.CohortEndKey",
-          "as": "CohortRangeEndKey"
         },
         {
           "type": "filter",
           "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
-        },
-        {
-          "type": "filter",
-          "expr": "(!isFinite(datum.CohortStartKey) || datum.DateKey >= datum.CohortStartKey) && (!isFinite(datum.CohortRangeEndKey) || datum.DateKey <= datum.CohortRangeEndKey)"
         },
         {
           "type": "formula",
@@ -136,39 +108,18 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         {
           "type": "formula",
-          "expr": "upper(toString(datum.Formula || datum.FormulaType || 'PR_ONLY'))",
+          "expr": "upper(toString(datum.FormulaType || 'PR_ONLY'))",
           "as": "FormulaKey"
         },
         {
           "type": "formula",
-          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
-          "as": "FormulaReturnCalc"
-        },
-        {
-          "type": "joinaggregate",
-          "ops": [
-            "max"
-          ],
-          "fields": [
-            "CohortStartKey"
-          ],
-          "as": [
-            "NewestCohortStartKey"
-          ]
-        },
-        {
-          "type": "formula",
-          "expr": "isFinite(datum.CohortStartKey) && datum.CohortStartKey === datum.NewestCohortStartKey ? datum.FormulaReturnCalc : isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaReturnCalc",
+          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
           "as": "ProductReturnCalc"
         },
         {
           "type": "formula",
-          "expr": "isFinite(datum.ProductReturnCalc) ? 100 * (1 + datum.ProductReturnCalc) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : null",
+          "expr": "100 * (1 + datum.ProductReturnCalc)",
           "as": "DisplayProduct"
-        },
-        {
-          "type": "filter",
-          "expr": "isFinite(datum.ProductReturnCalc) && isFinite(datum.DisplayProduct)"
         },
         {
           "type": "formula",
@@ -187,30 +138,6 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
               "ascending"
             ]
           }
-        },
-        {
-          "type": "window",
-          "groupby": [
-            "SeriesKey"
-          ],
-          "sort": {
-            "field": "DateKey",
-            "order": "ascending"
-          },
-          "ops": [
-            "row_number"
-          ],
-          "fields": [
-            null
-          ],
-          "as": [
-            "RowIndex"
-          ]
-        },
-        {
-          "type": "formula",
-          "expr": "datum.DisplayProduct",
-          "as": "DisplayProductNormalized"
         }
       ]
     },
@@ -225,8 +152,8 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "max"
           ],
           "fields": [
-            "DisplayProductNormalized",
-            "DisplayProductNormalized"
+            "DisplayProduct",
+            "DisplayProduct"
           ],
           "as": [
             "MinY",
@@ -247,24 +174,6 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           "type": "formula",
           "expr": "ceil((datum.MaxY + max(0.5, datum.Spread * 0.12)) * 2) / 2",
           "as": "DomainMax"
-        }
-      ]
-    },
-    {
-      "name": "rowIndexRange",
-      "source": "chartData",
-      "transform": [
-        {
-          "type": "aggregate",
-          "ops": [
-            "max"
-          ],
-          "fields": [
-            "RowIndex"
-          ],
-          "as": [
-            "MaxRowIndex"
-          ]
         }
       ]
     },
@@ -349,26 +258,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.CardNo <= 4"
-        }
-      ]
-    },
-    {
-      "name": "hiddenCards",
-      "source": "latestByProduct",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.CardNo > 4"
-        },
-        {
-          "type": "aggregate",
-          "ops": [
-            "count"
-          ],
-          "as": [
-            "HiddenCount"
-          ]
+          "expr": "datum.CardNo <= 6"
         }
       ]
     },
@@ -416,54 +306,28 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         {
           "type": "formula",
-          "expr": "abs(datum.Value - 100) < 0.0001 ? '0%' : datum.TickStep >= 1 ? format((datum.Value - 100) / 100, '+.0%') : format((datum.Value - 100) / 100, '+.1%')",
+          "expr": "datum.TickStep >= 1 ? format(datum.Value, '.0f') : format(datum.Value, '.1f')",
           "as": "Label"
         }
       ]
     },
     {
-      "name": "dateTickSource",
+      "name": "dateTicks",
       "source": "chartData",
       "transform": [
         {
           "type": "filter",
-          "expr": "length(data('latestByProduct')) > 0 && datum.SeriesKey === data('latestByProduct')[0].SeriesKey"
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "DateKey",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "TickRowNo"
-          ]
+          "expr": "datum.DateKey === data('chartData')[0].DateKey || datum.DateKey === data('chartData')[length(data('chartData')) - 1].DateKey || datum.DateKey % max(1, ceil((data('chartData')[length(data('chartData')) - 1].DateKey - data('chartData')[0].DateKey) / 7)) < 86400000"
         }
       ]
     },
     {
-      "name": "dateTicks",
-      "source": "dateTickSource",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTickSource')) || (datum.TickRowNo - 1) % max(1, ceil(length(data('dateTickSource')) / 4)) === 0"
-        }
-      ]
-    },
-    {
-      "name": "hoverAnchor",
+      "name": "hoverRows",
       "source": "chartData",
       "transform": [
         {
           "type": "formula",
-          "expr": "hoverIndex == null ? null : abs(datum.DateKey - hoverIndex)",
+          "expr": "hoverDateKey == null ? null : abs(datum.DateKey - hoverDateKey)",
           "as": "HoverDistance"
         },
         {
@@ -483,22 +347,9 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           ]
         },
         {
-          "type": "collect",
-          "sort": {
-            "field": "HoverDistance",
-            "order": "ascending"
-          }
-        },
-        {
           "type": "filter",
-          "expr": "hoverIndex != null && datum.HoverRank === 1"
-        }
-      ]
-    },
-    {
-      "name": "hoverRows",
-      "source": "hoverAnchor",
-      "transform": [
+          "expr": "hoverDateKey != null && datum.HoverRank === 1"
+        },
         {
           "type": "collect",
           "sort": {
@@ -513,35 +364,6 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           ],
           "as": [
             "HoverRowNo"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "hoverRowsVisible",
-      "source": "hoverRows",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.HoverRowNo <= 9"
-        }
-      ]
-    },
-    {
-      "name": "hoverRowsHidden",
-      "source": "hoverRows",
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "datum.HoverRowNo > 9"
-        },
-        {
-          "type": "aggregate",
-          "ops": [
-            "count"
-          ],
-          "as": [
-            "HiddenCount"
           ]
         }
       ]
@@ -566,8 +388,8 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         "field": "DateKey"
       },
       "range": [
-        300,
-        1360
+        150,
+        1430
       ],
       "nice": true,
       "zero": false
@@ -583,12 +405,8 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         ]
       },
       "range": [
-        {
-          "signal": "plotBottom"
-        },
-        {
-          "signal": "plotTop"
-        }
+        926,
+        416
       ],
       "zero": false,
       "nice": false
@@ -616,7 +434,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     {
       "orient": "bottom",
       "scale": "x",
-      "position": 780,
+      "position": 926,
       "labels": false,
       "ticks": false,
       "domain": false
@@ -624,36 +442,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     {
       "orient": "left",
       "scale": "y",
-      "position": 300,
+      "position": 276,
       "labels": false,
       "ticks": false,
       "domain": false
     }
   ],
   "marks": [
-    {
-      "name": "pageBackground",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 0
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 900
-          },
-          "fill": {
-            "value": "#F6F8FB"
-          }
-        }
-      }
-    },
     {
       "name": "sharedHeaderTop",
       "type": "rect",
@@ -692,7 +487,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": 18
           },
           "width": {
-            "value": 44
+            "value": 36
           },
           "height": {
             "value": 36
@@ -712,13 +507,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 50
+            "value": 46
           },
           "y": {
             "value": 37
           },
           "text": {
-            "value": "AIA"
+            "value": "M"
           },
           "align": {
             "value": "center"
@@ -730,7 +525,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#FFFFFF"
           },
           "fontSize": {
-            "value": 18
+            "value": 17
           },
           "fontWeight": {
             "value": "bold"
@@ -744,13 +539,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 80
+            "value": 78
           },
           "y": {
             "value": 37
           },
           "text": {
-            "value": "OneView"
+            "value": "Index Intelligence"
           },
           "baseline": {
             "value": "middle"
@@ -759,7 +554,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#172033"
           },
           "fontSize": {
-            "value": 18
+            "value": 16
           },
           "fontWeight": {
             "value": "bold"
@@ -773,13 +568,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 170
+            "value": 225
           },
           "y": {
             "value": 37
           },
           "text": {
-            "value": "by G.8 Intern"
+            "value": "by MTL Product Dev"
           },
           "baseline": {
             "value": "middle"
@@ -931,45 +726,139 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     },
     {
       "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 126
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 1026
+          },
+          "fill": {
+            "value": "#F4F8FB"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 56
+          },
+          "y": {
+            "value": 164
+          },
+          "text": {
+            "value": "Product Comparator"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 24
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 56
+          },
+          "y": {
+            "value": 192
+          },
+          "text": {
+            "value": "Select two or more ProductName values in Power BI slicers. Each product is normalized to Day 1 = 100."
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "limit": {
+            "value": 850
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 56
+          },
+          "y": {
+            "value": 210
+          },
+          "text": {
+            "value": "Use the CohortNo slicer to select cohort; each selected card displays its cohort and start date."
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "limit": {
+            "value": 850
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
       "from": {
         "data": "visibleCards"
       },
       "encode": {
         "enter": {
           "width": {
-            "value": 330
+            "value": 440
           },
           "height": {
-            "value": 74
+            "value": 86
           },
           "cornerRadius": {
-            "value": 7
+            "value": 8
           },
           "fill": {
             "value": "#FFFFFF"
           },
           "strokeWidth": {
-            "value": 1.4
+            "value": 2
           },
           "shadowColor": {
-            "value": "#D8E1EA"
+            "value": "#CBD5E1"
           },
           "shadowBlur": {
-            "value": 6
+            "value": 12
           },
           "shadowOffsetY": {
-            "value": 3
-          },
-          "stroke": {
-            "value": "#E3EBF3"
+            "value": 5
           }
         },
         "update": {
           "x": {
-            "signal": "56 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "56 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "220 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "218 + floor((datum.CardNo - 1) / 3) * 228"
           },
           "stroke": {
             "scale": "color",
@@ -989,21 +878,21 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#172033"
           },
           "fontSize": {
-            "value": 12
+            "value": 14
           },
           "fontWeight": {
             "value": "bold"
           },
           "limit": {
-            "value": 280
+            "value": 370
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "242 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "244 + floor((datum.CardNo - 1) / 3) * 228"
           },
           "text": {
             "signal": "datum.ProductName"
@@ -1022,18 +911,15 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 9.5
-          },
-          "limit": {
-            "value": 295
+            "value": 11
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "266 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "272 + floor((datum.CardNo - 1) / 3) * 228"
           },
           "text": {
             "signal": "'Index: ' + datum.IndexCode + '   PR: ' + format(datum.NumericPR, '.0%') + '   Volatility: ' + format(datum.NumericVolatility, '.0%')"
@@ -1049,61 +935,25 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "fontSize": {
-            "value": 10.5
+            "value": 14
           },
           "fontWeight": {
             "value": "bold"
-          },
-          "limit": {
-            "value": 295
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "76 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "289 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "297 + floor((datum.CardNo - 1) / 3) * 228"
           },
           "fill": {
             "scale": "color",
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "'Growth: ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-') + '   Latest: ' + timeFormat(datum.DateKey, '%d %b %Y')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "hiddenCards"
-      },
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 1288
-          },
-          "y": {
-            "value": 312
-          },
-          "align": {
-            "value": "right"
-          },
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "fontStyle": {
-            "value": "italic"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others selected' : ''"
+            "signal": "'Growth: ' + format(datum.DisplayProduct / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + timeFormat(datum.DateKey, '%d %b %Y')"
           }
         }
       }
@@ -1116,13 +966,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": 56
           },
           "y": {
-            "signal": "chartPanelY"
+            "value": 364
           },
           "x2": {
-            "value": 1430
+            "value": 1486
           },
           "y2": {
-            "value": 878
+            "value": 984
           },
           "cornerRadius": {
             "value": 8
@@ -1134,7 +984,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#E3EBF3"
           },
           "strokeWidth": {
-            "value": 1.1
+            "value": 1.2
           }
         }
       }
@@ -1144,22 +994,44 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 300
+            "value": 78
           },
           "y": {
-            "signal": "chartTitleY"
+            "value": 396
           },
           "text": {
-            "value": "Product Comparison"
+            "value": "Normalized Product Comparison"
           },
           "fill": {
             "value": "#172033"
           },
           "fontSize": {
-            "value": 14
+            "value": 16
           },
           "fontWeight": {
             "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 78
+          },
+          "y": {
+            "value": 418
+          },
+          "text": {
+            "value": "Day 1 = 100 for each product independently"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 12
           }
         }
       }
@@ -1169,13 +1041,39 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 300
+            "value": 150
+          },
+          "x2": {
+            "value": 1430
           },
           "y": {
-            "signal": "plotTop"
+            "scale": "y",
+            "value": 226
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.2
+          },
+          "strokeOpacity": {
+            "value": 0.75
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "y": {
+            "value": 416
           },
           "y2": {
-            "signal": "plotBottom"
+            "value": 926
           },
           "stroke": {
             "value": "#111111"
@@ -1191,13 +1089,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 300
+            "value": 150
           },
           "x2": {
-            "value": 1360
+            "value": 1430
           },
           "y": {
-            "signal": "plotBottom"
+            "value": 926
           },
           "stroke": {
             "value": "#111111"
@@ -1216,10 +1114,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 300
+            "value": 150
           },
           "x2": {
-            "value": 1360
+            "value": 1430
           },
           "stroke": {
             "value": "#E1E7EF"
@@ -1244,7 +1142,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 286
+            "value": 136
           },
           "align": {
             "value": "right"
@@ -1256,7 +1154,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#111111"
           },
           "fontSize": {
-            "value": 11
+            "value": 12
           },
           "fontWeight": {
             "value": "bold"
@@ -1282,10 +1180,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 300
+            "value": 150
           },
           "x2": {
-            "value": 1360
+            "value": 1430
           },
           "stroke": {
             "value": "#111111"
@@ -1306,14 +1204,52 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       }
     },
     {
+      "name": "forcedHundredLabel",
+      "type": "text",
+      "from": {
+        "data": "hundredTick"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 136
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          },
+          "text": {
+            "field": "Label"
+          }
+        }
+      }
+    },
+    {
       "type": "text",
       "encode": {
         "enter": {
           "x": {
-            "value": 242
+            "value": 100
           },
           "y": {
-            "signal": "(plotTop + plotBottom) / 2"
+            "value": 671
           },
           "text": {
             "value": "Growth"
@@ -1341,10 +1277,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 830
+            "value": 790
           },
           "y": {
-            "signal": "chartDateY"
+            "value": 964
           },
           "text": {
             "value": "Date"
@@ -1382,7 +1318,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           "encode": {
             "enter": {
               "interpolate": {
-                "value": "linear"
+                "value": "monotone"
               },
               "strokeWidth": {
                 "value": 3
@@ -1395,7 +1331,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
               },
               "y": {
                 "scale": "y",
-                "field": "DisplayProductNormalized"
+                "field": "DisplayProduct"
               },
               "stroke": {
                 "scale": "color",
@@ -1430,7 +1366,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProductNormalized"
+            "field": "DisplayProduct"
           },
           "fill": {
             "scale": "color",
@@ -1446,6 +1382,9 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       },
       "encode": {
         "enter": {
+          "dx": {
+            "value": 8
+          },
           "dy": {
             "value": -8
           },
@@ -1458,21 +1397,19 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1320 ? scale('x', datum.DateKey) - 8 : scale('x', datum.DateKey) + 8"
-          },
-          "align": {
-            "signal": "scale('x', datum.DateKey) > 1320 ? 'right' : 'left'"
+            "scale": "x",
+            "field": "DateKey"
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProductNormalized"
+            "field": "DisplayProduct"
           },
           "fill": {
             "scale": "color",
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "format(datum.DisplayProductNormalized / 100 - 1, '+.1%')"
+            "signal": "format(datum.DisplayProduct / 100 - 1, '+.1%')"
           }
         }
       }
@@ -1482,10 +1419,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 78
+            "value": 56
           },
           "y": {
-            "signal": "chartNoteY"
+            "value": 964
           },
           "text": {
             "value": "Remark: FX rate references Bank of Thailand (BoT)."
@@ -1494,7 +1431,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 9
+            "value": 10
           },
           "fontStyle": {
             "value": "italic"
@@ -1510,25 +1447,16 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "y": {
-            "signal": "dateTickY"
+            "value": 948
           },
           "align": {
-            "value": "right"
-          },
-          "baseline": {
-            "value": "top"
+            "value": "center"
           },
           "fill": {
             "value": "#111111"
           },
           "fontSize": {
-            "value": 8
-          },
-          "angle": {
-            "value": -25
-          },
-          "limit": {
-            "value": 95
+            "value": 10
           }
         },
         "update": {
@@ -1548,16 +1476,16 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 300
+            "value": 150
           },
           "y": {
-            "signal": "plotTop"
+            "value": 416
           },
           "x2": {
-            "value": 1360
+            "value": 1430
           },
           "y2": {
-            "signal": "plotBottom"
+            "value": 926
           },
           "fill": {
             "value": "#FFFFFF"
@@ -1567,25 +1495,22 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           },
           "cursor": {
             "value": "crosshair"
-          },
-          "stroke": {
-            "value": "#E3EBF3"
-          },
-          "strokeOpacity": {
-            "value": 0
           }
         }
       }
     },
     {
       "type": "rule",
+      "from": {
+        "data": "hoverDate"
+      },
       "encode": {
         "enter": {
           "y": {
-            "signal": "plotTop"
+            "value": 416
           },
           "y2": {
-            "signal": "plotBottom"
+            "value": 926
           },
           "stroke": {
             "value": "#D31145"
@@ -1602,10 +1527,8 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -100 : scale('x', hoverIndex)"
-          },
-          "opacity": {
-            "signal": "hoverIndex == null ? 0 : 1"
+            "scale": "x",
+            "field": "DateKey"
           }
         }
       }
@@ -1634,7 +1557,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           },
           "y": {
             "scale": "y",
-            "field": "DisplayProductNormalized"
+            "field": "DisplayProduct"
           },
           "fill": {
             "scale": "color",
@@ -1645,10 +1568,13 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     },
     {
       "type": "rect",
+      "from": {
+        "data": "hoverDate"
+      },
       "encode": {
         "enter": {
           "y": {
-            "value": 318
+            "value": 444
           },
           "width": {
             "value": 315
@@ -1669,31 +1595,31 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": 1.2
           },
           "shadowColor": {
-            "value": "#D8E1EA"
+            "value": "#CBD5E1"
           },
           "shadowBlur": {
-            "value": 7
+            "value": 12
           },
           "shadowOffsetY": {
-            "value": 3
+            "value": 5
           }
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 335 : scale('x', hoverIndex) + 20"
-          },
-          "opacity": {
-            "signal": "hoverIndex == null ? 0 : 1"
+            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
           }
         }
       }
     },
     {
       "type": "text",
+      "from": {
+        "data": "hoverDate"
+      },
       "encode": {
         "enter": {
           "y": {
-            "value": 346
+            "value": 472
           },
           "fill": {
             "value": "#172033"
@@ -1707,13 +1633,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 315 : scale('x', hoverIndex) + 40"
+            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
           },
           "text": {
-            "signal": "hoverIndex == null ? '' : 'Date: ' + timeFormat(hoverIndex, '%d %b %Y')"
-          },
-          "opacity": {
-            "signal": "hoverIndex == null ? 0 : 1"
+            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
           }
         }
       }
@@ -1721,7 +1644,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     {
       "type": "rect",
       "from": {
-        "data": "hoverRowsVisible"
+        "data": "hoverRows"
       },
       "encode": {
         "enter": {
@@ -1740,10 +1663,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 335 : hoverIndex != null ? scale('x', hoverIndex) + 20 : -1000"
+            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
           },
           "y": {
-            "signal": "366 + datum.HoverRowNo * 28"
+            "signal": "492 + datum.HoverRowNo * 154"
           }
         }
       }
@@ -1751,7 +1674,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     {
       "type": "text",
       "from": {
-        "data": "hoverRowsVisible"
+        "data": "hoverRows"
       },
       "encode": {
         "enter": {
@@ -1770,10 +1693,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : -1000"
+            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
           },
           "y": {
-            "signal": "384 + datum.HoverRowNo * 28"
+            "signal": "510 + datum.HoverRowNo * 154"
           },
           "text": {
             "signal": "datum.ProductName"
@@ -1784,7 +1707,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     {
       "type": "text",
       "from": {
-        "data": "hoverRowsVisible"
+        "data": "hoverRows"
       },
       "encode": {
         "enter": {
@@ -1800,47 +1723,17 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 38 : hoverIndex != null ? scale('x', hoverIndex) + 302 : -1000"
+            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
           },
           "y": {
-            "signal": "384 + datum.HoverRowNo * 28"
+            "signal": "510 + datum.HoverRowNo * 154"
           },
           "fill": {
             "scale": "color",
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%')"
-          }
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {
-        "data": "hoverRowsHidden"
-      },
-      "encode": {
-        "enter": {
-          "fill": {
-            "value": "#6B7890"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "fontStyle": {
-            "value": "italic"
-          }
-        },
-        "update": {
-          "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : -1000"
-          },
-          "y": {
-            "value": 740
-          },
-          "text": {
-            "signal": "datum.HiddenCount > 0 ? '+ ' + datum.HiddenCount + ' others' : ''"
+            "signal": "format(datum.DisplayProduct, '.2f') + ' / ' + format(datum.DisplayProduct / 100 - 1, '+.2%')"
           }
         }
       }
@@ -1848,39 +1741,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
   ],
   "signals": [
     {
-      "name": "dateTickY",
-      "update": "plotBottom + 26"
-    },
-    {
-      "name": "chartDateY",
-      "update": "plotBottom + 66"
-    },
-    {
-      "name": "chartNoteY",
-      "update": "plotBottom + 88"
-    },
-    {
-      "name": "plotBottom",
-      "update": "780"
-    },
-    {
-      "name": "plotTop",
-      "update": "chartPanelY + 90"
-    },
-    {
-      "name": "chartTitleY",
-      "update": "chartPanelY + 30"
-    },
-    {
-      "name": "chartPanelY",
-      "update": "328"
-    },
-    {
-      "name": "cardRows",
-      "update": "max(1, ceil(length(data('visibleCards')) / 4))"
-    },
-    {
-      "name": "hoverIndex",
+      "name": "hoverX",
       "value": null,
       "on": [
         {
@@ -1888,7 +1749,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "invert('x', clamp(x(), 300, 1360))"
+          "update": "clamp(x(), 150, 1430)"
         },
         {
           "events": {
@@ -1898,6 +1759,10 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
           "update": "null"
         }
       ]
+    },
+    {
+      "name": "hoverDateKey",
+      "update": "hoverX == null || length(data('chartData')) == 0 ? null : invert('x', hoverX)"
     }
   ]
 }
