@@ -405,6 +405,16 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
           "groupby": [
             "SeriesKey"
           ],
+          "sort": {
+            "field": [
+              "HoverDistance",
+              "DateKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          },
           "ops": [
             "row_number"
           ],
@@ -445,6 +455,16 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
           "groupby": [
             "SeriesKey"
           ],
+          "sort": {
+            "field": [
+              "HoverDistance",
+              "DateKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          },
           "ops": [
             "row_number"
           ],
@@ -1826,7 +1846,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(datum.ProductReturnCalc, '+.2%')"
+            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(isFinite(datum.ProductReturnCalc) && abs(datum.ProductReturnCalc) > 0.0000001 ? datum.ProductReturnCalc : datum.DisplayProductNormalized / 100 - 1, '+.2%')"
           }
         }
       }
