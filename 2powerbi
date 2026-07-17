@@ -41,9 +41,9 @@ SLICERS RECOMMENDED
 - Company: optional.
 - Date: optional Between slicer.
 
-ProductReturn drives the product comparison line. If Final Data contains dates after CohortEndDate, page 2 continues to the latest available Final Data date.
-Do not limit the Date slicer to CohortEndDate. If the Date slicer ends at CohortEndDate, Power BI hides later calculated rows before Deneb receives them.
-The graph displays exactly the rows generated in Final Data, so cohort sampling is controlled by the Excel script: newest 6 daily, older than 6 four points/month + latest, older than 12 two points/month + latest, older than 30 one point/month + latest.
+ProductReturn drives the product comparison line. Page 2 only keeps rows inside each cohort's own CohortStartDate to ObservationEndDate/CohortEndDate window.
+The Date slicer can therefore remove product/cohort combinations when the selected date range has no valid rows for that cohort.
+Newest cohort rows are recalculated from the formula in Deneb for every available date row. Source row sampling is controlled by the Excel script: newest cohort daily, newer cohorts under 6 daily, older than 6 four points/month + latest, older than 12 two points/month + latest, older than 30 one point/month + latest.
 
 ================ PASTE JSON BELOW ================
 {
@@ -98,12 +98,31 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortStartDate)) ? (toNumber(datum.CohortStartDate) > 1000000000 ? toNumber(datum.CohortStartDate) : (toNumber(datum.CohortStartDate) - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
+          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 100000000000 ? datum.CohortStartDate : datum.CohortStartDate > 1000000000 ? datum.CohortStartDate * 1000 : (datum.CohortStartDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortStartDate)) ? (toNumber(datum.CohortStartDate) > 100000000000 ? toNumber(datum.CohortStartDate) : toNumber(datum.CohortStartDate) > 1000000000 ? toNumber(datum.CohortStartDate) * 1000 : (toNumber(datum.CohortStartDate) - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
           "as": "CohortStartKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.CohortEndDate) ? time(datum.CohortEndDate) : isNumber(datum.CohortEndDate) ? (datum.CohortEndDate > 100000000000 ? datum.CohortEndDate : datum.CohortEndDate > 1000000000 ? datum.CohortEndDate * 1000 : (datum.CohortEndDate - 25569) * 86400000) : isFinite(toNumber(datum.CohortEndDate)) ? (toNumber(datum.CohortEndDate) > 100000000000 ? toNumber(datum.CohortEndDate) : toNumber(datum.CohortEndDate) > 1000000000 ? toNumber(datum.CohortEndDate) * 1000 : (toNumber(datum.CohortEndDate) - 25569) * 86400000) : time(toDate(datum.CohortEndDate))",
+          "as": "CohortEndKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.ObservationEndDate) ? time(datum.ObservationEndDate) : isNumber(datum.ObservationEndDate) ? (datum.ObservationEndDate > 100000000000 ? datum.ObservationEndDate : datum.ObservationEndDate > 1000000000 ? datum.ObservationEndDate * 1000 : (datum.ObservationEndDate - 25569) * 86400000) : isFinite(toNumber(datum.ObservationEndDate)) ? (toNumber(datum.ObservationEndDate) > 100000000000 ? toNumber(datum.ObservationEndDate) : toNumber(datum.ObservationEndDate) > 1000000000 ? toNumber(datum.ObservationEndDate) * 1000 : (toNumber(datum.ObservationEndDate) - 25569) * 86400000) : time(toDate(datum.ObservationEndDate))",
+          "as": "ObservationEndKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.ObservationEndKey) ? datum.ObservationEndKey : datum.CohortEndKey",
+          "as": "CohortRangeEndKey"
         },
         {
           "type": "filter",
           "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
+        },
+        {
+          "type": "filter",
+          "expr": "(!isFinite(datum.CohortStartKey) || datum.DateKey >= datum.CohortStartKey) && (!isFinite(datum.CohortRangeEndKey) || datum.DateKey <= datum.CohortRangeEndKey)"
         },
         {
           "type": "formula",
@@ -122,7 +141,24 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
+          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
+          "as": "FormulaReturnCalc"
+        },
+        {
+          "type": "joinaggregate",
+          "ops": [
+            "max"
+          ],
+          "fields": [
+            "CohortStartKey"
+          ],
+          "as": [
+            "NewestCohortStartKey"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(datum.CohortStartKey) && datum.CohortStartKey === datum.NewestCohortStartKey ? datum.FormulaReturnCalc : isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaReturnCalc",
           "as": "ProductReturnCalc"
         },
         {
@@ -1563,10 +1599,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "signal": "plotBottom"
           },
           "fill": {
-            "value": "#D31145"
+            "value": "#FFFFFF"
           },
           "fillOpacity": {
-            "value": 0.01
+            "value": 0
           },
           "cursor": {
             "value": "crosshair"
@@ -1576,9 +1612,6 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
     },
     {
       "type": "rule",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
@@ -1602,8 +1635,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "scale": "x",
-            "field": "DateKey"
+            "signal": "hoverIndex == null ? -100 : scale('x', hoverIndex)"
+          },
+          "opacity": {
+            "signal": "hoverIndex == null ? 0 : 1"
           }
         }
       }
@@ -1643,9 +1678,6 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
     },
     {
       "type": "rect",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
@@ -1681,16 +1713,16 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 335 : scale('x', hoverIndex) + 20"
+          },
+          "opacity": {
+            "signal": "hoverIndex == null ? 0 : 1"
           }
         }
       }
     },
     {
       "type": "text",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
@@ -1708,10 +1740,13 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 315 : scale('x', hoverIndex) + 40"
           },
           "text": {
-            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "hoverIndex == null ? '' : 'Date: ' + timeFormat(hoverIndex, '%d %b %Y')"
+          },
+          "opacity": {
+            "signal": "hoverIndex == null ? 0 : 1"
           }
         }
       }
@@ -1738,7 +1773,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 335 : hoverIndex != null ? scale('x', hoverIndex) + 20 : -1000"
           },
           "y": {
             "signal": "366 + datum.HoverRowNo * 28"
@@ -1768,7 +1803,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : -1000"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1798,7 +1833,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1080 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 38 : hoverIndex != null ? scale('x', hoverIndex) + 302 : -1000"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1832,7 +1867,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "length(data('hoverDate')) && scale('x', data('hoverDate')[0].DateKey) > 1080 ? scale('x', data('hoverDate')[0].DateKey) - 318 : length(data('hoverDate')) ? scale('x', data('hoverDate')[0].DateKey) + 37 : 0"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : 0"
           },
           "y": {
             "value": 740
