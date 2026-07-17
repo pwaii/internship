@@ -1,0 +1,1704 @@
+POWER BI DENEB - MTL INDEX COMPARISON ASSIGNED THEME Y-AXIS ADAPTIVE TICKS
+
+This page compares indexes instead of products. It supports multi-select indexes and uses a non-zero y-axis range.
+
+DATA SOURCE
+Use Final Data.
+This page reads the index price columns from Final Data and compares the index movement for selected products/indexes.
+
+Recommended Power BI table name: Final Data
+Required shape:
+- ProductName
+- IndexName
+- IndexCode
+- CohortNo
+- Date
+- Price
+
+ADD THESE FIELDS TO DENEB VALUES
+- ProductName
+- IndexName
+- IndexCode
+- CohortNo
+- Date
+- Price
+
+Optional but harmless if already present:
+- Company
+- ProductName
+- CohortNo
+- CohortStartDate
+- CohortEndDate
+
+IMPORTANT
+1. Choose Deneb > Create new specification > Vega > Empty.
+2. Use raw Date, not Date hierarchy.
+3. Set Price to Don't summarize.
+4. Use slicers for Company, ProductName, IndexCode, or IndexName. Multi-select is supported.
+5. Product formula fields are not needed on this page.
+6. Set Date and Price to Don't summarize.
+
+================ PASTE JSON BELOW ================
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "MTL index comparison dashboard with assigned theme, aligned y-axis, 0.5-step labels, and forced 100.0 tick. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
+  "background": "#F4F8FB",
+  "width": 1500,
+  "height": 900,
+  "padding": 0,
+  "autosize": {
+    "type": "fit",
+    "contains": "padding",
+    "resize": true
+  },
+  "signals": [
+    {
+      "name": "chartRemarkY",
+      "update": "plotBottom + 58"
+    },
+    {
+      "name": "dateTitleY",
+      "update": "plotBottom + 38"
+    },
+    {
+      "name": "dateTickY",
+      "update": "plotBottom + 22"
+    },
+    {
+      "name": "plotMidY",
+      "update": "(plotTop + plotBottom) / 2"
+    },
+    {
+      "name": "plotBottom",
+      "update": "790"
+    },
+    {
+      "name": "plotTop",
+      "update": "chartPanelY + 90"
+    },
+    {
+      "name": "chartTitleY",
+      "update": "chartPanelY + 30"
+    },
+    {
+      "name": "chartPanelY",
+      "update": "220 + cardRows * 84 + 24"
+    },
+    {
+      "name": "cardRows",
+      "update": "max(1, ceil(length(data('visibleCards')) / 4))"
+    },
+    {
+      "name": "hoverX",
+      "value": null,
+      "on": [
+        {
+          "events": {
+            "type": "mousemove",
+            "markname": "hoverArea"
+          },
+          "update": "clamp(x(), 150, 1360)"
+        },
+        {
+          "events": {
+            "type": "mouseout",
+            "markname": "hoverArea"
+          },
+          "update": "null"
+        }
+      ]
+    },
+    {
+      "name": "hoverDateKey",
+      "update": "hoverX == null || length(data('indexSeries')) == 0 ? null : invert('x', hoverX)"
+    }
+  ],
+  "data": [
+    {
+      "name": "dataset"
+    },
+    {
+      "name": "rawIndexRows",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "toNumber(datum.Price)",
+          "as": "NumericPrice"
+        },
+        {
+          "type": "formula",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
+          "as": "DateKey"
+        },
+        {
+          "type": "formula",
+          "expr": "isFinite(toNumber(datum.CohortNo)) ? toNumber(datum.CohortNo) : 1",
+          "as": "NumericCohortNo"
+        },
+        {
+          "type": "filter",
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.DateKey) && datum.IndexCode != null"
+        },
+        {
+          "type": "formula",
+          "expr": "toString(datum.IndexCode)",
+          "as": "SeriesKey"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.IndexName ? toString(datum.IndexName) : toString(datum.IndexCode)",
+          "as": "SeriesName"
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "NumericCohortNo",
+            "order": "ascending"
+          },
+          "ops": [
+            "first_value"
+          ],
+          "fields": [
+            "NumericCohortNo"
+          ],
+          "as": [
+            "FirstCohortNo"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.NumericCohortNo === datum.FirstCohortNo"
+        }
+      ]
+    },
+    {
+      "name": "indexDaily",
+      "source": "rawIndexRows",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "SeriesKey",
+            "SeriesName",
+            "DateKey"
+          ],
+          "ops": [
+            "mean"
+          ],
+          "fields": [
+            "NumericPrice"
+          ],
+          "as": [
+            "IndexPrice"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": [
+              "SeriesKey",
+              "DateKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "indexSeries",
+      "source": "indexDaily",
+      "transform": [
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          },
+          "ops": [
+            "row_number",
+            "first_value"
+          ],
+          "fields": [
+            null,
+            "IndexPrice"
+          ],
+          "as": [
+            "RowIndex",
+            "StartPrice"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.StartPrice > 0 ? datum.IndexPrice / datum.StartPrice * 100 : datum.IndexPrice",
+          "as": "CompareIndex"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.CompareIndex / 100 - 1",
+          "as": "IndexGrowth"
+        }
+      ]
+    },
+    {
+      "name": "latestByIndex",
+      "source": "indexSeries",
+      "transform": [
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "DateKey",
+            "order": "descending"
+          },
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "LatestRank"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.LatestRank === 1"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "SeriesKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "CardNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "visibleCards",
+      "source": "latestByIndex",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.CardNo <= 12"
+        }
+      ]
+    },
+    {
+      "name": "yDomain",
+      "source": "indexSeries",
+      "transform": [
+        {
+          "type": "aggregate",
+          "ops": [
+            "min",
+            "max"
+          ],
+          "fields": [
+            "CompareIndex",
+            "CompareIndex"
+          ],
+          "as": [
+            "MinY",
+            "MaxY"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "max(1, datum.MaxY - datum.MinY)",
+          "as": "Spread"
+        },
+        {
+          "type": "formula",
+          "expr": "floor((datum.MinY - datum.Spread * 0.12) * 2) / 2",
+          "as": "DomainMin"
+        },
+        {
+          "type": "formula",
+          "expr": "ceil((datum.MaxY + datum.Spread * 0.12) * 2) / 2",
+          "as": "DomainMax"
+        }
+      ]
+    },
+    {
+      "name": "dateTicksSource",
+      "source": "indexSeries",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "length(data('latestByIndex')) > 0 && datum.SeriesKey === data('latestByIndex')[0].SeriesKey"
+        }
+      ]
+    },
+    {
+      "name": "dateTicks",
+      "source": "dateTicksSource",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.RowIndex === 1 || datum.RowIndex === length(data('dateTicksSource')) || datum.RowIndex % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
+        }
+      ]
+    },
+    {
+      "name": "hoverRows",
+      "source": "indexSeries",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "hoverDateKey == null ? null : abs(datum.DateKey - hoverDateKey)",
+          "as": "HoverDistance"
+        },
+        {
+          "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
+          "sort": {
+            "field": "HoverDistance",
+            "order": "ascending"
+          },
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "HoverRank"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "hoverDateKey != null && datum.HoverRank === 1"
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "SeriesKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "HoverRowNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hoverDate",
+      "source": "hoverRows",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.HoverRowNo === 1"
+        }
+      ]
+    },
+    {
+      "name": "manualYTicks",
+      "source": "yDomain",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "datum.DomainMax - datum.DomainMin",
+          "as": "AxisSpan"
+        },
+        {
+          "type": "formula",
+          "expr": "floor(datum.AxisSpan / 0.5) + 1",
+          "as": "HalfStepCount"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.HalfStepCount > 15 ? 1 : 0.5",
+          "as": "TickStep"
+        },
+        {
+          "type": "formula",
+          "expr": "ceil(datum.DomainMin / datum.TickStep) * datum.TickStep",
+          "as": "FirstTick"
+        },
+        {
+          "type": "formula",
+          "expr": "sequence(datum.FirstTick, datum.DomainMax + datum.TickStep * 0.5, datum.TickStep)",
+          "as": "TickArray"
+        },
+        {
+          "type": "flatten",
+          "fields": [
+            "TickArray"
+          ],
+          "as": [
+            "Value"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "datum.Value >= datum.DomainMin && datum.Value <= datum.DomainMax"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.TickStep >= 1 ? format(datum.Value, '.0f') : format(datum.Value, '.1f')",
+          "as": "Label"
+        }
+      ]
+    },
+    {
+      "name": "hundredTick",
+      "source": "yDomain",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.DomainMin <= 100 && datum.DomainMax >= 100"
+        },
+        {
+          "type": "formula",
+          "expr": "100",
+          "as": "Value"
+        },
+        {
+          "type": "formula",
+          "expr": "'100'",
+          "as": "Label"
+        }
+      ]
+    }
+  ],
+  "scales": [
+    {
+      "name": "x",
+      "type": "linear",
+      "domain": {
+        "data": "indexSeries",
+        "field": "DateKey"
+      },
+      "range": [
+        150,
+        1360
+      ],
+      "zero": false,
+      "nice": true
+    },
+    {
+      "name": "y",
+      "type": "linear",
+      "domain": {
+        "data": "yDomain",
+        "fields": [
+          "DomainMin",
+          "DomainMax"
+        ]
+      },
+      "range": [
+        {
+          "signal": "plotBottom"
+        },
+        {
+          "signal": "plotTop"
+        }
+      ],
+      "zero": false,
+      "nice": false
+    },
+    {
+      "name": "color",
+      "type": "ordinal",
+      "domain": {
+        "data": "indexSeries",
+        "field": "SeriesKey"
+      },
+      "range": [
+        "#D31145",
+        "#59C7F2",
+        "#47DDB1",
+        "#7B61FF",
+        "#FFD166",
+        "#FF9F1C",
+        "#2EC4B6"
+      ]
+    }
+  ],
+  "axes": [
+    {
+      "orient": "bottom",
+      "scale": "x",
+      "position": 790,
+      "labels": false,
+      "ticks": false,
+      "domain": false,
+      "labelColor": "#111111",
+      "tickColor": "#111111",
+      "domainColor": "#111111",
+      "titleColor": "#111111",
+      "grid": false
+    },
+    {
+      "orient": "left",
+      "scale": "y",
+      "position": 150,
+      "labelColor": "#111111",
+      "labelFontSize": 12,
+      "tickColor": "#111111",
+      "domainColor": "#111111",
+      "grid": false,
+      "gridColor": "#E1E7EF",
+      "gridOpacity": 1,
+      "tickCount": 7,
+      "titleColor": "#111111",
+      "titleFontSize": 12,
+      "titlePadding": 36,
+      "labels": false,
+      "ticks": false,
+      "domain": false
+    }
+  ],
+  "marks": [
+    {
+      "name": "pageBackground",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 900
+          },
+          "fill": {
+            "value": "#F6F8FB"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderTop",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 0
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 70
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderLogo",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 28
+          },
+          "y": {
+            "value": 18
+          },
+          "width": {
+            "value": 36
+          },
+          "height": {
+            "value": 36
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#D31145"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderLogoText",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 46
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "M"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "fontSize": {
+            "value": 17
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderTitle",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 78
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "Index Intelligence"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 16
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderByline",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 225
+          },
+          "y": {
+            "value": 37
+          },
+          "text": {
+            "value": "by MTL Product Dev"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 13
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderNav",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 70
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 126
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderNavProduct",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 48
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Product Viewer"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderNavComparator",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 210
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Comparator"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "normal"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderNavIndex",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 350
+          },
+          "y": {
+            "value": 99
+          },
+          "text": {
+            "value": "Index Dashboard"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "sharedHeaderActiveRule",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 350
+          },
+          "x2": {
+            "value": 510
+          },
+          "y": {
+            "value": 125
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 3
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "width": {
+            "value": 330
+          },
+          "height": {
+            "value": 74
+          },
+          "cornerRadius": {
+            "value": 7
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 1.4
+          },
+          "shadowColor": {
+            "value": "#D8E1EA"
+          },
+          "shadowBlur": {
+            "value": 6
+          },
+          "shadowOffsetY": {
+            "value": 3
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "56 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "stroke": {
+            "scale": "color",
+            "field": "SeriesKey"
+          },
+          "y": {
+            "signal": "220 + floor((datum.CardNo - 1) / 4) * 84"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "limit": {
+            "value": 280
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "text": {
+            "signal": "datum.SeriesName"
+          },
+          "y": {
+            "signal": "242 + floor((datum.CardNo - 1) / 4) * 84"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 22
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "text": {
+            "signal": "format(datum.CompareIndex, '.2f')"
+          },
+          "y": {
+            "signal": "263 + floor((datum.CardNo - 1) / 4) * 84"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "visibleCards"
+      },
+      "encode": {
+        "enter": {
+          "fontSize": {
+            "value": 10.5
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "limit": {
+            "value": 290
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          },
+          "text": {
+            "signal": "'Growth ' + format(datum.IndexGrowth, '+.2%')"
+          },
+          "y": {
+            "signal": "287 + floor((datum.CardNo - 1) / 4) * 84"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 56
+          },
+          "y": {
+            "signal": "chartPanelY"
+          },
+          "x2": {
+            "value": 1430
+          },
+          "y2": {
+            "value": 878
+          },
+          "cornerRadius": {
+            "value": 8
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          },
+          "strokeWidth": {
+            "value": 1.1
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 190
+          },
+          "y": {
+            "signal": "chartTitleY"
+          },
+          "text": {
+            "value": "Index Performance Comparison"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 14
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "manualYAxisGrid",
+      "type": "rule",
+      "from": {
+        "data": "manualYTicks"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "x2": {
+            "value": 1360
+          },
+          "stroke": {
+            "value": "#E1E7EF"
+          },
+          "strokeWidth": {
+            "value": 1
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "name": "manualYAxisLine",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "y": {
+            "signal": "plotTop"
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.5
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "manualXAxisLine",
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "x2": {
+            "value": 1360
+          },
+          "y": {
+            "signal": "plotBottom"
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.5
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "manualYAxisTicks",
+      "type": "rule",
+      "from": {
+        "data": "manualYTicks"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 144
+          },
+          "x2": {
+            "value": 150
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.2
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "name": "manualYAxisLabels",
+      "type": "text",
+      "from": {
+        "data": "manualYTicks"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 138
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#111111"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          },
+          "text": {
+            "field": "Label"
+          }
+        }
+      }
+    },
+    {
+      "name": "forcedHundredGrid",
+      "type": "rule",
+      "from": {
+        "data": "hundredTick"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "x2": {
+            "value": 1360
+          },
+          "stroke": {
+            "value": "#111111"
+          },
+          "strokeWidth": {
+            "value": 1.35
+          },
+          "strokeOpacity": {
+            "value": 0.7
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          }
+        }
+      }
+    },
+    {
+      "name": "forcedHundredLabel",
+      "type": "text",
+      "from": {
+        "data": "hundredTick"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 138
+          },
+          "align": {
+            "value": "right"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#D31145"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "y": {
+            "scale": "y",
+            "field": "Value"
+          },
+          "text": {
+            "value": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "manualYAxisTitle",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 104
+          },
+          "y": {
+            "signal": "plotMidY"
+          },
+          "text": {
+            "value": "Index (Base 100)"
+          },
+          "angle": {
+            "value": -90
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "type": "group",
+      "from": {
+        "facet": {
+          "name": "series",
+          "data": "indexSeries",
+          "groupby": "SeriesKey"
+        }
+      },
+      "marks": [
+        {
+          "type": "line",
+          "from": {
+            "data": "series"
+          },
+          "encode": {
+            "enter": {
+              "interpolate": {
+                "value": "monotone"
+              },
+              "strokeWidth": {
+                "value": 3
+              }
+            },
+            "update": {
+              "x": {
+                "scale": "x",
+                "field": "DateKey"
+              },
+              "y": {
+                "scale": "y",
+                "field": "CompareIndex"
+              },
+              "stroke": {
+                "scale": "color",
+                "field": "SeriesKey"
+              }
+            }
+          }
+        }
+      ],
+      "encode": {
+        "enter": {},
+        "update": {}
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "dateTicks"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "signal": "dateTickY"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          },
+          "text": {
+            "signal": "timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 760
+          },
+          "y": {
+            "signal": "dateTitleY"
+          },
+          "text": {
+            "value": "Date"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 12
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "name": "hoverArea",
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 150
+          },
+          "y": {
+            "signal": "plotTop"
+          },
+          "x2": {
+            "value": 1360
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fillOpacity": {
+            "value": 0
+          },
+          "cursor": {
+            "value": "crosshair"
+          }
+        },
+        "update": {}
+      }
+    },
+    {
+      "type": "rule",
+      "from": {
+        "data": "hoverDate"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "signal": "plotTop"
+          },
+          "y2": {
+            "signal": "plotBottom"
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 2
+          },
+          "strokeDash": {
+            "value": [
+              4,
+              4
+            ]
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "symbol",
+      "from": {
+        "data": "hoverRows"
+      },
+      "encode": {
+        "enter": {
+          "size": {
+            "value": 85
+          },
+          "stroke": {
+            "value": "#172033"
+          },
+          "strokeWidth": {
+            "value": 2.5
+          }
+        },
+        "update": {
+          "x": {
+            "scale": "x",
+            "field": "DateKey"
+          },
+          "y": {
+            "scale": "y",
+            "field": "CompareIndex"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "hoverDate"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "signal": "plotTop + 22"
+          },
+          "width": {
+            "value": 305
+          },
+          "height": {
+            "value": 42
+          },
+          "cornerRadius": {
+            "value": 8
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverDate"
+      },
+      "encode": {
+        "enter": {
+          "y": {
+            "signal": "plotTop + 49"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 305 : scale('x', datum.DateKey) + 40"
+          },
+          "text": {
+            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "hoverRows"
+      },
+      "encode": {
+        "enter": {
+          "width": {
+            "value": 305
+          },
+          "height": {
+            "value": 28
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "stroke": {
+            "value": "#E3EBF3"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
+          },
+          "y": {
+            "signal": "plotTop + 26 + datum.HoverRowNo * 28"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverRows"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "limit": {
+            "value": 180
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 308 : scale('x', datum.DateKey) + 37"
+          },
+          "y": {
+            "signal": "plotTop + 44 + datum.HoverRowNo * 28"
+          },
+          "text": {
+            "signal": "datum.SeriesName"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "hoverRows"
+      },
+      "encode": {
+        "enter": {
+          "align": {
+            "value": "right"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 292"
+          },
+          "y": {
+            "signal": "plotTop + 44 + datum.HoverRowNo * 28"
+          },
+          "fill": {
+            "scale": "color",
+            "field": "SeriesKey"
+          },
+          "text": {
+            "signal": "format(datum.CompareIndex, '.2f') + ' / ' + format(datum.IndexGrowth, '+.2%')"
+          }
+        }
+      }
+    }
+  ]
+}
