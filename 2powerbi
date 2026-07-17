@@ -103,11 +103,11 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "filter",
-          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
+          "expr": "isFinite(datum.DateKey) && (isFinite(toNumber(datum.ProductValue)) || isFinite(toNumber(datum.ProductReturn)) || (isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0))"
         },
         {
           "type": "formula",
-          "expr": "datum.NumericPrice / datum.NumericBase * 100",
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 ? datum.NumericPrice / datum.NumericBase * 100 : 100",
           "as": "DisplayIndex"
         },
         {
@@ -122,7 +122,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
+          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) / 100 - 1 : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0), isFinite(datum.NumericVolatility) ? datum.NumericVolatility : 1) : max(datum.IndexReturnCalc * datum.NumericPR, isFinite(datum.NumericFloor) ? datum.NumericFloor : 0)",
           "as": "ProductReturnCalc"
         },
         {
@@ -298,6 +298,9 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
           "ops": [
             "row_number"
           ],
@@ -402,6 +405,9 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
           "ops": [
             "row_number"
           ],
@@ -439,6 +445,9 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "window",
+          "groupby": [
+            "SeriesKey"
+          ],
           "ops": [
             "row_number"
           ],
@@ -1670,7 +1679,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
+            "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
           },
           "opacity": {
             "signal": "hoverIndex == null ? 0 : 1"
@@ -1697,7 +1706,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 430 : scale('x', hoverIndex) + 50"
+            "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 430 : scale('x', hoverIndex) + 50"
           },
           "text": {
             "signal": "hoverIndex == null ? '' : 'Date: ' + timeFormat(hoverIndex, '%d %b %Y')"
@@ -1730,7 +1739,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
+            "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
           },
           "y": {
             "signal": "372 + datum.HoverRowNo * 40"
@@ -1760,7 +1769,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : scale('x', hoverIndex) + 47"
+            "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : scale('x', hoverIndex) + 47"
           },
           "y": {
             "signal": "397 + datum.HoverRowNo * 40"
@@ -1790,7 +1799,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 45 : scale('x', hoverIndex) + 405"
+            "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 45 : scale('x', hoverIndex) + 405"
           },
           "y": {
             "signal": "397 + datum.HoverRowNo * 40"
@@ -1824,7 +1833,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : hoverIndex != null ? scale('x', hoverIndex) + 47 : -1000"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : hoverIndex != null ? scale('x', hoverIndex) + 47 : 190"
           },
           "y": {
             "value": 875
