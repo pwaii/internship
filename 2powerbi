@@ -79,17 +79,17 @@ SLICERS RECOMMENDED
         },
         {
           "type": "formula",
-          "expr": "toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)",
+          "expr": "isFinite(toNumber(datum.FloorRate)) ? (toNumber(datum.FloorRate) > 1 ? toNumber(datum.FloorRate) / 100 : toNumber(datum.FloorRate)) : 0",
           "as": "NumericFloor"
         },
         {
           "type": "formula",
-          "expr": "toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)",
+          "expr": "isFinite(toNumber(datum.Volatility)) ? (toNumber(datum.Volatility) > 1 ? toNumber(datum.Volatility) / 100 : toNumber(datum.Volatility)) : (isFinite(toNumber(datum.CapRate)) ? (toNumber(datum.CapRate) > 1 ? toNumber(datum.CapRate) / 100 : toNumber(datum.CapRate)) : 1)",
           "as": "NumericVolatility"
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
         },
         {
@@ -108,18 +108,22 @@ SLICERS RECOMMENDED
         },
         {
           "type": "formula",
-          "expr": "upper(toString(datum.FormulaType || 'PR_ONLY'))",
+          "expr": "upper(toString(datum.Formula || datum.FormulaType || 'PR_ONLY'))",
           "as": "FormulaKey"
         },
         {
           "type": "formula",
-          "expr": "datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
+          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
           "as": "ProductReturnCalc"
         },
         {
           "type": "formula",
-          "expr": "100 * (1 + datum.ProductReturnCalc)",
+          "expr": "isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) : 100 * (1 + datum.ProductReturnCalc)",
           "as": "DisplayProduct"
+        },
+        {
+          "type": "filter",
+          "expr": "isFinite(datum.ProductReturnCalc) && isFinite(datum.DisplayProduct)"
         },
         {
           "type": "formula",
@@ -316,8 +320,30 @@ SLICERS RECOMMENDED
       "source": "chartData",
       "transform": [
         {
+          "type": "aggregate",
+          "groupby": [
+            "DateKey"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "TickRowNo"
+          ]
+        },
+        {
           "type": "filter",
-          "expr": "datum.DateKey === data('chartData')[0].DateKey || datum.DateKey === data('chartData')[length(data('chartData')) - 1].DateKey || datum.DateKey % max(1, ceil((data('chartData')[length(data('chartData')) - 1].DateKey - data('chartData')[0].DateKey) / 7)) < 86400000"
+          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTicks')) || (datum.TickRowNo - 1) % max(1, ceil(length(data('dateTicks')) / 7)) === 0"
         }
       ]
     },
@@ -1491,7 +1517,7 @@ SLICERS RECOMMENDED
             "value": "#FFFFFF"
           },
           "fillOpacity": {
-            "value": 0
+            "value": 0.001
           },
           "cursor": {
             "value": "crosshair"
@@ -1501,9 +1527,6 @@ SLICERS RECOMMENDED
     },
     {
       "type": "rule",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
@@ -1527,8 +1550,10 @@ SLICERS RECOMMENDED
         },
         "update": {
           "x": {
-            "scale": "x",
-            "field": "DateKey"
+            "signal": "hoverDateKey == null ? -100 : scale('x', hoverDateKey)"
+          },
+          "opacity": {
+            "signal": "hoverDateKey == null ? 0 : 1"
           }
         }
       }
@@ -1568,9 +1593,6 @@ SLICERS RECOMMENDED
     },
     {
       "type": "rect",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
@@ -1606,16 +1628,16 @@ SLICERS RECOMMENDED
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "hoverDateKey == null ? -1000 : scale('x', hoverDateKey) > 1120 ? scale('x', hoverDateKey) - 335 : scale('x', hoverDateKey) + 20"
+          },
+          "opacity": {
+            "signal": "hoverDateKey == null ? 0 : 1"
           }
         }
       }
     },
     {
       "type": "text",
-      "from": {
-        "data": "hoverDate"
-      },
       "encode": {
         "enter": {
           "y": {
@@ -1633,10 +1655,13 @@ SLICERS RECOMMENDED
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 315 : scale('x', datum.DateKey) + 40"
+            "signal": "hoverDateKey == null ? -1000 : scale('x', hoverDateKey) > 1120 ? scale('x', hoverDateKey) - 315 : scale('x', hoverDateKey) + 40"
           },
           "text": {
-            "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "hoverDateKey == null ? '' : 'Date: ' + timeFormat(hoverDateKey, '%d %b %Y')"
+          },
+          "opacity": {
+            "signal": "hoverDateKey == null ? 0 : 1"
           }
         }
       }
@@ -1663,7 +1688,7 @@ SLICERS RECOMMENDED
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 335 : scale('x', datum.DateKey) + 20"
+            "signal": "hoverDateKey != null && scale('x', hoverDateKey) > 1120 ? scale('x', hoverDateKey) - 335 : hoverDateKey != null ? scale('x', hoverDateKey) + 20 : -1000"
           },
           "y": {
             "signal": "492 + datum.HoverRowNo * 154"
@@ -1693,7 +1718,7 @@ SLICERS RECOMMENDED
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 318 : scale('x', datum.DateKey) + 37"
+            "signal": "hoverDateKey != null && scale('x', hoverDateKey) > 1120 ? scale('x', hoverDateKey) - 318 : hoverDateKey != null ? scale('x', hoverDateKey) + 37 : -1000"
           },
           "y": {
             "signal": "510 + datum.HoverRowNo * 154"
@@ -1723,7 +1748,7 @@ SLICERS RECOMMENDED
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1120 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 302"
+            "signal": "hoverDateKey != null && scale('x', hoverDateKey) > 1120 ? scale('x', hoverDateKey) - 38 : hoverDateKey != null ? scale('x', hoverDateKey) + 302 : -1000"
           },
           "y": {
             "signal": "510 + datum.HoverRowNo * 154"
@@ -1746,15 +1771,15 @@ SLICERS RECOMMENDED
       "on": [
         {
           "events": {
-            "type": "mousemove",
-            "markname": "hoverArea"
+            "source": "view",
+            "type": "mousemove"
           },
-          "update": "clamp(x(), 150, 1430)"
+          "update": "x() >= 150 && x() <= 1430 && y() >= 416 && y() <= 926 ? x() : null"
         },
         {
           "events": {
-            "type": "mouseout",
-            "markname": "hoverArea"
+            "source": "view",
+            "type": "mouseout"
           },
           "update": "null"
         }
