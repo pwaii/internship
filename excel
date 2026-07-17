@@ -130,7 +130,7 @@ function main(workbook: ExcelScript.Workbook): string {
 
     const periodRowsAll = getDateRowsFromStart(indexDateRows, startSerial).filter(d => {
       const price = toNumber(indexData[d.row][indexCol]);
-      return price !== null;
+      return d.serial <= endSerial && price !== null;
     });
     const cohortNoNumber = toNumber(cohortData[c][cCohortNo]);
     const maxCohortNo = maxCohortNoByProduct.get(cleanKey(productName));
@@ -426,6 +426,7 @@ function samplePeriodRows(
   rows: { row: number; serial: number }[],
   cohortAge: number
 ): { row: number; serial: number }[] {
+  if (cohortAge <= 0) return rows;
   if (rows.length <= 2 || cohortAge < 6) return rows;
 
   if (cohortAge >= 30) {
