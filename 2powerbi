@@ -93,8 +93,13 @@ SLICERS RECOMMENDED
           "as": "DateKey"
         },
         {
+          "type": "formula",
+          "expr": "isDate(datum.CohortStartDate) ? time(datum.CohortStartDate) : isNumber(datum.CohortStartDate) ? (datum.CohortStartDate > 1000000000 ? datum.CohortStartDate : (datum.CohortStartDate - 25569) * 86400000) : time(toDate(datum.CohortStartDate))",
+          "as": "CohortStartKey"
+        },
+        {
           "type": "filter",
-          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey) && (!isFinite(datum.CohortStartKey) || datum.DateKey >= datum.CohortStartKey)"
         },
         {
           "type": "formula",
@@ -312,12 +317,49 @@ SLICERS RECOMMENDED
       ]
     },
     {
-      "name": "dateTicks",
+      "name": "dateTicksSource",
       "source": "chartData",
       "transform": [
         {
+          "type": "aggregate",
+          "groupby": [
+            "DateKey"
+          ],
+          "ops": [
+            "count"
+          ],
+          "fields": [
+            null
+          ],
+          "as": [
+            "DateCount"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "TickRowNo"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dateTicks",
+      "source": "dateTicksSource",
+      "transform": [
+        {
           "type": "filter",
-          "expr": "datum.DateKey === data('chartData')[0].DateKey || datum.DateKey === data('chartData')[length(data('chartData')) - 1].DateKey || datum.DateKey % max(1, ceil((data('chartData')[length(data('chartData')) - 1].DateKey - data('chartData')[0].DateKey) / 7)) < 86400000"
+          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTicksSource')) || datum.TickRowNo % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
         }
       ]
     },
@@ -391,7 +433,7 @@ SLICERS RECOMMENDED
         150,
         1430
       ],
-      "nice": true,
+      "nice": false,
       "zero": false
     },
     {
