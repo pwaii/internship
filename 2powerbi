@@ -298,9 +298,6 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "type": "window",
-          "groupby": [
-            "SeriesKey"
-          ],
           "ops": [
             "row_number"
           ],
@@ -923,10 +920,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
       "encode": {
         "enter": {
           "width": {
-            "value": 330
+            "value": 450
           },
           "height": {
-            "value": 74
+            "value": 96
           },
           "cornerRadius": {
             "value": 7
@@ -952,10 +949,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         "update": {
           "x": {
-            "signal": "56 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "42 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "220 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "220 + floor((datum.CardNo - 1) / 3) * 108"
           },
           "stroke": {
             "scale": "color",
@@ -975,21 +972,21 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "#172033"
           },
           "fontSize": {
-            "value": 12
+            "value": 13
           },
           "fontWeight": {
             "value": "bold"
           },
           "limit": {
-            "value": 280
+            "value": 410
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "62 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "242 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "244 + floor((datum.CardNo - 1) / 3) * 108"
           },
           "text": {
             "signal": "datum.ProductName"
@@ -1011,15 +1008,15 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": 9.5
           },
           "limit": {
-            "value": 295
+            "value": 410
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "62 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "266 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "271 + floor((datum.CardNo - 1) / 3) * 108"
           },
           "text": {
             "signal": "'Index: ' + datum.IndexCode + '   PR: ' + format(datum.NumericPR, '.0%') + '   Volatility: ' + format(datum.NumericVolatility, '.0%')"
@@ -1041,22 +1038,22 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "bold"
           },
           "limit": {
-            "value": 295
+            "value": 410
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "62 + ((datum.CardNo - 1) % 3) * 480"
           },
           "y": {
-            "signal": "289 + floor((datum.CardNo - 1) / 4) * 84"
+            "signal": "300 + floor((datum.CardNo - 1) / 3) * 108"
           },
           "fill": {
             "scale": "color",
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "'Growth: ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-') + '   Latest: ' + timeFormat(datum.DateKey, '%d %b %Y')"
+            "signal": "'Return: ' + format(datum.ProductReturnCalc, '+.2%') + '   Cohort ' + datum.CohortNo + '   Start: ' + (isFinite(datum.CohortStartKey) ? timeFormat(datum.CohortStartKey, '%d %b %Y') : '-')"
           }
         }
       }
@@ -1829,7 +1826,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "field": "SeriesKey"
           },
           "text": {
-            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(datum.DisplayProductNormalized / 100 - 1, '+.2%')"
+            "signal": "format(datum.DisplayProductNormalized, '.2f') + ' / ' + format(datum.ProductReturnCalc, '+.2%')"
           }
         }
       }
@@ -1892,11 +1889,11 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
     },
     {
       "name": "chartPanelY",
-      "update": "220 + cardRows * 84 + 24"
+      "update": "220 + cardRows * 108 + 30"
     },
     {
       "name": "cardRows",
-      "update": "max(1, ceil(length(data('visibleCards')) / 4))"
+      "update": "max(1, ceil(length(data('visibleCards')) / 3))"
     },
     {
       "name": "hoverX",
