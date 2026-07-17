@@ -94,11 +94,11 @@ SLICERS RECOMMENDED
         },
         {
           "type": "filter",
-          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 && isFinite(datum.DateKey)"
+          "expr": "isFinite(datum.DateKey) && (isFinite(toNumber(datum.ProductValue)) || isFinite(toNumber(datum.ProductReturn)) || (isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0))"
         },
         {
           "type": "formula",
-          "expr": "datum.NumericPrice / datum.NumericBase * 100",
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.NumericBase) && datum.NumericBase > 0 ? datum.NumericPrice / datum.NumericBase * 100 : 100",
           "as": "DisplayIndex"
         },
         {
@@ -113,7 +113,7 @@ SLICERS RECOMMENDED
         },
         {
           "type": "formula",
-          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
+          "expr": "isFinite(toNumber(datum.ProductReturn)) ? toNumber(datum.ProductReturn) : isFinite(toNumber(datum.ProductReturnFromFormula)) ? toNumber(datum.ProductReturnFromFormula) : isFinite(toNumber(datum.ProductValue)) ? toNumber(datum.ProductValue) / 100 - 1 : datum.FormulaKey === 'ABS_PR' ? min(max(abs(datum.IndexReturnCalc) * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : datum.FormulaKey === 'CAP_FLOOR' ? min(max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor), datum.NumericVolatility) : max(datum.IndexReturnCalc * datum.NumericPR, datum.NumericFloor)",
           "as": "ProductReturnCalc"
         },
         {
@@ -123,7 +123,7 @@ SLICERS RECOMMENDED
         },
         {
           "type": "filter",
-          "expr": "isFinite(datum.ProductReturnCalc) && isFinite(datum.DisplayProduct)"
+          "expr": "isFinite(datum.DisplayProduct)"
         },
         {
           "type": "formula",
