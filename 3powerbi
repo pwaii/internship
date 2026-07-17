@@ -82,11 +82,11 @@ IMPORTANT
         },
         {
           "type": "filter",
-          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.DateKey) && datum.IndexCode != null"
+          "expr": "isFinite(datum.NumericPrice) && isFinite(datum.DateKey) && ((datum.IndexCode != null && toString(datum.IndexCode) !== '') || (datum.IndexName != null && toString(datum.IndexName) !== ''))"
         },
         {
           "type": "formula",
-          "expr": "toString(datum.IndexCode)",
+          "expr": "datum.IndexCode != null && toString(datum.IndexCode) !== '' ? toString(datum.IndexCode) : toString(datum.IndexName)",
           "as": "SeriesKey"
         },
         {
@@ -263,35 +263,8 @@ IMPORTANT
       "source": "indexSeries",
       "transform": [
         {
-          "type": "aggregate",
-          "groupby": [
-            "DateKey"
-          ],
-          "ops": [
-            "count"
-          ],
-          "fields": [
-            null
-          ],
-          "as": [
-            "DateCount"
-          ]
-        },
-        {
-          "type": "collect",
-          "sort": {
-            "field": "DateKey",
-            "order": "ascending"
-          }
-        },
-        {
-          "type": "window",
-          "ops": [
-            "row_number"
-          ],
-          "as": [
-            "TickRowNo"
-          ]
+          "type": "filter",
+          "expr": "length(data('latestByIndex')) > 0 && datum.SeriesKey === data('latestByIndex')[0].SeriesKey"
         }
       ]
     },
@@ -301,7 +274,7 @@ IMPORTANT
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTicksSource')) || datum.TickRowNo % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
+          "expr": "datum.RowIndex === 1 || datum.RowIndex === length(data('dateTicksSource')) || datum.RowIndex % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
         }
       ]
     },
