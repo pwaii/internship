@@ -1,25 +1,14 @@
-POWER BI DENEB - MTL INDEX COMPARISON ASSIGNED THEME Y-AXIS ADAPTIVE TICKS
+POWER BI DENEB - MTL PAGE 3 INDEX COMPARISON FINAL COMPLETE
 
 This page compares indexes instead of products. It supports multi-select indexes and uses a non-zero y-axis range.
 
 DATA SOURCE
-Use Final Data.
-This page reads the index price columns from Final Data and compares the index movement for selected products/indexes.
-
-Recommended Power BI table name: Final Data
-Required shape:
-- ProductName
-- IndexName
-- IndexCode
-- CohortNo
-- Date
-- Price
+Use the same final query/table used by previous pages, for example:
+MTL_Deneb_Data
 
 ADD THESE FIELDS TO DENEB VALUES
-- ProductName
 - IndexName
 - IndexCode
-- CohortNo
 - Date
 - Price
 
@@ -27,16 +16,12 @@ Optional but harmless if already present:
 - Company
 - ProductName
 - CohortNo
-- CohortStartDate
-- CohortEndDate
 
 IMPORTANT
 1. Choose Deneb > Create new specification > Vega > Empty.
 2. Use raw Date, not Date hierarchy.
 3. Set Price to Don't summarize.
-4. Use slicers for Company, ProductName, IndexCode, or IndexName. Multi-select is supported.
-5. Product formula fields are not needed on this page.
-6. Set Date and Price to Don't summarize.
+4. Use slicers for IndexCode or IndexName. Multi-select is supported.
 
 ================ PASTE JSON BELOW ================
 {
@@ -44,7 +29,7 @@ IMPORTANT
   "description": "MTL index comparison dashboard with assigned theme, aligned y-axis, 0.5-step labels, and forced 100.0 tick. Adaptive y-axis labels switch from 0.5 to 1.0 spacing when crowded.",
   "background": "#F4F8FB",
   "width": 1500,
-  "height": 900,
+  "height": 1020,
   "padding": 0,
   "autosize": {
     "type": "fit",
@@ -52,42 +37,6 @@ IMPORTANT
     "resize": true
   },
   "signals": [
-    {
-      "name": "chartRemarkY",
-      "update": "plotBottom + 58"
-    },
-    {
-      "name": "dateTitleY",
-      "update": "plotBottom + 38"
-    },
-    {
-      "name": "dateTickY",
-      "update": "plotBottom + 22"
-    },
-    {
-      "name": "plotMidY",
-      "update": "(plotTop + plotBottom) / 2"
-    },
-    {
-      "name": "plotBottom",
-      "update": "790"
-    },
-    {
-      "name": "plotTop",
-      "update": "chartPanelY + 90"
-    },
-    {
-      "name": "chartTitleY",
-      "update": "chartPanelY + 30"
-    },
-    {
-      "name": "chartPanelY",
-      "update": "220 + cardRows * 84 + 24"
-    },
-    {
-      "name": "cardRows",
-      "update": "max(1, ceil(length(data('visibleCards')) / 4))"
-    },
     {
       "name": "hoverX",
       "value": null,
@@ -97,7 +46,7 @@ IMPORTANT
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "clamp(x(), 150, 1360)"
+          "update": "clamp(x(), 115, 1410)"
         },
         {
           "events": {
@@ -128,13 +77,8 @@ IMPORTANT
         },
         {
           "type": "formula",
-          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 1000000000 ? datum.Date : (datum.Date - 25569) * 86400000) : time(toDate(datum.Date))",
+          "expr": "isDate(datum.Date) ? time(datum.Date) : isNumber(datum.Date) ? (datum.Date > 100000000000 ? datum.Date : datum.Date > 1000000000 ? datum.Date * 1000 : (datum.Date - 25569) * 86400000) : isFinite(toNumber(datum.Date)) ? (toNumber(datum.Date) > 100000000000 ? toNumber(datum.Date) : toNumber(datum.Date) > 1000000000 ? toNumber(datum.Date) * 1000 : (toNumber(datum.Date) - 25569) * 86400000) : time(toDate(datum.Date))",
           "as": "DateKey"
-        },
-        {
-          "type": "formula",
-          "expr": "isFinite(toNumber(datum.CohortNo)) ? toNumber(datum.CohortNo) : 1",
-          "as": "NumericCohortNo"
         },
         {
           "type": "filter",
@@ -149,29 +93,6 @@ IMPORTANT
           "type": "formula",
           "expr": "datum.IndexName ? toString(datum.IndexName) : toString(datum.IndexCode)",
           "as": "SeriesName"
-        },
-        {
-          "type": "window",
-          "groupby": [
-            "SeriesKey"
-          ],
-          "sort": {
-            "field": "NumericCohortNo",
-            "order": "ascending"
-          },
-          "ops": [
-            "first_value"
-          ],
-          "fields": [
-            "NumericCohortNo"
-          ],
-          "as": [
-            "FirstCohortNo"
-          ]
-        },
-        {
-          "type": "filter",
-          "expr": "datum.NumericCohortNo === datum.FirstCohortNo"
         }
       ]
     },
@@ -297,7 +218,7 @@ IMPORTANT
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.CardNo <= 12"
+          "expr": "datum.CardNo <= 5"
         }
       ]
     },
@@ -342,8 +263,32 @@ IMPORTANT
       "source": "indexSeries",
       "transform": [
         {
-          "type": "filter",
-          "expr": "length(data('latestByIndex')) > 0 && datum.SeriesKey === data('latestByIndex')[0].SeriesKey"
+          "type": "aggregate",
+          "groupby": [
+            "DateKey"
+          ],
+          "ops": [
+            "count"
+          ],
+          "as": [
+            "DateCount"
+          ]
+        },
+        {
+          "type": "collect",
+          "sort": {
+            "field": "DateKey",
+            "order": "ascending"
+          }
+        },
+        {
+          "type": "window",
+          "ops": [
+            "row_number"
+          ],
+          "as": [
+            "TickRowNo"
+          ]
         }
       ]
     },
@@ -353,7 +298,7 @@ IMPORTANT
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.RowIndex === 1 || datum.RowIndex === length(data('dateTicksSource')) || datum.RowIndex % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
+          "expr": "datum.TickRowNo === 1 || datum.TickRowNo === length(data('dateTicksSource')) || datum.TickRowNo % max(1, ceil(length(data('dateTicksSource')) / 7)) === 0"
         }
       ]
     },
@@ -474,7 +419,7 @@ IMPORTANT
         {
           "type": "formula",
           "expr": "100",
-          "as": "Value"
+          "as": "TickValue"
         },
         {
           "type": "formula",
@@ -493,8 +438,8 @@ IMPORTANT
         "field": "DateKey"
       },
       "range": [
-        150,
-        1360
+        115,
+        1410
       ],
       "zero": false,
       "nice": true
@@ -510,12 +455,8 @@ IMPORTANT
         ]
       },
       "range": [
-        {
-          "signal": "plotBottom"
-        },
-        {
-          "signal": "plotTop"
-        }
+        916,
+        411
       ],
       "zero": false,
       "nice": false
@@ -542,7 +483,7 @@ IMPORTANT
     {
       "orient": "bottom",
       "scale": "x",
-      "position": 790,
+      "position": 916,
       "labels": false,
       "ticks": false,
       "domain": false,
@@ -555,7 +496,7 @@ IMPORTANT
     {
       "orient": "left",
       "scale": "y",
-      "position": 150,
+      "position": 241,
       "labelColor": "#111111",
       "labelFontSize": 12,
       "tickColor": "#111111",
@@ -573,30 +514,6 @@ IMPORTANT
     }
   ],
   "marks": [
-    {
-      "name": "pageBackground",
-      "type": "rect",
-      "encode": {
-        "enter": {
-          "x": {
-            "value": 0
-          },
-          "y": {
-            "value": 0
-          },
-          "x2": {
-            "value": 1500
-          },
-          "y2": {
-            "value": 900
-          },
-          "fill": {
-            "value": "#F6F8FB"
-          }
-        },
-        "update": {}
-      }
-    },
     {
       "name": "sharedHeaderTop",
       "type": "rect",
@@ -620,8 +537,7 @@ IMPORTANT
           "stroke": {
             "value": "#E3EBF3"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -647,8 +563,7 @@ IMPORTANT
           "fill": {
             "value": "#D31145"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -680,8 +595,7 @@ IMPORTANT
           "fontWeight": {
             "value": "bold"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -710,8 +624,7 @@ IMPORTANT
           "fontWeight": {
             "value": "bold"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -737,8 +650,7 @@ IMPORTANT
           "fontSize": {
             "value": 13
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -764,8 +676,7 @@ IMPORTANT
           "stroke": {
             "value": "#E3EBF3"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -794,8 +705,7 @@ IMPORTANT
           "fontWeight": {
             "value": "normal"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -824,8 +734,7 @@ IMPORTANT
           "fontWeight": {
             "value": "normal"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -854,8 +763,7 @@ IMPORTANT
           "fontWeight": {
             "value": "bold"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -878,8 +786,79 @@ IMPORTANT
           "strokeWidth": {
             "value": 3
           }
-        },
-        "update": {}
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 0
+          },
+          "y": {
+            "value": 126
+          },
+          "x2": {
+            "value": 1500
+          },
+          "y2": {
+            "value": 1026
+          },
+          "fill": {
+            "value": "#F4F8FB"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 20
+          },
+          "y": {
+            "value": 148
+          },
+          "text": {
+            "value": "Index Comparator"
+          },
+          "fill": {
+            "value": "#172033"
+          },
+          "fontSize": {
+            "value": 24
+          },
+          "fontWeight": {
+            "value": "bold"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 20
+          },
+          "y": {
+            "value": 174
+          },
+          "text": {
+            "value": "Select multiple IndexCode or IndexName values in Power BI slicers. Y-axis is intentionally not zero-based."
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "limit": {
+            "value": 980
+          }
+        }
       }
     },
     {
@@ -889,44 +868,41 @@ IMPORTANT
       },
       "encode": {
         "enter": {
+          "y": {
+            "value": 198
+          },
           "width": {
-            "value": 330
+            "value": 276
           },
           "height": {
-            "value": 74
+            "value": 116
           },
           "cornerRadius": {
-            "value": 7
+            "value": 8
           },
           "fill": {
             "value": "#FFFFFF"
           },
           "strokeWidth": {
-            "value": 1.4
+            "value": 2
           },
           "shadowColor": {
-            "value": "#D8E1EA"
+            "value": "#CBD5E1"
           },
           "shadowBlur": {
-            "value": 6
+            "value": 12
           },
           "shadowOffsetY": {
-            "value": 3
-          },
-          "stroke": {
-            "value": "#E3EBF3"
+            "value": 5
           }
         },
         "update": {
           "x": {
-            "signal": "56 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "20 + (datum.CardNo - 1) * 288"
           },
           "stroke": {
             "scale": "color",
             "field": "SeriesKey"
-          },
-          "y": {
-            "signal": "220 + floor((datum.CardNo - 1) / 4) * 84"
           }
         }
       }
@@ -938,25 +914,25 @@ IMPORTANT
       },
       "encode": {
         "enter": {
+          "y": {
+            "value": 228
+          },
           "fill": {
             "value": "#6B7890"
           },
           "fontSize": {
-            "value": 12
+            "value": 13
           },
           "limit": {
-            "value": 280
+            "value": 230
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "38 + (datum.CardNo - 1) * 288"
           },
           "text": {
             "signal": "datum.SeriesName"
-          },
-          "y": {
-            "signal": "242 + floor((datum.CardNo - 1) / 4) * 84"
           }
         }
       }
@@ -968,11 +944,14 @@ IMPORTANT
       },
       "encode": {
         "enter": {
+          "y": {
+            "value": 268
+          },
           "fill": {
             "value": "#172033"
           },
           "fontSize": {
-            "value": 22
+            "value": 26
           },
           "fontWeight": {
             "value": "bold"
@@ -980,17 +959,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "38 + (datum.CardNo - 1) * 288"
           },
           "text": {
             "signal": "format(datum.CompareIndex, '.2f')"
-          },
-          "y": {
-            "signal": "263 + floor((datum.CardNo - 1) / 4) * 84"
-          },
-          "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
           }
         }
       }
@@ -1002,29 +974,25 @@ IMPORTANT
       },
       "encode": {
         "enter": {
+          "y": {
+            "value": 297
+          },
           "fontSize": {
-            "value": 10.5
+            "value": 13
           },
           "fontWeight": {
             "value": "bold"
-          },
-          "limit": {
-            "value": 290
           }
         },
         "update": {
           "x": {
-            "signal": "72 + ((datum.CardNo - 1) % 4) * 350"
+            "signal": "38 + (datum.CardNo - 1) * 288"
           },
           "fill": {
-            "scale": "color",
-            "field": "SeriesKey"
+            "signal": "datum.IndexGrowth >= 0 ? '#00D26A' : '#D31145'"
           },
           "text": {
             "signal": "'Growth ' + format(datum.IndexGrowth, '+.2%')"
-          },
-          "y": {
-            "signal": "287 + floor((datum.CardNo - 1) / 4) * 84"
           }
         }
       }
@@ -1034,16 +1002,16 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 56
+            "value": 20
           },
           "y": {
-            "signal": "chartPanelY"
+            "value": 346
           },
           "x2": {
-            "value": 1430
+            "value": 1450
           },
           "y2": {
-            "value": 878
+            "value": 976
           },
           "cornerRadius": {
             "value": 8
@@ -1055,10 +1023,9 @@ IMPORTANT
             "value": "#E3EBF3"
           },
           "strokeWidth": {
-            "value": 1.1
+            "value": 1.2
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -1066,10 +1033,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 40
           },
           "y": {
-            "signal": "chartTitleY"
+            "value": 381
           },
           "text": {
             "value": "Index Performance Comparison"
@@ -1078,13 +1045,63 @@ IMPORTANT
             "value": "#172033"
           },
           "fontSize": {
-            "value": 14
+            "value": 16
           },
           "fontWeight": {
             "value": "bold"
           }
-        },
-        "update": {}
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 40
+          },
+          "y": {
+            "value": 406
+          },
+          "text": {
+            "value": "Normalized to 100 at the first visible date for each index"
+          },
+          "fill": {
+            "value": "#6B7890"
+          },
+          "fontSize": {
+            "value": 12
+          }
+        }
+      }
+    },
+    {
+      "type": "rule",
+      "encode": {
+        "enter": {
+          "x": {
+            "value": 115
+          },
+          "x2": {
+            "value": 1410
+          },
+          "y": {
+            "scale": "y",
+            "value": 226
+          },
+          "stroke": {
+            "value": "#D31145"
+          },
+          "strokeWidth": {
+            "value": 1.2
+          },
+          "strokeDash": {
+            "value": [
+              4,
+              4
+            ]
+          }
+        }
       }
     },
     {
@@ -1096,10 +1113,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 115
           },
           "x2": {
-            "value": 1360
+            "value": 1410
           },
           "stroke": {
             "value": "#E1E7EF"
@@ -1111,7 +1128,7 @@ IMPORTANT
         "update": {
           "y": {
             "scale": "y",
-            "field": "Value"
+            "field": "TickValue"
           }
         }
       }
@@ -1122,13 +1139,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 115
           },
           "y": {
-            "signal": "plotTop"
+            "value": 411
           },
           "y2": {
-            "signal": "plotBottom"
+            "value": 916
           },
           "stroke": {
             "value": "#111111"
@@ -1136,8 +1153,7 @@ IMPORTANT
           "strokeWidth": {
             "value": 1.5
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -1146,13 +1162,13 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 115
           },
           "x2": {
-            "value": 1360
+            "value": 1410
           },
           "y": {
-            "signal": "plotBottom"
+            "value": 916
           },
           "stroke": {
             "value": "#111111"
@@ -1160,8 +1176,7 @@ IMPORTANT
           "strokeWidth": {
             "value": 1.5
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -1173,10 +1188,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 144
+            "value": 109
           },
           "x2": {
-            "value": 150
+            "value": 115
           },
           "stroke": {
             "value": "#111111"
@@ -1188,7 +1203,7 @@ IMPORTANT
         "update": {
           "y": {
             "scale": "y",
-            "field": "Value"
+            "field": "TickValue"
           }
         }
       }
@@ -1202,7 +1217,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 138
+            "value": 103
           },
           "align": {
             "value": "right"
@@ -1214,7 +1229,7 @@ IMPORTANT
             "value": "#111111"
           },
           "fontSize": {
-            "value": 11
+            "value": 12
           },
           "fontWeight": {
             "value": "bold"
@@ -1223,7 +1238,7 @@ IMPORTANT
         "update": {
           "y": {
             "scale": "y",
-            "field": "Value"
+            "field": "TickValue"
           },
           "text": {
             "field": "Label"
@@ -1240,10 +1255,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 115
           },
           "x2": {
-            "value": 1360
+            "value": 1410
           },
           "stroke": {
             "value": "#111111"
@@ -1258,7 +1273,7 @@ IMPORTANT
         "update": {
           "y": {
             "scale": "y",
-            "field": "Value"
+            "field": "TickValue"
           }
         }
       }
@@ -1272,7 +1287,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 138
+            "value": 103
           },
           "align": {
             "value": "right"
@@ -1293,10 +1308,10 @@ IMPORTANT
         "update": {
           "y": {
             "scale": "y",
-            "field": "Value"
+            "field": "TickValue"
           },
           "text": {
-            "value": ""
+            "field": "Label"
           }
         }
       }
@@ -1307,10 +1322,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 104
+            "value": 58
           },
           "y": {
-            "signal": "plotMidY"
+            "value": 663.5
           },
           "text": {
             "value": "Index (Base 100)"
@@ -1325,16 +1340,15 @@ IMPORTANT
             "value": "middle"
           },
           "fill": {
-            "value": "#172033"
+            "value": "#111111"
           },
           "fontSize": {
-            "value": 12
+            "value": 13
           },
           "fontWeight": {
             "value": "bold"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -1377,11 +1391,7 @@ IMPORTANT
             }
           }
         }
-      ],
-      "encode": {
-        "enter": {},
-        "update": {}
-      }
+      ]
     },
     {
       "type": "text",
@@ -1391,7 +1401,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "signal": "dateTickY"
+            "value": 941
           },
           "align": {
             "value": "center"
@@ -1422,7 +1432,7 @@ IMPORTANT
             "value": 760
           },
           "y": {
-            "signal": "dateTitleY"
+            "value": 966
           },
           "text": {
             "value": "Date"
@@ -1439,8 +1449,7 @@ IMPORTANT
           "fontWeight": {
             "value": "bold"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -1449,16 +1458,16 @@ IMPORTANT
       "encode": {
         "enter": {
           "x": {
-            "value": 150
+            "value": 115
           },
           "y": {
-            "signal": "plotTop"
+            "value": 411
           },
           "x2": {
-            "value": 1360
+            "value": 1410
           },
           "y2": {
-            "signal": "plotBottom"
+            "value": 916
           },
           "fill": {
             "value": "#172033"
@@ -1469,8 +1478,7 @@ IMPORTANT
           "cursor": {
             "value": "crosshair"
           }
-        },
-        "update": {}
+        }
       }
     },
     {
@@ -1481,10 +1489,10 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "signal": "plotTop"
+            "value": 411
           },
           "y2": {
-            "signal": "plotBottom"
+            "value": 916
           },
           "stroke": {
             "value": "#D31145"
@@ -1548,7 +1556,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "signal": "plotTop + 22"
+            "value": 434
           },
           "width": {
             "value": 305
@@ -1568,7 +1576,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
           }
         }
       }
@@ -1581,7 +1589,7 @@ IMPORTANT
       "encode": {
         "enter": {
           "y": {
-            "signal": "plotTop + 49"
+            "value": 461
           },
           "fill": {
             "value": "#172033"
@@ -1595,7 +1603,7 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 305 : scale('x', datum.DateKey) + 40"
+            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 305 : scale('x', datum.DateKey) + 40"
           },
           "text": {
             "signal": "'Date: ' + timeFormat(datum.DateKey, '%d %b %Y')"
@@ -1625,10 +1633,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
+            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 325 : scale('x', datum.DateKey) + 20"
           },
           "y": {
-            "signal": "plotTop + 26 + datum.HoverRowNo * 28"
+            "signal": "478 + datum.HoverRowNo * 154"
           }
         }
       }
@@ -1655,10 +1663,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 308 : scale('x', datum.DateKey) + 37"
+            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 308 : scale('x', datum.DateKey) + 37"
           },
           "y": {
-            "signal": "plotTop + 44 + datum.HoverRowNo * 28"
+            "signal": "496 + datum.HoverRowNo * 154"
           },
           "text": {
             "signal": "datum.SeriesName"
@@ -1685,10 +1693,10 @@ IMPORTANT
         },
         "update": {
           "x": {
-            "signal": "scale('x', datum.DateKey) > 1060 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 292"
+            "signal": "scale('x', datum.DateKey) > 1100 ? scale('x', datum.DateKey) - 38 : scale('x', datum.DateKey) + 292"
           },
           "y": {
-            "signal": "plotTop + 44 + datum.HoverRowNo * 28"
+            "signal": "496 + datum.HoverRowNo * 154"
           },
           "fill": {
             "scale": "color",
