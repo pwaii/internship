@@ -468,12 +468,32 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         {
           "type": "collect",
           "sort": {
-            "field": "SeriesKey",
-            "order": "ascending"
+            "field": [
+              "ProductName",
+              "CohortNo",
+              "SeriesKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending",
+              "ascending"
+            ]
           }
         },
         {
           "type": "window",
+          "sort": {
+            "field": [
+              "ProductName",
+              "CohortNo",
+              "SeriesKey"
+            ],
+            "order": [
+              "ascending",
+              "ascending",
+              "ascending"
+            ]
+          },
           "ops": [
             "row_number"
           ],
@@ -1728,7 +1748,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": 430
           },
           "height": {
-            "value": 40
+            "value": 46
           },
           "fill": {
             "value": "#FFFFFF"
@@ -1742,7 +1762,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 455 : scale('x', hoverIndex) + 24"
           },
           "y": {
-            "signal": "372 + datum.HoverRowNo * 40"
+            "signal": "368 + datum.HoverRowNo * 46"
           }
         }
       }
@@ -1764,7 +1784,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "value": "bold"
           },
           "limit": {
-            "value": 275
+            "value": 285
           }
         },
         "update": {
@@ -1772,10 +1792,10 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 432 : scale('x', hoverIndex) + 47"
           },
           "y": {
-            "signal": "397 + datum.HoverRowNo * 40"
+            "signal": "397 + datum.HoverRowNo * 46"
           },
           "text": {
-            "signal": "datum.ProductName"
+            "signal": "datum.ProductName + '  C' + datum.CohortNo"
           }
         }
       }
@@ -1802,7 +1822,7 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
             "signal": "hoverIndex == null ? 190 : scale('x', hoverIndex) > 980 ? scale('x', hoverIndex) - 45 : scale('x', hoverIndex) + 405"
           },
           "y": {
-            "signal": "397 + datum.HoverRowNo * 40"
+            "signal": "397 + datum.HoverRowNo * 46"
           },
           "fill": {
             "scale": "color",
