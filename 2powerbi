@@ -349,7 +349,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.CardNo <= 12"
+          "expr": "datum.CardNo <= 4"
         }
       ]
     },
@@ -359,7 +359,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.CardNo > 12"
+          "expr": "datum.CardNo > 4"
         },
         {
           "type": "aggregate",
@@ -523,7 +523,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.HoverRowNo <= 12"
+          "expr": "datum.HoverRowNo <= 9"
         }
       ]
     },
@@ -533,7 +533,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "transform": [
         {
           "type": "filter",
-          "expr": "datum.HoverRowNo > 12"
+          "expr": "datum.HoverRowNo > 9"
         },
         {
           "type": "aggregate",
@@ -1086,7 +1086,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "value": 1288
           },
           "y": {
-            "value": 452
+            "value": 312
           },
           "align": {
             "value": "right"
@@ -1906,7 +1906,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     },
     {
       "name": "chartPanelY",
-      "update": "220 + cardRows * 84 + 24"
+      "update": "328"
     },
     {
       "name": "cardRows",
