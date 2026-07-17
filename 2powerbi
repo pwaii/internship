@@ -566,7 +566,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         "field": "DateKey"
       },
       "range": [
-        190,
+        300,
         1360
       ],
       "nice": true,
@@ -624,7 +624,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
     {
       "orient": "left",
       "scale": "y",
-      "position": 190,
+      "position": 300,
       "labels": false,
       "ticks": false,
       "domain": false
@@ -1144,7 +1144,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 300
           },
           "y": {
             "signal": "chartTitleY"
@@ -1169,7 +1169,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 300
           },
           "y": {
             "signal": "plotTop"
@@ -1191,7 +1191,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 300
           },
           "x2": {
             "value": 1360
@@ -1216,7 +1216,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 300
           },
           "x2": {
             "value": 1360
@@ -1244,7 +1244,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 176
+            "value": 286
           },
           "align": {
             "value": "right"
@@ -1282,7 +1282,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 300
           },
           "x2": {
             "value": 1360
@@ -1310,7 +1310,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 132
+            "value": 242
           },
           "y": {
             "signal": "(plotTop + plotBottom) / 2"
@@ -1341,7 +1341,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 775
+            "value": 830
           },
           "y": {
             "signal": "chartDateY"
@@ -1548,7 +1548,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
       "encode": {
         "enter": {
           "x": {
-            "value": 190
+            "value": 300
           },
           "y": {
             "signal": "plotTop"
@@ -1680,7 +1680,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 335 : scale('x', hoverIndex) + 20"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 335 : scale('x', hoverIndex) + 20"
           },
           "opacity": {
             "signal": "hoverIndex == null ? 0 : 1"
@@ -1707,7 +1707,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 315 : scale('x', hoverIndex) + 40"
+            "signal": "hoverIndex == null ? -1000 : scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 315 : scale('x', hoverIndex) + 40"
           },
           "text": {
             "signal": "hoverIndex == null ? '' : 'Date: ' + timeFormat(hoverIndex, '%d %b %Y')"
@@ -1740,7 +1740,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 335 : hoverIndex != null ? scale('x', hoverIndex) + 20 : -1000"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 335 : hoverIndex != null ? scale('x', hoverIndex) + 20 : -1000"
           },
           "y": {
             "signal": "366 + datum.HoverRowNo * 28"
@@ -1770,7 +1770,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : -1000"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : -1000"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1800,7 +1800,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 38 : hoverIndex != null ? scale('x', hoverIndex) + 302 : -1000"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 38 : hoverIndex != null ? scale('x', hoverIndex) + 302 : -1000"
           },
           "y": {
             "signal": "384 + datum.HoverRowNo * 28"
@@ -1834,7 +1834,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
         },
         "update": {
           "x": {
-            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1080 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : 0"
+            "signal": "hoverIndex != null && scale('x', hoverIndex) > 1025 ? scale('x', hoverIndex) - 318 : hoverIndex != null ? scale('x', hoverIndex) + 37 : -1000"
           },
           "y": {
             "value": 740
@@ -1888,7 +1888,7 @@ Newest cohort rows are recalculated from the formula in Deneb for every availabl
             "type": "mousemove",
             "markname": "hoverArea"
           },
-          "update": "invert('x', clamp(x(), 190, 1360))"
+          "update": "invert('x', clamp(x(), 300, 1360))"
         },
         {
           "events": {
