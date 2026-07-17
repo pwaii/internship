@@ -1909,4 +1909,12 @@ The graph displays exactly the rows generated in Final Data, so cohort sampling 
         },
         {
           "events": {
-            "type
+            "type": "mouseout",
+            "markname": "hoverArea"
+          },
+          "update": "null"
+        }
+      ]
+    }
+  ]
+}
